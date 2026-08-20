@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { Thread } from "@/data/ward";
 import { bays, patients, staff, statusLabels } from "@/data/ward";
 
@@ -29,10 +30,18 @@ export function Insights({ threads, onOpenPatient }: Props) {
   const escalated = threads.filter((t) => t.status === "escalated");
   const unowned = open.filter((t) => !t.assignee);
 
-  const load = staff
-    .map((s) => ({ ...s, count: open.filter((t) => t.assignee === s.name).length }))
-    .sort((a, b) => b.count - a.count);
-  const maxLoad = Math.max(1, ...load.map((l) => l.count));
+  const teams = useMemo(() => {
+    const map = new Map<string, { total: number; free: number }>();
+    for (const s of staff) {
+      const existing = map.get(s.team) ?? { total: 0, free: 0 };
+      existing.total += 1;
+      if (s.free) existing.free += 1;
+      map.set(s.team, existing);
+    }
+    return Array.from(map.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
 
   const goingHome = patients.filter((p) => p.homeTomorrow);
   const blocked = goingHome.filter((p) => open.some((t) => t.patientId === p.id));
@@ -67,24 +76,24 @@ export function Insights({ threads, onOpenPatient }: Props) {
           </dl>
         </Block>
 
-        <Block title="Who is free right now">
+        <Block title="Available staff">
           <ul className="space-y-2">
-            {load.slice(0, 6).map((s) => (
-              <li key={s.name} className="space-y-1">
+            {teams.map((team) => (
+              <li key={team.name} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-2 text-[13px]">
-                  <span className="truncate text-foreground">{s.name}</span>
+                  <span className="truncate text-foreground">{team.name}</span>
                   <span className="shrink-0 text-muted-foreground">
-                    {s.count} open · {s.free ? "free" : "busy"}
+                    {team.free}/{team.total} free
                   </span>
                 </div>
-                <Bar value={s.count} total={maxLoad} />
+                <Bar value={team.free} total={team.total} />
               </li>
             ))}
           </ul>
           {unowned.length > 0 && (
             <p className="mt-3 text-[12.5px] text-muted-foreground">
               {unowned.length} task{unowned.length === 1 ? "" : "s"} with no owner yet — offer them
-              to someone free.
+              to a free team.
             </p>
           )}
         </Block>
