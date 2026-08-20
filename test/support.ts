@@ -5,6 +5,7 @@ import { createApp } from "../src/http/app.js";
 import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
+import { HandoverService } from "../src/services/handover-service.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 import { RecordService } from "../src/services/record-service.js";
 import { SchedulerService } from "../src/services/scheduler-service.js";
@@ -29,18 +30,20 @@ export function createAppHarness() {
     "approval-secret-with-at-least-32-bytes",
   );
   const records = new RecordService(store);
+  const handovers = new HandoverService(store, clock);
   const scheduler = new SchedulerService(store, clock);
   const app = createApp({
     store,
     clock,
     ledger,
+    handovers,
     records,
     scheduler,
     uiOrigin: UI_ORIGIN,
     appBearerToken: APP_TOKEN,
     mcpBearerToken: MCP_TOKEN,
   });
-  return { app, store, clock, ledger, records, scheduler };
+  return { app, store, clock, ledger, handovers, records, scheduler };
 }
 
 export async function listen(app: ReturnType<typeof createApp>) {
