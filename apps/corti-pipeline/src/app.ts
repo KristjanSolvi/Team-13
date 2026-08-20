@@ -102,7 +102,7 @@ const handoverPacketSchema = z
 const renderHandoverRequestSchema = z
   .object({
     handoverId: z.string().uuid(),
-    patientId: z.string().trim().min(1).max(160),
+    patientId: z.string().min(1).max(160),
     sourceSnapshotHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     packet: handoverPacketSchema,
   })

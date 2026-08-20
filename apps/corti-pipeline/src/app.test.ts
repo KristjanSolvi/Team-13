@@ -264,6 +264,40 @@ describe("pipeline HTTP contract", () => {
     },
   );
 
+  it("preserves the patient identity exactly at the renderer boundary", async () => {
+    const renderHandover = vi.fn(async () => ({
+      title: "Current patient handover",
+      sections: [],
+      creditsConsumed: 0,
+    }));
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+    const patientId = " patient-identity ";
+
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, patientId })
+      .expect(200);
+
+    expect(renderHandover).toHaveBeenCalledWith({
+      ...handoverRequest,
+      patientId,
+    });
+  });
+
+  it("rejects a 161-character patient identity before any normalization", async () => {
+    const renderHandover = vi.fn();
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+    const patientId = ` ${"p".repeat(160)}`;
+
+    const response = await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, patientId })
+      .expect(400);
+
+    expect(response.body.error.code).toBe("INVALID_REQUEST");
+    expect(renderHandover).not.toHaveBeenCalled();
+  });
+
   it("preserves authoritative task whitespace in deterministic rendering", async () => {
     const noTextGeneration = vi.fn();
     const renderHandover = vi.fn((input) =>
