@@ -1,5 +1,5 @@
 [build]
-buildCommand = "npm ci && npm run build:railway"
+buildCommand = "npm run build:railway"
 
 [deploy]
 startCommand = "npm run start"
