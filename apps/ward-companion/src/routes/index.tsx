@@ -16,6 +16,7 @@ import {
   getWardCompanionOverview,
   type WardTaskCommand,
 } from "@/lib/follow-through-api";
+import { loadWardState, saveWardState } from "@/lib/ward-persistence";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
 import { initialNotes, initialThreads, patients, statusDotClass, statusLabels } from "@/data/ward";
 
@@ -59,6 +60,7 @@ function Index() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>("t1");
   const [cameFromBoard, setCameFromBoard] = useState(false);
   const [scopeId, setScopeId] = useState<string | null>(null);
+  const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
 
@@ -83,6 +85,20 @@ function Index() {
       // Retain visibly labelled demo fixtures when authoritative services are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    const persisted = loadWardState(window.localStorage);
+    if (persisted !== null) {
+      setThreads(persisted.threads);
+      setNotes(persisted.notes);
+    }
+    setPersistenceReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!persistenceReady) return;
+    saveWardState(window.localStorage, { threads, notes });
+  }, [notes, persistenceReady, threads]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
