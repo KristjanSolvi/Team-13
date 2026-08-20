@@ -1,18 +1,11 @@
 import { useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  Clock,
-  Plus,
-  Send,
-  TriangleAlert,
-  UserPlus,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Plus, Send, TriangleAlert, UserPlus } from "lucide-react";
 import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, staff, statusDotClass, statusLabels } from "@/data/ward";
 import { LiveStrip } from "./LiveStrip";
+import { Spinner } from "./Loading";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
+import { usePendingAction } from "./useLoading";
 
 type Props = {
   threads: Thread[];
@@ -58,6 +51,7 @@ export function PatientActivity({
   const [showNewTask, setShowNewTask] = useState(false);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "mine" | "unowned" | "attention" | "done">("all");
+  const { pending, run } = usePendingAction();
 
   const patient = patients.find((p) => p.id === patientId) ?? patients[0]!;
   const scoped = scopeId ? threads.filter((t) => t.patientId === scopeId) : threads;
@@ -263,25 +257,41 @@ export function PatientActivity({
                       {!done && (
                         <div className="flex flex-wrap gap-2">
                           <button
-                            onClick={() => {
-                              onAssign(thread.id, "You");
-                              onStatusChange(thread.id, "tracking");
-                            }}
-                            className="flex flex-1 items-center justify-center gap-2 rounded-md bg-foreground py-2 text-[13.5px] font-medium text-background"
+                            disabled={pending === `assign-you-${thread.id}`}
+                            onClick={() =>
+                              run(`assign-you-${thread.id}`, () => {
+                                onAssign(thread.id, "You");
+                                onStatusChange(thread.id, "tracking");
+                              })
+                            }
+                            className="flex flex-1 items-center justify-center gap-2 rounded-md bg-foreground py-2 text-[13.5px] font-medium text-background hover:opacity-90"
                           >
-                            <UserPlus className="size-3.5" /> I'll do this
+                            {pending === `assign-you-${thread.id}` ? (
+                              <Spinner className="size-3.5" />
+                            ) : (
+                              <UserPlus className="size-3.5" />
+                            )}
+                            {pending === `assign-you-${thread.id}` ? "Assigning…" : "Assign to you"}
                           </button>
                           {suggested && (
                             <button
-                              onClick={() => onAssign(thread.id, suggested.name)}
-                              className="rounded-md border border-border bg-panel px-3 py-2 text-[13.5px] font-medium text-foreground"
+                              disabled={pending === `assign-suggested-${thread.id}`}
+                              onClick={() =>
+                                run(`assign-suggested-${thread.id}`, () =>
+                                  onAssign(thread.id, suggested.name),
+                                )
+                              }
+                              className="flex items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-[13.5px] font-medium text-foreground hover:bg-background"
                             >
-                              Offer to {suggested.name.split(" ")[0]}
+                              {pending === `assign-suggested-${thread.id}` && (
+                                <Spinner className="size-3" />
+                              )}
+                              Assign to {suggested.name.split(" ")[0]}
                             </button>
                           )}
                           <button
                             onClick={() => setPickerFor(pickerFor === thread.id ? null : thread.id)}
-                            className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-muted-foreground"
+                            className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-muted-foreground hover:bg-background"
                             aria-label="Choose someone else"
                           >
                             …
@@ -352,24 +362,40 @@ export function PatientActivity({
                       </form>
 
                       <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
-                        <button
-                          onClick={() => onStatusChange(thread.id, "verified")}
-                          className="flex items-center gap-1.5 rounded-md bg-verified-soft px-2.5 py-1.5 text-[12.5px] font-medium text-verified-strong"
-                        >
-                          <Check className="size-3.5" /> Verify done
-                        </button>
-                        <button
-                          onClick={() => onStatusChange(thread.id, "pending")}
-                          className="flex items-center gap-1.5 rounded-md bg-pending-soft px-2.5 py-1.5 text-[12.5px] font-medium text-pending-strong"
-                        >
-                          <Clock className="size-3.5" /> Needs a decision
-                        </button>
-                        <button
-                          onClick={() => onStatusChange(thread.id, "escalated")}
-                          className="flex items-center gap-1.5 rounded-md bg-escalated-soft px-2.5 py-1.5 text-[12.5px] font-medium text-escalated-strong"
-                        >
-                          <TriangleAlert className="size-3.5" /> Ask for help
-                        </button>
+                        {(
+                          [
+                            [
+                              "verified",
+                              "Verify done",
+                              Check,
+                              "bg-verified-soft text-verified-strong",
+                            ],
+                            [
+                              "escalated",
+                              "Ask for help",
+                              TriangleAlert,
+                              "bg-escalated-soft text-escalated-strong",
+                            ],
+                          ] as [ThreadStatus, string, typeof Check, string][]
+                        ).map(([status, label, Icon, tone]) => {
+                          const actionId = `${status}-${thread.id}`;
+                          const busy = pending === actionId;
+                          return (
+                            <button
+                              key={status}
+                              disabled={busy}
+                              onClick={() => run(actionId, () => onStatusChange(thread.id, status))}
+                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium hover:opacity-85 ${tone}`}
+                            >
+                              {busy ? (
+                                <Spinner className="size-3" />
+                              ) : (
+                                <Icon className="size-3.5" />
+                              )}
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

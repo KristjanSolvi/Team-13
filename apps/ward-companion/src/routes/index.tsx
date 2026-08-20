@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, LayoutGrid, ListChecks, X } from "lucide-react";
+import { X } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
+import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
+import { ViewTabs } from "@/components/ward/ViewTabs";
+import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { getWardCompanionOverview } from "@/lib/follow-through-api";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
@@ -40,6 +43,7 @@ function Index() {
   const [cameFromBoard, setCameFromBoard] = useState(false);
   const [scopeId, setScopeId] = useState<string | null>(null);
   const lastShift = useRef(0);
+  const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
     const patient = patients.find((candidate) => candidate.id === uiPatientId);
@@ -250,35 +254,16 @@ function Index() {
       />
 
       {open && (
-        <section className="fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-xl border border-border bg-panel/95 shadow-xl ring-1 ring-foreground/5 backdrop-blur-xl transition-[max-width] duration-300">
-          <header className="border-b border-border bg-background/60 px-4 py-3">
+        <section className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300">
+          <header className="border-b border-white/25 bg-white/12 px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
-                {(
-                  [
-                    ["board", "Ward board", LayoutGrid],
-                    ["activity", "Activity", ListChecks],
-                    ["insights", "Insights", BarChart3],
-                  ] as const
-                ).map(([key, label, Icon]) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setView(key);
-                      if (key === "board") setCameFromBoard(false);
-                    }}
-                    aria-current={view === key}
-                    className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                      view === key
-                        ? "bg-panel text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="size-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <ViewTabs
+                value={view}
+                onChange={(key) => {
+                  setView(key);
+                  if (key === "board") setCameFromBoard(false);
+                }}
+              />
 
               <div className="flex items-center gap-3">
                 <span className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
@@ -310,42 +295,54 @@ function Index() {
           </header>
 
           <div className="min-h-0 flex-1">
-            {view === "activity" ? (
-              <PatientActivity
-                threads={threads}
-                patientId={ehrPatientId}
-                scopeId={scopeId}
-                onScopeChange={(id) => {
-                  setScopeId(id);
-                  if (id) setEhrPatientId(id);
-                  setCameFromBoard(false);
-                }}
-                activeThreadId={activeThreadId}
-                onSelect={setActiveThreadId}
-                onStatusChange={handleStatusChange}
-                onAssign={handleAssign}
-                onAddActivity={handleAddActivity}
-                onAddThread={handleAddThread}
-                onSelectPatient={setEhrPatientId}
-                onRefreshPatient={refreshPatientThreads}
-                cameFromBoard={cameFromBoard}
-                onBackToBoard={() => {
-                  setView("board");
-                  setCameFromBoard(false);
-                  setScopeId(null);
-                }}
-              />
+            {loadingView ? (
+              view === "board" ? (
+                <BoardSkeleton />
+              ) : view === "insights" ? (
+                <InsightsSkeleton />
+              ) : (
+                <ListSkeleton />
+              )
+            ) : view === "activity" ? (
+              <div key="activity" className="fade-in-view h-full">
+                <PatientActivity
+                  threads={threads}
+                  patientId={ehrPatientId}
+                  scopeId={scopeId}
+                  onScopeChange={(id) => {
+                    setScopeId(id);
+                    if (id) setEhrPatientId(id);
+                    setCameFromBoard(false);
+                  }}
+                  activeThreadId={activeThreadId}
+                  onSelect={setActiveThreadId}
+                  onStatusChange={handleStatusChange}
+                  onAssign={handleAssign}
+                  onAddActivity={handleAddActivity}
+                  onAddThread={handleAddThread}
+                  onSelectPatient={setEhrPatientId}
+                  onRefreshPatient={refreshPatientThreads}
+                  cameFromBoard={cameFromBoard}
+                  onBackToBoard={() => {
+                    setView("board");
+                    setCameFromBoard(false);
+                    setScopeId(null);
+                  }}
+                />
+              </div>
             ) : view === "insights" ? (
-              <Insights
-                threads={threads}
-                onOpenPatient={(pid) => {
-                  setEhrPatientId(pid);
-                  setCameFromBoard(false);
-                  setView("activity");
-                }}
-              />
+              <div key="insights" className="fade-in-view h-full">
+                <Insights
+                  threads={threads}
+                  onOpenPatient={(pid) => {
+                    setEhrPatientId(pid);
+                    setCameFromBoard(false);
+                    setView("activity");
+                  }}
+                />
+              </div>
             ) : (
-              <div className="flex h-full flex-col">
+              <div key="board" className="fade-in-view flex h-full flex-col">
                 <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border px-5 py-3">
                   <div>
                     <h1 className="text-[15px] font-medium tracking-tight">North Wing · Level 4</h1>
@@ -391,7 +388,7 @@ function Index() {
             )}
           </div>
 
-          <footer className="flex items-center justify-between border-t border-border bg-background/60 px-6 py-3 text-xs font-medium text-muted-foreground">
+          <footer className="flex items-center justify-between border-t border-white/25 bg-white/12 px-6 py-3 text-xs font-medium text-muted-foreground">
             <span>Ward Threads · connected to Nervecentre</span>
             <span>← → to switch views · Esc to hide</span>
           </footer>
