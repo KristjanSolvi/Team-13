@@ -5,6 +5,7 @@ import { parseConfig } from "../src/config.js";
 describe("integration API config", () => {
   it("parses defaults and multiple UI origins", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
@@ -24,15 +25,25 @@ describe("integration API config", () => {
         "https://ui-preview.example.test",
       ],
       upstreamTimeoutMs: 8_000,
+      integrationApiBearerToken: "public-secret",
     });
   });
 
-  it("requires the server-only agentic application token", () => {
+  it("requires the dedicated inbound and server-only upstream tokens", () => {
     expect(() => parseConfig({})).toThrow();
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "short",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      }),
+    ).toThrow();
   });
 
   it("allows both common local Vite hostnames by default", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
@@ -46,6 +57,7 @@ describe("integration API config", () => {
 
   it("accepts generic platform host and port variables", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",

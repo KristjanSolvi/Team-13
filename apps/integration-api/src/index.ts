@@ -37,6 +37,7 @@ const service = new IntegrationService(agentic, pipeline, undefined, {
 const app = createIntegrationApp({
   service,
   allowedOrigins: config.allowedOrigins,
+  integrationApiBearerToken: config.integrationApiBearerToken,
 });
 
 app.listen(config.port, config.host, () => {

@@ -10,6 +10,7 @@ import { IntegrationError } from "../src/errors.js";
 import { IntegrationService } from "../src/service.js";
 
 const sourceSnapshotHash = `sha256:${"a".repeat(64)}`;
+const integrationApiBearerToken = "integration-public-token";
 const handoverPacket = {
   situation: [],
   background: [],
@@ -142,6 +143,7 @@ function harness() {
   const app = createIntegrationApp({
     service,
     allowedOrigins: ["http://127.0.0.1:5173"],
+    integrationApiBearerToken,
   });
   return { agentic, pipeline, app, calls };
 }
@@ -193,7 +195,25 @@ describe("integration API", () => {
         response.body.paths["/api/patients/{patientId}/handovers"].post
           .responses,
       ).sort(),
-    ).toEqual(["200", "201", "400", "403", "409", "502", "503", "504"]);
+    ).toEqual([
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "409",
+      "502",
+      "503",
+      "504",
+    ]);
+    expect(
+      response.body.paths["/api/patients/{patientId}/handovers"].post.security,
+    ).toEqual([{ integrationBearer: [] }]);
+    expect(response.body.components.securitySchemes.integrationBearer).toEqual({
+      type: "http",
+      scheme: "bearer",
+      bearerFormat: "opaque",
+    });
     const handoverSchema = response.body.components.schemas.Handover;
     expect(handoverSchema.properties.packet).toEqual({
       $ref: "#/components/schemas/HandoverPacket",
@@ -393,11 +413,40 @@ describe("integration API", () => {
     expect(pipeline.request).toHaveBeenCalledOnce();
   });
 
-  it("orchestrates a new handover as draft, render, finalize and returns 201", async () => {
+  it.each([
+    ["missing", undefined],
+    ["wrong", "Bearer wrong-public-token"],
+    ["malformed", `Basic ${integrationApiBearerToken}`],
+  ])(
+    "rejects a %s public handover credential before validation or upstream calls",
+    async (_label, authorization) => {
+      const { agentic, pipeline, app } = harness();
+      let pending = request(app)
+        .post("/api/patients/synthetic-karen/handovers")
+        .send({ invalid: "body" });
+      if (authorization !== undefined) {
+        pending = pending.set("authorization", authorization);
+      }
+
+      const response = await pending.expect(401);
+
+      expect(response.body.error).toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Authentication required",
+        retryable: false,
+      });
+      expect(agentic.createHandoverDraft).not.toHaveBeenCalled();
+      expect(pipeline.renderHandover).not.toHaveBeenCalled();
+      expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a lowercase bearer scheme and orchestrates a new handover", async () => {
     const { agentic, pipeline, app, calls } = harness();
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .set("x-correlation-id", "corr-handover-1")
       .send({
@@ -469,6 +518,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(201);
@@ -489,6 +539,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(200);
@@ -512,6 +563,7 @@ describe("integration API", () => {
 
     await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(200);
@@ -528,6 +580,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(500);
@@ -554,6 +607,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(503);
@@ -666,6 +720,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -693,6 +748,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(409);
@@ -713,7 +769,9 @@ describe("integration API", () => {
     ["unknown field", "clinician:karen", { idempotencyKey: "handover-001", reason: "on_demand", surprise: true }],
   ])("rejects %s before any upstream call", async (_label, actor, body) => {
     const { agentic, pipeline, app } = harness();
-    let pending = request(app).post("/api/patients/synthetic-karen/handovers");
+    let pending = request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`);
     if (actor !== undefined) pending = pending.set("x-actor-id", actor);
 
     await pending.send(body).expect(400);
@@ -733,6 +791,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -754,6 +813,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -775,6 +835,7 @@ describe("integration API", () => {
 
     await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -815,6 +876,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -841,6 +903,7 @@ describe("integration API", () => {
 
     await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -879,6 +942,7 @@ describe("integration API", () => {
 
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:karen")
       .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
       .expect(502);
@@ -1073,6 +1137,9 @@ describe("integration API", () => {
 
     expect(allowed.headers["access-control-allow-origin"]).toBe(
       "http://127.0.0.1:5173",
+    );
+    expect(allowed.headers["access-control-allow-headers"]).toContain(
+      "authorization",
     );
     expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
   });

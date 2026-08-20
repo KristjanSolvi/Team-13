@@ -176,6 +176,7 @@ describe("real HTTP service boundaries", () => {
     app = createIntegrationApp({
       service,
       allowedOrigins: ["http://127.0.0.1:5173"],
+      integrationApiBearerToken: "integration-public-token",
     });
   });
 
@@ -306,6 +307,7 @@ describe("real HTTP service boundaries", () => {
   it("orchestrates handover HTTP boundaries without leaking the agentic credential", async () => {
     const response = await request(app)
       .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", "Bearer integration-public-token")
       .set("x-actor-id", "clinician:karen")
       .set("x-correlation-id", "corr-http-handover")
       .send({
@@ -348,6 +350,15 @@ describe("real HTTP service boundaries", () => {
     });
     expect(JSON.stringify(response.body)).not.toContain(
       "server-only-app-token",
+    );
+    expect(JSON.stringify(response.body)).not.toContain(
+      "integration-public-token",
+    );
+    expect(JSON.stringify(captured.handoverDraft)).not.toContain(
+      "integration-public-token",
+    );
+    expect(JSON.stringify(captured.handoverFinalize)).not.toContain(
+      "integration-public-token",
     );
   });
 

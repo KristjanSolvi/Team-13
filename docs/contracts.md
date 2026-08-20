@@ -6,15 +6,16 @@ Companion, and Agentic/MCP backend. All examples use synthetic data.
 ## Authentication and attribution
 
 - `GET /healthz` is public.
-- Every `/api/*` request requires `Authorization: Bearer
-  $APP_BEARER_TOKEN`.
-- Every `/api/*` mutation also requires `x-actor-id`.
+- `POST /api/patients/:patientId/handovers` requires `Authorization: Bearer
+  $INTEGRATION_API_BEARER_TOKEN`. This dedicated inbound secret is distinct
+  from every service-to-service token.
+- Every attributed `/api/*` mutation requires `x-actor-id`.
 - Every mutation carries an operation-specific `idempotencyKey`. Retrying the
   same operation must reuse the key.
 - MCP requests to `POST`, `GET`, or `DELETE /mcp` require `Authorization:
   Bearer $MCP_BEARER_TOKEN`.
-- Browser CORS is allowed only for the configured `UI_ORIGIN`. The application
-  bearer belongs in the integration service/BFF, never in browser code.
+- Browser CORS is allowed only for configured `UI_ORIGINS`; the handover route
+  explicitly allows the `Authorization` header.
 - Corti, MCP, application, HMAC, and tunnel credentials are server-side only.
 
 Errors use a stable, non-sensitive envelope:
@@ -164,6 +165,7 @@ The UI has one public operation through the integration API:
 
 ```text
 POST /api/patients/:patientId/handovers
+Authorization: Bearer $INTEGRATION_API_BEARER_TOKEN
 x-actor-id: clinician:demo
 x-correlation-id: handover-demo-1
 ```
@@ -176,11 +178,13 @@ x-correlation-id: handover-demo-1
 }
 ```
 
+The inbound bearer is checked before body validation, attribution, or any
+upstream call. It must not equal or expose `AGENTIC_APP_BEARER_TOKEN`.
 `x-actor-id` is required and becomes `requestedBy`; `x-correlation-id` is
 propagated across the integration, Agentic, and pipeline services. `focus` is
 only an emphasis hint. It is never treated as patient evidence. A new result
-returns `201`; an exact saved or finalized replay returns `200`. The response is
-always labelled `status: "draft"` because it is decision support, never an
+returns `201`; an exact saved or finalized replay returns `200`. The response
+is always labelled `status: "draft"` because it is decision support, never an
 approved clinical record. `renderingStatus` distinguishes `pending` from
 `rendered`.
 

@@ -58,6 +58,7 @@ Request an on-demand handover through the public integration boundary:
 ```bash
 curl --request POST \
   http://127.0.0.1:8790/api/patients/synthetic-karen/handovers \
+  --header "authorization: Bearer $INTEGRATION_API_BEARER_TOKEN" \
   --header 'content-type: application/json' \
   --header 'x-actor-id: clinician:demo' \
   --header 'x-correlation-id: handover-demo-1' \
@@ -68,8 +69,9 @@ curl --request POST \
   }'
 ```
 
-The browser never receives or supplies the private Agentic service bearer. A
-replay returns `200`; a newly generated handover returns `201`.
+The caller supplies the dedicated inbound `INTEGRATION_API_BEARER_TOKEN`. The
+browser never receives or supplies the separate private Agentic service bearer.
+A replay returns `200`; a newly generated handover returns `201`.
 
 ## Ward Companion boundary
 
@@ -98,10 +100,11 @@ npm test
 npm run dev
 ```
 
-Use the same `AGENTIC_APP_BEARER_TOKEN` configured by the Agentic/MCP backend.
-Set `PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
-private-service values. Never expose any of these tokens to the browser or
-commit `.env`.
+Generate a dedicated `INTEGRATION_API_BEARER_TOKEN` for inbound handover
+requests. Do not reuse it as `AGENTIC_APP_BEARER_TOKEN`, which must match the
+Agentic/MCP backend's private application token. Set
+`PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
+private-service values. Never commit `.env`.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
 port `5173` are accepted by the example configuration. Add the deployed or

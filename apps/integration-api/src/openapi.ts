@@ -212,12 +212,14 @@ export const integrationOpenApi = {
             },
           },
           "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
           "403": { $ref: "#/components/responses/Error" },
           "409": { $ref: "#/components/responses/Error" },
           "502": { $ref: "#/components/responses/Error" },
           "503": { $ref: "#/components/responses/Error" },
           "504": { $ref: "#/components/responses/Error" },
         },
+        security: [{ integrationBearer: [] }],
       },
     },
     "/api/patients/{patientId}/companion": {
@@ -517,6 +519,13 @@ export const integrationOpenApi = {
     },
   },
   components: {
+    securitySchemes: {
+      integrationBearer: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "opaque",
+      },
+    },
     parameters: {
       PatientId: {
         name: "patientId",

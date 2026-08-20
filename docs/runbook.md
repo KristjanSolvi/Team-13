@@ -158,7 +158,9 @@ In `apps/integration-api/.env`, keep `AGENTIC_BASE_URL=http://127.0.0.1:3000`,
 `PATIENT_PROFILE_BASE_URL=http://127.0.0.1:8791`, and
 `MOCK_EHR_BASE_URL=http://127.0.0.1:8793`. Set `AGENTIC_APP_BEARER_TOKEN` to
 the backend's `APP_BEARER_TOKEN`, and set the profile/mock-EHR bearer values to
-their matching private service tokens. Add the actual
+their matching private service tokens. Generate a separate
+`INTEGRATION_API_BEARER_TOKEN` of at least eight characters for callers of the
+public handover endpoint; never reuse `AGENTIC_APP_BEARER_TOKEN`. Add the actual
 Lovable preview origin to `UI_ORIGINS`; do not use a wildcard.
 
 Confirm the handover path is ready before spending credit:
@@ -177,13 +179,15 @@ exactly one attributed public request:
 HANDOVER_PATIENT_ID=synthetic-karen \
 HANDOVER_ACTOR_ID=clinician:demo \
 INTEGRATION_API_BASE_URL=http://127.0.0.1:8790 \
+INTEGRATION_API_BEARER_TOKEN=replace-with-public-handover-token \
 npm run smoke:handover
 ```
 
 The helper sends exactly one
 `POST /api/patients/synthetic-karen/handovers`. It prints only four identifiers
 and status fields; it never prints the canonical packet, patient prose,
-prompts, tokens, or the full HTTP response. It has no retry loop. If the call
+prompts, tokens, or the full HTTP response. It refuses to run without the
+dedicated inbound bearer and has no retry loop. If the call
 fails, note the HTTP status, inspect the three server logs and Corti console,
 and decide manually whether to use a new idempotency key. Do not rerun the
 command blindly.
