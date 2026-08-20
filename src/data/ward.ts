@@ -190,9 +190,9 @@ export const initialThreads: Thread[] = [
     suggestion: "Offer to the on-shift therapy team — two members are currently free.",
     assignee: null,
     candidates: [
-      { name: "Therapy team", role: "Physio", free: true },
+      { name: "Physio team", role: "Physio", free: true },
       { name: "Amira Yusuf", role: "Senior physio", free: true },
-      { name: "Ortho team", role: "Surgical", free: false },
+      { name: "Surgical SHO", role: "Surgery", free: false },
     ],
     due: "Yesterday 17:00",
     activity: [
@@ -338,15 +338,39 @@ export const initialNotes: Record<string, CaseNote[]> = {
   ],
 };
 
-export type Staff = { name: string; role: string; free: boolean };
+export type Staff = { name: string; role: string; team: string; free: boolean };
 
 export const staff: Staff[] = [
-  { name: "Dr. Neve Halloran", role: "SHO", free: true },
-  { name: "Dr. Aris", role: "Registrar", free: false },
-  { name: "Nurse Kelly O.", role: "Bay A nurse", free: true },
-  { name: "Nurse Ben Adeyemi", role: "Bay B nurse", free: true },
-  { name: "Amira Yusuf", role: "Senior physio", free: true },
-  { name: "Pharmacy", role: "Ward pharmacist", free: true },
-  { name: "Portering team", role: "Transport", free: true },
-  { name: "Surgical SHO", role: "Surgery", free: false },
+  // Nursing team
+  { name: "Nurse Kelly O.", role: "Bay A nurse", team: "Nursing team", free: true },
+  { name: "Nurse Ben Adeyemi", role: "Bay B nurse", team: "Nursing team", free: true },
+  { name: "Nurse Chen L.", role: "Bay C nurse", team: "Nursing team", free: false },
+  { name: "Nurse Patel S.", role: "Senior nurse", team: "Nursing team", free: true },
+  { name: "Nurse Wright J.", role: "Nurse coordinator", team: "Nursing team", free: false },
+
+  // Surgical SHO team
+  { name: "Surgical SHO", role: "Surgery", team: "Surgical SHO team", free: false },
+  { name: "Dr. Samira H.", role: "Surgery", team: "Surgical SHO team", free: true },
+
+  // Surgical F1s
+  { name: "Dr. Aris", role: "Registrar", team: "Surgical F1s", free: false },
+  { name: "Dr. Neve Halloran", role: "SHO", team: "Surgical F1s", free: true },
+  { name: "Dr. Yuki T.", role: "F1", team: "Surgical F1s", free: true },
+  { name: "Dr. Rosa M.", role: "F1", team: "Surgical F1s", free: false },
+
+  // Portering team
+  { name: "Portering team", role: "Transport", team: "Portering team", free: true },
+  { name: "Porter A.", role: "Transport", team: "Portering team", free: true },
+  { name: "Porter B.", role: "Transport", team: "Portering team", free: false },
+
+  // Physio team
+  { name: "Amira Yusuf", role: "Senior physio", team: "Physio team", free: true },
+  { name: "Physio J.", role: "Physio", team: "Physio team", free: false },
+
+  // Pharmacist
+  { name: "Pharmacy", role: "Ward pharmacist", team: "Pharmacist", free: true },
+  { name: "Pharmacist M.", role: "Ward pharmacist", team: "Pharmacist", free: false },
+
+  // Discharge coordinator
+  { name: "Discharge coordinator", role: "Coordinator", team: "Discharge coordinator", free: true },
 ];

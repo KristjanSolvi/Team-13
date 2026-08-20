@@ -11,7 +11,6 @@ import {
   initialNotes,
   initialThreads,
   patients,
-  staff,
   statusDotClass,
   statusLabels,
 } from "@/data/ward";
@@ -265,11 +264,19 @@ function Index() {
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
-                  {(["pending", "tracking", "verified", "escalated"] as ThreadStatus[]).map((s) => (
-                    <span key={s} className="flex items-center gap-1.5">
+                <span className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
+                  {(
+                    [
+                      ["pending", "Needs action"],
+                      ["tracking", "In progress"],
+                      ["verified", "Completed"],
+                      ["escalated", "Escalated"],
+                    ] as [ThreadStatus, string][]
+                  ).map(([s, label]) => (
+                    <span key={s} className="flex items-center gap-1.5" title={label}>
                       <span className={`size-2 rounded-full ${statusDotClass[s]}`} />
-                      {counts[s]}
+                      <span className="text-[11px]">{label}</span>
+                      <span className="text-[11px] tabular-nums text-foreground">{counts[s]}</span>
                       <span className="sr-only">{statusLabels[s]}</span>
                     </span>
                   ))}
@@ -343,10 +350,6 @@ function Index() {
                     <div>
                       <dt>Past deadline</dt>
                       <dd className="text-foreground">{counts.escalated}</dd>
-                    </div>
-                    <div>
-                      <dt>Staff free</dt>
-                      <dd className="text-foreground">{staff.filter((s) => s.free).length}</dd>
                     </div>
                   </dl>
                 </div>
