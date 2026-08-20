@@ -1236,6 +1236,63 @@ test("finalize rejects omitted, added, duplicated, or rewritten unknowns", (t) =
   }
 });
 
+test("finalize preserves the exact ordering of distinct packet unknowns", (t) => {
+  const unknowns = [
+    "The response to the change is not yet documented.",
+    "The next blood pressure reading is not yet available.",
+  ];
+  const accepted = prepareRequested(t);
+  accepted.packet.unknowns = unknowns;
+  const acceptedDraft = accepted.service.saveDraft({
+    handoverId: accepted.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: accepted.packet,
+  });
+  assert.equal(
+    accepted.service.finalize(
+      acceptedDraft.handoverId,
+      acceptedDraft.version,
+      acceptedDraft.sourceSnapshotHash as string,
+      renderedFor(accepted.packet),
+    ).status,
+    "rendered",
+  );
+
+  const rejected = prepareRequested(t);
+  rejected.packet.unknowns = unknowns;
+  const rejectedDraft = rejected.service.saveDraft({
+    handoverId: rejected.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: rejected.packet,
+  });
+  const reversed = renderedFor(rejected.packet);
+  const renderedUnknowns = reversed.sections.find(
+    ({ sectionId }) => sectionId === "unknowns",
+  );
+  assert.ok(renderedUnknowns);
+  renderedUnknowns.statements.reverse();
+  const eventsBefore = rejected.store.listEvents(0);
+
+  assertDomainError(
+    () =>
+      rejected.service.finalize(
+        rejectedDraft.handoverId,
+        rejectedDraft.version,
+        rejectedDraft.sourceSnapshotHash as string,
+        reversed,
+      ),
+    "HANDOVER_EVIDENCE_NOT_FOUND",
+    409,
+  );
+  assert.deepEqual(
+    rejected.store.requireHandover(rejectedDraft.handoverId),
+    rejectedDraft,
+  );
+  assert.deepEqual(rejected.store.listEvents(0), eventsBefore);
+});
+
 test("finalize omits the unknowns section when the packet has no unknowns", (t) => {
   const setup = prepareRequested(t);
   setup.packet.unknowns = [];
