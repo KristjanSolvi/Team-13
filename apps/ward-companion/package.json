@@ -92,5 +92,11 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "optionalDependencies": {
+    "@oxc-parser/binding-linux-x64-gnu": "0.120.0",
+    "@rolldown/binding-linux-x64-gnu": "1.2.5",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
+    "lightningcss-linux-x64-gnu": "1.33.0"
   }
 }
