@@ -223,6 +223,10 @@ or reading a handover cannot change task state or ownership.
 - Every clinical statement cites one or more references already registered for
   that patient. Narrative claims may cite clinical `record:` and `encounter:`
   references, never task or thread references as clinical evidence.
+- Operational task items may cite `thread:<threadId>@<version>` only for a
+  current open thread in the patient scope. A stale, terminal, foreign, or
+  unknown thread/version reference is rejected; thread references never support
+  clinical narrative claims.
 - Every active task appears exactly once in `outstandingTasks`,
   `awaitingVerification`, or `escalations`. Its summary, state, team, member,
   urgency, deadlines, version, and `task:<id>@<version>` reference must exactly
