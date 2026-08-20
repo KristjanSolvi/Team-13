@@ -19,7 +19,8 @@
     "tunnel": "tsx scripts/tunnel.ts",
     "smoke:corti": "tsx scripts/smoke-corti.ts",
     "smoke:handover": "tsx scripts/smoke-handover.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx scripts/demo.ts",
+    "demo:meeting": "tsx scripts/demo-meeting.ts"
   },
   "dependencies": {
     "@corti/sdk": "5.0.0",
