@@ -18,6 +18,7 @@ import {
 import type { Task } from "../domain/types.js";
 import type { Clock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
+import { isHandoverAgentDraftVerified } from "./handover-verification.js";
 
 export interface BeginHandoverInput {
   patientId: string;
@@ -238,7 +239,11 @@ export class HandoverService {
         409,
       );
     }
-    if (handover.status === "requested") {
+    if (
+      handover.status === "requested" ||
+      (handover.status === "draft" &&
+        !isHandoverAgentDraftVerified(this.store, handover))
+    ) {
       throw new DomainError(
         "HANDOVER_IN_PROGRESS",
         "Handover generation is already in progress",

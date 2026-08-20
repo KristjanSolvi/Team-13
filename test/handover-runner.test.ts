@@ -23,6 +23,10 @@ import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
 import { HandoverService } from "../src/services/handover-service.js";
+import {
+  handoverAgentVerificationScope,
+  verifyHandoverAgentDraft,
+} from "../src/services/handover-verification.js";
 
 const NOW = "2026-08-20T10:00:00.000Z";
 const PATIENT_ID = "synthetic-karen";
@@ -67,8 +71,10 @@ function testConfig(overrides: NodeJS.ProcessEnv = {}) {
   });
 }
 
-function harness(t: TestContext) {
-  const store = new SqliteStore(openDatabase(":memory:"));
+function harness(
+  t: TestContext,
+  store: SqliteStore = new SqliteStore(openDatabase(":memory:")),
+) {
   t.after(() => store.close());
   seedKaren(store, NOW);
   const handovers = new HandoverService(
@@ -95,6 +101,20 @@ function assertDomainError(
   assert.equal(error.code, code);
   assert.equal(error.retryable, retryable);
   return true;
+}
+
+class VerificationMarkerFailureStore extends SqliteStore {
+  failMarker = true;
+
+  override saveProcessedCommand(
+    scope: string,
+    key: string,
+    result: unknown,
+    createdAt: string,
+  ): void {
+    if (this.failMarker) throw new Error("verification marker write failed");
+    super.saveProcessedCommand(scope, key, result, createdAt);
+  }
 }
 
 test("handover prompt preserves the exact constrained five-tool contract", () => {
@@ -165,6 +185,29 @@ test("the dedicated Corti gateway attaches the token to the handover MCP name", 
       token: MCP_TOKEN,
     },
   });
+});
+
+test("the Corti gateway returns terminal non-completed results for typed runner classification", async () => {
+  const gateway = new CortiSdkGateway(
+    "handover-agent",
+    testConfig(),
+    "follow-through-handover",
+  );
+
+  for (const state of [
+    "failed",
+    "canceled",
+    "rejected",
+    "input-required",
+    "auth-required",
+  ]) {
+    const result = {
+      contextId: "ctx-terminal",
+      taskId: `task-${state}`,
+      state,
+    };
+    assert.deepEqual(await gateway.waitForCompletion(result), result);
+  }
 });
 
 test("pure provisioning definitions configure exactly one distinct MCP per agent", () => {
@@ -312,6 +355,95 @@ test("a handover always uses a fresh data-free context and verifies one persiste
   assert.equal(
     store.listEvents(0).some((event) => event.eventType.startsWith("task.")),
     false,
+  );
+  const verificationScope = handoverAgentVerificationScope(handover.handoverId);
+  const expectedMarker = {
+    handoverId: handover.handoverId,
+    contextId: "ctx-fresh",
+    version: generated.version,
+  };
+  assert.deepEqual(
+    store.getProcessedCommand(verificationScope, "handover-request-1"),
+    expectedMarker,
+  );
+  assert.deepEqual(
+    verifyHandoverAgentDraft(store, {
+      handoverId: handover.handoverId,
+      contextId: "ctx-fresh",
+      idempotencyKey: "handover-request-1",
+    }),
+    generated,
+  );
+  assert.deepEqual(
+    store.getProcessedCommand(verificationScope, "handover-request-1"),
+    expectedMarker,
+  );
+});
+
+test("handover verification marker writes fail atomically and retry idempotently", async (t) => {
+  const store = new VerificationMarkerFailureStore(openDatabase(":memory:"));
+  const { handovers, handover } = harness(t, store);
+  let calls = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      calls += 1;
+      if (calls === 1) return completed("ctx-marker", "warmup");
+      handovers.saveDraft({
+        handoverId: handover.handoverId,
+        patientId: PATIENT_ID,
+        contextId: "ctx-marker",
+        packet: PACKET,
+      });
+      return completed("ctx-marker", "generate");
+    },
+    async waitForCompletion(result) {
+      return result;
+    },
+  };
+
+  await assert.rejects(
+    new HandoverAgentRunner(gateway, store, MCP_TOKEN).generate({
+      handoverId: handover.handoverId,
+      patientId: PATIENT_ID,
+      reason: "on_demand",
+      focus: "Medication safety",
+      idempotencyKey: "handover-request-1",
+    }),
+    /verification marker write failed/,
+  );
+  const draft = store.requireHandover(handover.handoverId);
+  assert.equal(draft.status, "draft");
+  assert.equal(
+    store.getProcessedCommand(
+      handoverAgentVerificationScope(handover.handoverId),
+      "handover-request-1",
+    ),
+    null,
+  );
+
+  store.failMarker = false;
+  const first = verifyHandoverAgentDraft(store, {
+    handoverId: handover.handoverId,
+    contextId: "ctx-marker",
+    idempotencyKey: "handover-request-1",
+  });
+  const replay = verifyHandoverAgentDraft(store, {
+    handoverId: handover.handoverId,
+    contextId: "ctx-marker",
+    idempotencyKey: "handover-request-1",
+  });
+  assert.deepEqual(first, draft);
+  assert.deepEqual(replay, draft);
+  assert.deepEqual(
+    store.getProcessedCommand(
+      handoverAgentVerificationScope(handover.handoverId),
+      "handover-request-1",
+    ),
+    {
+      handoverId: handover.handoverId,
+      contextId: "ctx-marker",
+      version: draft.version,
+    },
   );
 });
 

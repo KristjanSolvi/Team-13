@@ -9,6 +9,7 @@ import {
   handoverReasons,
   renderedHandoverSchema,
 } from "../domain/handover.js";
+import { isHandoverAgentDraftVerified } from "../services/handover-verification.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor } from "./auth.js";
 
@@ -109,14 +110,26 @@ export function mountHandoverRoutes(
             }
             throw agentFailure();
           }
-          if (persisted.status === "draft" || persisted.status === "rendered") {
+          if (
+            persisted.status === "rendered" ||
+            (persisted.status === "draft" &&
+              isHandoverAgentDraftVerified(dependencies.store, persisted))
+          ) {
             handover = persisted;
           } else {
-            dependencies.handovers.markFailed(
-              handover.handoverId,
-              "CORTI_HANDOVER_AGENT_FAILED",
-              true,
-            );
+            if (persisted.status === "draft") {
+              dependencies.handovers.rejectDraft(
+                handover.handoverId,
+                "CORTI_HANDOVER_AGENT_FAILED",
+                true,
+              );
+            } else {
+              dependencies.handovers.markFailed(
+                handover.handoverId,
+                "CORTI_HANDOVER_AGENT_FAILED",
+                true,
+              );
+            }
             throw agentFailure();
           }
         }

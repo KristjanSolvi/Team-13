@@ -1,6 +1,7 @@
 import { DomainError } from "../domain/errors.js";
 import type { HandoverReason, HandoverRecord } from "../domain/handover.js";
 import type { SqliteStore } from "../infra/store.js";
+import { verifyHandoverAgentDraft } from "../services/handover-verification.js";
 import type { AgentGateway, AgentResult } from "./runner.js";
 
 export interface GenerateHandoverInput {
@@ -122,6 +123,10 @@ export class HandoverAgentRunner {
         502,
       );
     }
-    return persisted;
+    return verifyHandoverAgentDraft(this.store, {
+      handoverId: input.handoverId,
+      contextId: warmup.contextId,
+      idempotencyKey: input.idempotencyKey,
+    });
   }
 }

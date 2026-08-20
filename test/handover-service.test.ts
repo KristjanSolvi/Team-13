@@ -20,6 +20,7 @@ import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
 import { HandoverService } from "../src/services/handover-service.js";
+import { verifyHandoverAgentDraft } from "../src/services/handover-verification.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 import { RecordService } from "../src/services/record-service.js";
 
@@ -339,8 +340,19 @@ test("beginRequest enforces idempotency across every lifecycle state", (t) => {
   );
 });
 
-test("beginRequest replays completed draft and rendered results", (t) => {
+test("beginRequest replays only agent-verified drafts and rendered results", (t) => {
   const setup = savePreparedDraft(t);
+  assertDomainError(
+    () => begin(setup.service),
+    "HANDOVER_IN_PROGRESS",
+    409,
+    true,
+  );
+  verifyHandoverAgentDraft(setup.store, {
+    handoverId: setup.draft.handoverId,
+    contextId: HANDOVER_CONTEXT_ID,
+    idempotencyKey: BEGIN_INPUT.idempotencyKey,
+  });
   const draftReplay = begin(setup.service);
   assert.equal(draftReplay.replayed, true);
   assert.deepEqual(draftReplay.handover, setup.draft);
