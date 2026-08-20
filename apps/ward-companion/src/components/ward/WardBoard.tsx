@@ -1,10 +1,9 @@
-import type { CaseNote, Patient, Thread } from "@/data/ward";
+import type { Patient, Thread } from "@/data/ward";
 import { bays, patients } from "@/data/ward";
 import { StatusBand } from "./StatusBand";
 
 type Props = {
   threads: Thread[];
-  notes?: Record<string, CaseNote[]>;
   onOpenThread: (threadId: string) => void;
   onOpenPatient: (patientId: string) => void;
   activePatientId?: string | null;
@@ -22,13 +21,7 @@ function dueStyle(due: string) {
   return "bg-tracking-soft text-tracking-strong";
 }
 
-export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activePatientId }: Props) {
-  const latestPlanFor = (p: Patient) => {
-    const list = notes?.[p.id] ?? [];
-    const candidates = list.filter((n) => n.doc === "medical");
-    const note = (candidates.length ? candidates : list).at(-1);
-    return note ? { text: note.text, at: note.at } : null;
-  };
+export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientId }: Props) {
   const openThreadsFor = (p: Patient) =>
     threads.filter(
       (t) => t.patientId === p.id && t.status !== "verified" && isDueTodayOrOverdue(t.due),
@@ -85,16 +78,6 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                     </span>
                   </div>
 
-                  {(() => {
-                    const plan = latestPlanFor(patient);
-                    return plan ? (
-                      <p className="mb-2 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                        <span className="font-medium text-foreground/80">Latest plan:</span>{" "}
-                        {plan.text}
-                      </p>
-                    ) : null;
-                  })()}
-
                   {open.length > 0 ? (
                     <div className="space-y-1">
                       {open.map((t) => (
@@ -113,18 +96,9 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                     </div>
                   ) : (
                     <p className="text-[11px] font-medium italic text-muted-foreground">
-                      Clear for discharge
+                      No tracked threads
                     </p>
                   )}
-
-                  <dl className="mt-3 space-y-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                    {patient.homeTomorrow && (
-                      <div className="flex justify-between gap-3">
-                        <dt>Estimate date of discharge</dt>
-                        <dd className="text-right font-medium text-foreground">Tomorrow</dd>
-                      </div>
-                    )}
-                  </dl>
                 </article>
               );
             })}

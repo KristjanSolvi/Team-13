@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import type { Thread, ThreadStatus } from "@/data/ward";
-import { bays, patients, staff } from "@/data/ward";
 
-type Props = { threads: Thread[]; onOpenPatient: (id: string) => void };
+type Props = { threads: Thread[] };
 
 const workLabels: Record<Exclude<ThreadStatus, "verified">, string> = {
   escalated: "Needs help",
@@ -62,11 +61,18 @@ function formatDuration(minutes: number | null) {
   return hours === 0 ? `${remainder}m` : `${hours}h ${remainder}m`;
 }
 
-export function Insights({ threads, onOpenPatient }: Props) {
+export function Insights({ threads }: Props) {
   const done = threads.filter((thread) => thread.status === "verified");
   const open = threads.filter((thread) => thread.status !== "verified");
   const escalated = threads.filter((thread) => thread.status === "escalated");
   const unowned = open.filter((thread) => !thread.assignee);
+  const assigned = open.length - unowned.length;
+  const trackedPatients = new Set(threads.map((thread) => thread.patientId)).size;
+  const owners = new Set(
+    open
+      .map((thread) => thread.assignee)
+      .filter((assignee): assignee is string => assignee !== null),
+  ).size;
 
   const averageCloseMinutes = useMemo(() => {
     const durations = done
@@ -76,30 +82,25 @@ export function Insights({ threads, onOpenPatient }: Props) {
     return Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length);
   }, [done]);
 
-  const teams = useMemo(() => {
-    const map = new Map<string, { total: number; free: number }>();
-    for (const member of staff) {
-      const existing = map.get(member.team) ?? { total: 0, free: 0 };
-      existing.total += 1;
-      if (member.free) existing.free += 1;
-      map.set(member.team, existing);
-    }
-    return Array.from(map.entries())
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }, []);
-
-  const goingHome = patients.filter((patient) => patient.homeTomorrow);
-  const blocked = goingHome.filter((patient) =>
-    open.some((thread) => thread.patientId === patient.id),
-  );
-  const occupied = bays.flatMap((bay) => bay.beds).filter((bed) => bed.patientId).length;
-  const totalBeds = bays.flatMap((bay) => bay.beds).length;
   const workGroups = (["escalated", "pending", "tracking"] as const).map((status) => ({
     status,
     count: threads.filter((thread) => thread.status === status).length,
   }));
   const busiestGroup = [...workGroups].sort((left, right) => right.count - left.count)[0];
+
+  if (threads.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center p-5">
+        <section className="max-w-sm rounded-xl border border-dashed border-border bg-panel/50 px-6 py-8 text-center">
+          <h2 className="text-[15px] font-medium text-foreground">No live ward threads yet</h2>
+          <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
+            Insights will appear after Ambient capture or a clinician-created task adds tracked
+            work.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto p-5">
@@ -128,70 +129,25 @@ export function Insights({ threads, onOpenPatient }: Props) {
           </dl>
         </Block>
 
-        <Block title="Available staff">
-          <ul className="space-y-2">
-            {teams.map((team) => (
-              <li key={team.name} className="space-y-1">
-                <div className="flex items-baseline justify-between gap-2 text-[13px]">
-                  <span className="truncate text-foreground">{team.name}</span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {team.free}/{team.total} free
-                  </span>
-                </div>
-                <Bar value={team.free} total={team.total} label={`${team.name} availability`} />
-              </li>
-            ))}
-          </ul>
-          {unowned.length > 0 && (
-            <p className="mt-3 text-[12.5px] text-muted-foreground">
-              {unowned.length} task{unowned.length === 1 ? "" : "s"} still need an owner.
-            </p>
-          )}
-        </Block>
-
-        <Block title="Patient flow">
+        <Block title="Ownership">
           <dl className="space-y-1.5 text-[13px]">
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Beds occupied</dt>
-              <dd className="text-foreground">
-                {occupied}/{totalBeds}
-              </dd>
+              <dt className="text-muted-foreground">Assigned open work</dt>
+              <dd className="text-foreground">{assigned}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Planned home tomorrow</dt>
-              <dd className="text-foreground">{goingHome.length}</dd>
+              <dt className="text-muted-foreground">Needs an owner</dt>
+              <dd className="text-foreground">{unowned.length}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Blocked by open work</dt>
-              <dd className="text-foreground">{blocked.length}</dd>
+              <dt className="text-muted-foreground">Active owners</dt>
+              <dd className="text-foreground">{owners}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Patients with tracked work</dt>
+              <dd className="text-foreground">{trackedPatients}</dd>
             </div>
           </dl>
-          <ul className="mt-3 space-y-1.5">
-            {blocked.map((patient) => {
-              const blockers = open.filter((thread) => thread.patientId === patient.id);
-              return (
-                <li key={patient.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenPatient(patient.id)}
-                    className="w-full rounded-md border border-border px-3 py-2 text-left transition-colors hover:bg-background"
-                  >
-                    <span className="block text-[13px] text-foreground">
-                      Bed {patient.bed} — {patient.name}
-                    </span>
-                    <span className="block truncate text-[12.5px] text-muted-foreground">
-                      Waiting on {blockers.map((blocker) => blocker.title.toLowerCase()).join(", ")}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-            {blocked.length === 0 && (
-              <li className="text-[12.5px] text-muted-foreground">
-                Nothing blocking tomorrow&apos;s discharges.
-              </li>
-            )}
-          </ul>
         </Block>
 
         <Block title="Where work waits">
