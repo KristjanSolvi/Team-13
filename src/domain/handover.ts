@@ -43,12 +43,12 @@ export const handoverPacketSchema = z.object({
 });
 
 export const renderedHandoverSchema = z.object({
-  title: z.string().min(1).max(160),
+  title: z.string().trim().min(1).max(160),
   sections: z
     .array(
       z.object({
-        sectionId: z.string().min(1).max(80),
-        heading: z.string().min(1).max(160),
+        sectionId: z.string().trim().min(1).max(80),
+        heading: z.string().trim().min(1).max(160),
         statements: z.array(groundedStatementSchema).max(50),
       }),
     )
@@ -57,20 +57,68 @@ export const renderedHandoverSchema = z.object({
 });
 
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const snapshotReferenceSchema = z.string().min(1).max(240);
+const snapshotVersionSchema = z.number().int().positive();
 
-export const handoverSourceSnapshotSchema = z.object({
-  recordItems: z.array(
-    z.object({
-      itemId: z.string(),
-      sourceRef: z.string(),
-      contentHash: sha256Schema,
-    }),
-  ),
-  threads: z.array(
-    z.object({ threadId: z.string(), version: z.number().int() }),
-  ),
-  tasks: z.array(z.object({ taskId: z.string(), version: z.number().int() })),
-});
+export const handoverSourceSnapshotSchema = z
+  .object({
+    recordItems: z.array(
+      z.object({
+        itemId: snapshotReferenceSchema,
+        sourceRef: snapshotReferenceSchema,
+        contentHash: sha256Schema,
+      }),
+    ),
+    threads: z.array(
+      z.object({
+        threadId: snapshotReferenceSchema,
+        version: snapshotVersionSchema,
+      }),
+    ),
+    tasks: z.array(
+      z.object({
+        taskId: snapshotReferenceSchema,
+        version: snapshotVersionSchema,
+      }),
+    ),
+  })
+  .superRefine((value, context) => {
+    const duplicateRecordItem = findDuplicateIdentifier(
+      value.recordItems,
+      ({ itemId }) => itemId,
+    );
+    if (duplicateRecordItem) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate record item ID: ${duplicateRecordItem.id}`,
+        path: ["recordItems", duplicateRecordItem.index, "itemId"],
+      });
+    }
+
+    const duplicateThread = findDuplicateIdentifier(
+      value.threads,
+      ({ threadId }) => threadId,
+    );
+    if (duplicateThread) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate thread ID: ${duplicateThread.id}`,
+        path: ["threads", duplicateThread.index, "threadId"],
+      });
+    }
+
+    const duplicateTask = findDuplicateIdentifier(
+      value.tasks,
+      ({ taskId }) => taskId,
+    );
+    if (duplicateTask) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate task ID: ${duplicateTask.id}`,
+        path: ["tasks", duplicateTask.index, "taskId"],
+      });
+    }
+  });
 
 export type GroundedStatement = z.infer<typeof groundedStatementSchema>;
 export type HandoverTaskItem = z.infer<typeof handoverTaskItemSchema>;
@@ -114,6 +162,32 @@ function sha256(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function requireUniqueIdentifiers<T>(
+  values: readonly T[],
+  identifier: (value: T) => string,
+  label: string,
+): void {
+  const duplicate = findDuplicateIdentifier(values, identifier);
+  if (duplicate) {
+    throw new TypeError(`Duplicate ${label} ID: ${duplicate.id}`);
+  }
+}
+
+function findDuplicateIdentifier<T>(
+  values: readonly T[],
+  identifier: (value: T) => string,
+): { id: string; index: number } | null {
+  const seen = new Set<string>();
+  for (const [index, value] of values.entries()) {
+    const id = identifier(value);
+    if (seen.has(id)) {
+      return { id, index };
+    }
+    seen.add(id);
+  }
+  return null;
+}
+
 export function isHandoverTaskActive(value: Task): boolean {
   return value.state !== "verified" && value.state !== "dismissed";
 }
@@ -123,6 +197,10 @@ export function buildHandoverSourceSnapshot(
   threads: Array<{ threadId: string; version: number }>,
   tasks: Task[],
 ): HandoverSourceSnapshot {
+  requireUniqueIdentifiers(recordItems, ({ itemId }) => itemId, "record item");
+  requireUniqueIdentifiers(threads, ({ threadId }) => threadId, "thread");
+  requireUniqueIdentifiers(tasks, ({ taskId }) => taskId, "task");
+
   return {
     recordItems: recordItems
       .map(({ itemId, sourceRef, text }) => ({
@@ -155,5 +233,12 @@ export function handoverRequestHash(value: {
   reason: HandoverReason;
   focus: string | null;
 }): string {
-  return sha256(JSON.stringify(value));
+  return sha256(
+    JSON.stringify({
+      patientId: value.patientId,
+      requestedBy: value.requestedBy,
+      reason: value.reason,
+      focus: value.focus,
+    }),
+  );
 }
