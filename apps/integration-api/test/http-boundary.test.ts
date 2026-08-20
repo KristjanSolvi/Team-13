@@ -19,6 +19,36 @@ interface CapturedRequest {
   body?: unknown;
 }
 
+const handoverHash = `sha256:${"b".repeat(64)}`;
+const handoverPacket = {
+  situation: [],
+  background: [],
+  currentConcerns: [],
+  outstandingTasks: [],
+  awaitingVerification: [],
+  escalations: [],
+  unknowns: ["No further information available."],
+};
+
+function handover(rendered: boolean) {
+  return {
+    handoverId: "22222222-2222-4222-8222-222222222222",
+    patientId: "synthetic-karen",
+    status: "draft",
+    renderingStatus: rendered ? "rendered" : "pending",
+    reason: "assignment",
+    requestedBy: "clinician:karen",
+    generatedAt: rendered ? "2026-08-20T12:00:00.000Z" : null,
+    version: rendered ? 3 : 2,
+    sourceSnapshotHash: handoverHash,
+    packet: handoverPacket,
+    rendered: rendered
+      ? { title: "Current handover", sections: [], creditsConsumed: 1 }
+      : null,
+    activity: [],
+  };
+}
+
 describe("real HTTP service boundaries", () => {
   let agenticServer: Server;
   let pipelineServer: Server;
@@ -74,6 +104,25 @@ describe("real HTTP service boundaries", () => {
       captured.approve = capture(request);
       response.json({ taskId: request.params.taskId, state: "offered_to_team", version: 2 });
     });
+    agentic.post(
+      "/api/patients/:patientId/handover-drafts",
+      (request, response) => {
+        captured.handoverDraft = capture(request);
+        response.status(201).json({
+          replayed: false,
+          lifecycleStatus: "draft",
+          handover: handover(false),
+        });
+      },
+    );
+    agentic.post("/api/handovers/:handoverId/finalize", (request, response) => {
+      captured.handoverFinalize = capture(request);
+      response.json({
+        replayed: false,
+        lifecycleStatus: "rendered",
+        handover: handover(true),
+      });
+    });
     agentic.get("/api/events/stream", (request, response) => {
       captured.stream = capture(request);
       response.status(200);
@@ -104,6 +153,14 @@ describe("real HTTP service boundaries", () => {
         expiresIn: 300,
       });
     });
+    pipeline.post("/api/corti/handovers/render", (request, response) => {
+      captured.handoverRender = capture(request);
+      response.json({
+        title: "Current handover",
+        sections: [],
+        creditsConsumed: 1,
+      });
+    });
 
     agenticServer = await listen(agentic);
     pipelineServer = await listen(pipeline);
@@ -119,6 +176,7 @@ describe("real HTTP service boundaries", () => {
     app = createIntegrationApp({
       service,
       allowedOrigins: ["http://127.0.0.1:5173"],
+      integrationApiBearerToken: "integration-public-token",
     });
   });
 
@@ -244,6 +302,64 @@ describe("real HTTP service boundaries", () => {
       correlationId: "corr-http-pipeline",
     });
     expect(captured.pipelineCandidates?.authorization).toBeUndefined();
+  });
+
+  it("orchestrates handover HTTP boundaries without leaking the agentic credential", async () => {
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("authorization", "Bearer integration-public-token")
+      .set("x-actor-id", "clinician:karen")
+      .set("x-correlation-id", "corr-http-handover")
+      .send({
+        reason: "assignment",
+        focus: null,
+        idempotencyKey: "handover-http-001",
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(handover(true));
+    expect(captured.handoverDraft).toMatchObject({
+      authorization: "Bearer server-only-app-token",
+      actorId: "clinician:karen",
+      correlationId: "corr-http-handover",
+    });
+    expect(captured.handoverRender).toMatchObject({
+      actorId: "clinician:karen",
+      correlationId: "corr-http-handover",
+      body: {
+        handoverId: "22222222-2222-4222-8222-222222222222",
+        patientId: "synthetic-karen",
+        sourceSnapshotHash: handoverHash,
+        packet: handoverPacket,
+      },
+    });
+    expect(captured.handoverRender?.authorization).toBeUndefined();
+    expect(captured.handoverFinalize).toMatchObject({
+      authorization: "Bearer server-only-app-token",
+      actorId: "clinician:karen",
+      correlationId: "corr-http-handover",
+      body: {
+        expectedVersion: 2,
+        sourceSnapshotHash: handoverHash,
+        rendered: {
+          title: "Current handover",
+          sections: [],
+          creditsConsumed: 1,
+        },
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain(
+      "server-only-app-token",
+    );
+    expect(JSON.stringify(response.body)).not.toContain(
+      "integration-public-token",
+    );
+    expect(JSON.stringify(captured.handoverDraft)).not.toContain(
+      "integration-public-token",
+    );
+    expect(JSON.stringify(captured.handoverFinalize)).not.toContain(
+      "integration-public-token",
+    );
   });
 
   it("preserves successful pipeline status codes", async () => {

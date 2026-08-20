@@ -20,6 +20,7 @@ import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
 import { HandoverService } from "../src/services/handover-service.js";
+import { verifyHandoverAgentDraft } from "../src/services/handover-verification.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 import { RecordService } from "../src/services/record-service.js";
 
@@ -180,6 +181,18 @@ function renderedFor(packet: HandoverPacket): RenderedHandover {
           packet.situation[0] as HandoverPacket["situation"][number],
         ],
       },
+      ...(packet.unknowns.length > 0
+        ? [
+            {
+              sectionId: "unknowns",
+              heading: "Unknowns",
+              statements: packet.unknowns.map((statement) => ({
+                statement,
+                sourceRefs: [],
+              })),
+            },
+          ]
+        : []),
     ],
     creditsConsumed: 1.25,
   };
@@ -327,8 +340,19 @@ test("beginRequest enforces idempotency across every lifecycle state", (t) => {
   );
 });
 
-test("beginRequest replays completed draft and rendered results", (t) => {
+test("beginRequest replays only agent-verified drafts and rendered results", (t) => {
   const setup = savePreparedDraft(t);
+  assertDomainError(
+    () => begin(setup.service),
+    "HANDOVER_IN_PROGRESS",
+    409,
+    true,
+  );
+  verifyHandoverAgentDraft(setup.store, {
+    handoverId: setup.draft.handoverId,
+    contextId: HANDOVER_CONTEXT_ID,
+    idempotencyKey: BEGIN_INPUT.idempotencyKey,
+  });
   const draftReplay = begin(setup.service);
   assert.equal(draftReplay.replayed, true);
   assert.deepEqual(draftReplay.handover, setup.draft);
@@ -1116,6 +1140,223 @@ test("finalize renders atomically when sources are unchanged and rejects new sou
   );
 });
 
+test("finalize preserves packet unknowns exactly as ungrounded statements", (t) => {
+  const setup = savePreparedDraft(t);
+  const rendered = renderedFor(setup.packet);
+
+  const finalized = setup.service.finalize(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+
+  assert.deepEqual(
+    finalized.rendered?.sections.find(
+      ({ sectionId }) => sectionId === "unknowns",
+    )?.statements,
+    setup.packet.unknowns.map((statement) => ({
+      statement,
+      sourceRefs: [],
+    })),
+  );
+});
+
+test("finalize rejects omitted, added, duplicated, or rewritten unknowns", (t) => {
+  const cases: Array<{
+    label: string;
+    mutate: (rendered: RenderedHandover) => void;
+  }> = [
+    {
+      label: "omitted section",
+      mutate: (rendered) => {
+        rendered.sections = rendered.sections.filter(
+          ({ sectionId }) => sectionId !== "unknowns",
+        );
+      },
+    },
+    {
+      label: "added statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        unknowns.statements.push({
+          statement: "A new unsupported unknown.",
+          sourceRefs: [],
+        });
+      },
+    },
+    {
+      label: "duplicated statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        const statement = unknowns.statements[0];
+        assert.ok(statement);
+        unknowns.statements.push(structuredClone(statement));
+      },
+    },
+    {
+      label: "rewritten statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        const statement = unknowns.statements[0];
+        assert.ok(statement);
+        statement.statement = "The response is probably normal.";
+      },
+    },
+    {
+      label: "duplicate unknowns section",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        rendered.sections.push(structuredClone(unknowns));
+      },
+    },
+  ];
+
+  for (const { label, mutate } of cases) {
+    const setup = savePreparedDraft(t);
+    const rendered = renderedFor(setup.packet);
+    mutate(rendered);
+
+    assertDomainError(
+      () =>
+        setup.service.finalize(
+          setup.draft.handoverId,
+          setup.draft.version,
+          setup.draft.sourceSnapshotHash as string,
+          rendered,
+        ),
+      "HANDOVER_EVIDENCE_NOT_FOUND",
+      409,
+    );
+    assert.equal(
+      setup.store.requireHandover(setup.draft.handoverId).status,
+      "draft",
+      label,
+    );
+  }
+});
+
+test("finalize preserves the exact ordering of distinct packet unknowns", (t) => {
+  const unknowns = [
+    "The response to the change is not yet documented.",
+    "The next blood pressure reading is not yet available.",
+  ];
+  const accepted = prepareRequested(t);
+  accepted.packet.unknowns = unknowns;
+  const acceptedDraft = accepted.service.saveDraft({
+    handoverId: accepted.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: accepted.packet,
+  });
+  assert.equal(
+    accepted.service.finalize(
+      acceptedDraft.handoverId,
+      acceptedDraft.version,
+      acceptedDraft.sourceSnapshotHash as string,
+      renderedFor(accepted.packet),
+    ).status,
+    "rendered",
+  );
+
+  const rejected = prepareRequested(t);
+  rejected.packet.unknowns = unknowns;
+  const rejectedDraft = rejected.service.saveDraft({
+    handoverId: rejected.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: rejected.packet,
+  });
+  const reversed = renderedFor(rejected.packet);
+  const renderedUnknowns = reversed.sections.find(
+    ({ sectionId }) => sectionId === "unknowns",
+  );
+  assert.ok(renderedUnknowns);
+  renderedUnknowns.statements.reverse();
+  const eventsBefore = rejected.store.listEvents(0);
+
+  assertDomainError(
+    () =>
+      rejected.service.finalize(
+        rejectedDraft.handoverId,
+        rejectedDraft.version,
+        rejectedDraft.sourceSnapshotHash as string,
+        reversed,
+      ),
+    "HANDOVER_EVIDENCE_NOT_FOUND",
+    409,
+  );
+  assert.deepEqual(
+    rejected.store.requireHandover(rejectedDraft.handoverId),
+    rejectedDraft,
+  );
+  assert.deepEqual(rejected.store.listEvents(0), eventsBefore);
+});
+
+test("finalize omits the unknowns section when the packet has no unknowns", (t) => {
+  const setup = prepareRequested(t);
+  setup.packet.unknowns = [];
+  const draft = setup.service.saveDraft({
+    handoverId: setup.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: setup.packet,
+  });
+  const rendered = renderedFor(setup.packet);
+
+  assert.equal(
+    rendered.sections.some(({ sectionId }) => sectionId === "unknowns"),
+    false,
+  );
+  assert.equal(
+    setup.service.finalize(
+      draft.handoverId,
+      draft.version,
+      draft.sourceSnapshotHash as string,
+      rendered,
+    ).status,
+    "rendered",
+  );
+
+  const rejected = prepareRequested(t);
+  rejected.packet.unknowns = [];
+  const rejectedDraft = rejected.service.saveDraft({
+    handoverId: rejected.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: rejected.packet,
+  });
+  const withEmptyUnknowns = renderedFor(rejected.packet);
+  withEmptyUnknowns.sections.push({
+    sectionId: "unknowns",
+    heading: "Unknowns",
+    statements: [],
+  });
+  assertDomainError(
+    () =>
+      rejected.service.finalize(
+        rejectedDraft.handoverId,
+        rejectedDraft.version,
+        rejectedDraft.sourceSnapshotHash as string,
+        withEmptyUnknowns,
+      ),
+    "HANDOVER_EVIDENCE_NOT_FOUND",
+    409,
+  );
+});
+
 test("finalize detects record, thread, and task source changes and emits a durable safe event", (t) => {
   const cases: Array<{
     label: string;
@@ -1226,6 +1467,34 @@ test("finalize supports exact lost-response replay and conflicts on changed rend
   }
 });
 
+test("finalizeWithReplay reports the transaction winner without duplicating the rendered event", (t) => {
+  const setup = savePreparedDraft(t);
+  const rendered = renderedFor(setup.packet);
+
+  const first = setup.service.finalizeWithReplay(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+  const replay = setup.service.finalizeWithReplay(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+
+  assert.equal(first.replayed, false);
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.handover, first.handover);
+  assert.equal(
+    setup.store
+      .listEvents(0)
+      .filter(({ eventType }) => eventType === "handover.rendered").length,
+    1,
+  );
+});
+
 test("markRenderRequested is retryable for drafts, replays rendered, and rejects other states", (t) => {
   const requestedSetup = prepareRequested(t);
   assertDomainError(
@@ -1312,6 +1581,63 @@ test("markFailed is idempotent for requested work and never erases draft or rend
     409,
   );
   assert.deepEqual(draft.store.requireHandover(rendered.handoverId), rendered);
+});
+
+test("rejectDraft retains grounded evidence, records a safe failure, and never erases rendered output", (t) => {
+  const setup = savePreparedDraft(t);
+  const failed = setup.service.rejectDraft(
+    setup.draft.handoverId,
+    "AGENT_TASK_INCOMPLETE",
+    true,
+  );
+
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.version, setup.draft.version + 1);
+  assert.deepEqual(failed.packet, setup.draft.packet);
+  assert.deepEqual(failed.sourceSnapshot, setup.draft.sourceSnapshot);
+  assert.equal(failed.sourceSnapshotHash, setup.draft.sourceSnapshotHash);
+  const failedEvent = setup.store.listEvents(0).at(-1);
+  assert.equal(failedEvent?.eventType, "handover.failed");
+  assert.deepEqual(failedEvent?.payload, {
+    handoverId: failed.handoverId,
+    code: "AGENT_TASK_INCOMPLETE",
+    retryable: true,
+    status: "failed",
+    version: failed.version,
+  });
+  assert.equal(
+    JSON.stringify(failedEvent).includes(
+      setup.packet.situation[0]?.statement ?? "unreachable",
+    ),
+    false,
+  );
+  assertDomainError(
+    () => begin(setup.service),
+    "HANDOVER_RETRY_REQUIRES_NEW_KEY",
+    409,
+  );
+
+  const renderedSetup = savePreparedDraft(t);
+  const rendered = renderedSetup.service.finalize(
+    renderedSetup.draft.handoverId,
+    renderedSetup.draft.version,
+    renderedSetup.draft.sourceSnapshotHash as string,
+    renderedFor(renderedSetup.packet),
+  );
+  assertDomainError(
+    () =>
+      renderedSetup.service.rejectDraft(
+        rendered.handoverId,
+        "AGENT_CONTEXT_MISMATCH",
+        true,
+      ),
+    "HANDOVER_FAILURE_CONFLICT",
+    409,
+  );
+  assert.deepEqual(
+    renderedSetup.store.requireHandover(rendered.handoverId),
+    rendered,
+  );
 });
 
 test("response exposes only the safe public projection and handover activity", (t) => {

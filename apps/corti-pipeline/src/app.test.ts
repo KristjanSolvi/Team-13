@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createPipelineApp } from "./app.js";
 import type { CortiGateway } from "./gateway.js";
+import { renderGroundedHandover } from "./handover.js";
 
 function gateway(): CortiGateway {
   return {
@@ -36,6 +37,11 @@ function gateway(): CortiGateway {
       creditsConsumed: 0.02,
       status: "draft" as const,
     })),
+    renderHandover: vi.fn(async () => ({
+      title: "Current patient handover",
+      sections: [],
+      creditsConsumed: 0,
+    })),
     predictCodes: vi.fn(async (input) => ({
       system: input.system ?? "icd10int-outpatient",
       codes: [],
@@ -44,6 +50,27 @@ function gateway(): CortiGateway {
     })),
   };
 }
+
+const handoverRequest = {
+  handoverId: "33333333-3333-4333-8333-333333333333",
+  patientId: "synthetic-karen",
+  sourceSnapshotHash:
+    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  packet: {
+    situation: [
+      {
+        statement: "Karen reports dizziness.",
+        sourceRefs: ["encounter:sentence-42"],
+      },
+    ],
+    background: [],
+    currentConcerns: [],
+    outstandingTasks: [],
+    awaitingVerification: [],
+    escalations: [],
+    unknowns: [],
+  },
+};
 
 describe("pipeline HTTP contract", () => {
   it("reports contract-only mode without leaking credential values", async () => {
@@ -192,5 +219,175 @@ describe("pipeline HTTP contract", () => {
     expect(mockGateway.generateCandidates).toHaveBeenCalledWith(
       expect.objectContaining({ correlationId: "corr-karen-1" }),
     );
+  });
+
+  it("validates and forwards the complete grounded handover packet", async () => {
+    const renderHandover = vi.fn(async () => ({
+      title: "Current patient handover",
+      sections: [],
+      creditsConsumed: 0.01,
+    }));
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send(handoverRequest)
+      .expect(200, {
+        title: "Current patient handover",
+        sections: [],
+        creditsConsumed: 0.01,
+      });
+
+    expect(renderHandover).toHaveBeenCalledWith(handoverRequest);
+  });
+
+  it.each([121, 160])(
+    "accepts a canonical patient ID with %i characters",
+    async (length) => {
+      const renderHandover = vi.fn(async () => ({
+        title: "Current patient handover",
+        sections: [],
+        creditsConsumed: 0,
+      }));
+      const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+      const patientId = "p".repeat(length);
+
+      await request(app)
+        .post("/api/corti/handovers/render")
+        .send({ ...handoverRequest, patientId })
+        .expect(200);
+
+      expect(renderHandover).toHaveBeenCalledWith({
+        ...handoverRequest,
+        patientId,
+      });
+    },
+  );
+
+  it("preserves the patient identity exactly at the renderer boundary", async () => {
+    const renderHandover = vi.fn(async () => ({
+      title: "Current patient handover",
+      sections: [],
+      creditsConsumed: 0,
+    }));
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+    const patientId = " patient-identity ";
+
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, patientId })
+      .expect(200);
+
+    expect(renderHandover).toHaveBeenCalledWith({
+      ...handoverRequest,
+      patientId,
+    });
+  });
+
+  it("rejects a 161-character patient identity before any normalization", async () => {
+    const renderHandover = vi.fn();
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+    const patientId = ` ${"p".repeat(160)}`;
+
+    const response = await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, patientId })
+      .expect(400);
+
+    expect(response.body.error.code).toBe("INVALID_REQUEST");
+    expect(renderHandover).not.toHaveBeenCalled();
+  });
+
+  it("preserves authoritative task whitespace in deterministic rendering", async () => {
+    const noTextGeneration = vi.fn();
+    const renderHandover = vi.fn((input) =>
+      renderGroundedHandover(input, noTextGeneration),
+    );
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+
+    const response = await request(app)
+      .post("/api/corti/handovers/render")
+      .send({
+        ...handoverRequest,
+        packet: {
+          situation: [],
+          background: [],
+          currentConcerns: [],
+          outstandingTasks: [
+            {
+              taskId: "11111111-1111-4111-8111-111111111111",
+              threadId: "22222222-2222-4222-8222-222222222222",
+              summary: "  Check blood pressure  ",
+              state: "accepted",
+              targetTeamId: " district-nursing ",
+              assignedMemberId: " nurse-7 ",
+              clinicalUrgency: "medium",
+              acceptBy: "2026-08-20T12:00:00.000Z",
+              dueBy: "2026-08-22T10:00:00.000Z",
+              version: 7,
+              sourceRefs: [
+                "task:11111111-1111-4111-8111-111111111111@7",
+                "thread:22222222-2222-4222-8222-222222222222@3",
+              ],
+            },
+          ],
+          awaitingVerification: [],
+          escalations: [],
+          unknowns: [],
+        },
+      })
+      .expect(200);
+
+    expect(noTextGeneration).not.toHaveBeenCalled();
+    expect(response.body.sections[0].statements[0].statement).toBe(
+      "  Check blood pressure   — state: accepted; team:  district-nursing ; owner:  nurse-7 ; urgency: medium; accept by: 2026-08-20T12:00:00.000Z; due by: 2026-08-22T10:00:00.000Z.",
+    );
+  });
+
+  it.each([
+    ["handoverId", "not-a-uuid"],
+    ["patientId", ""],
+    ["sourceSnapshotHash", "sha256:not-a-hash"],
+  ])("rejects malformed handover %s before invoking Corti", async (field, value) => {
+    const renderHandover = vi.fn();
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+
+    const response = await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, [field]: value })
+      .expect(400);
+
+    expect(response.body.error.code).toBe("INVALID_REQUEST");
+    expect(renderHandover).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed nested handover task data before invoking Corti", async () => {
+    const renderHandover = vi.fn();
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send({
+        ...handoverRequest,
+        packet: {
+          ...handoverRequest.packet,
+          outstandingTasks: [{ taskId: "not-a-uuid" }],
+        },
+      })
+      .expect(400);
+
+    expect(renderHandover).not.toHaveBeenCalled();
+  });
+
+  it("rejects undocumented handover fields before invoking Corti", async () => {
+    const renderHandover = vi.fn();
+    const app = createPipelineApp({ gateway: { ...gateway(), renderHandover } });
+
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ ...handoverRequest, unexpected: "field" })
+      .expect(400);
+
+    expect(renderHandover).not.toHaveBeenCalled();
   });
 });

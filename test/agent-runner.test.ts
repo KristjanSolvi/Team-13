@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { type AgentGateway, AgentRunner } from "../src/agent/runner.js";
 import { seedKaren } from "../src/fixtures/karen.js";
@@ -24,6 +24,59 @@ const EVIDENCE_REF = "encounter:sentence-42";
 
 function result(contextId: string, taskId: string, state: string) {
   return { contextId, taskId, state };
+}
+
+class PublishAuditFailureStore extends SqliteStore {
+  failPublishVerificationOnce = false;
+
+  override appendEvent(
+    input: Parameters<SqliteStore["appendEvent"]>[0],
+  ): ReturnType<SqliteStore["appendEvent"]> {
+    if (
+      this.failPublishVerificationOnce &&
+      input.eventType === "task.publish_verified"
+    ) {
+      this.failPublishVerificationOnce = false;
+      throw new Error("Injected publish verification audit failure");
+    }
+    return super.appendEvent(input);
+  }
+}
+
+function publicationHarness(
+  t: TestContext,
+  store: SqliteStore = new SqliteStore(openDatabase(":memory:")),
+) {
+  t.after(() => store.close());
+  seedKaren(store, "2026-08-20T10:00:00.000Z");
+  store.putContextMapping(
+    "ctx-karen",
+    INTERACTION_ID,
+    PATIENT_ID,
+    "2026-08-20T10:00:00.000Z",
+  );
+  const ledger = new LedgerService(
+    store,
+    new DemoClock(new Date("2026-08-20T10:00:00.000Z"), true),
+    "approval-secret-with-at-least-32-bytes",
+  );
+  const draft = ledger.createKarenDraft("ctx-karen", "draft-for-recovery");
+  const approval = ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "approve-for-recovery",
+  );
+  const input = {
+    patientId: PATIENT_ID,
+    interactionId: INTERACTION_ID,
+    taskId: draft.taskId,
+    expectedVersion: draft.version,
+    approvalProof: approval.proof,
+    idempotencyKey: "publish-for-recovery",
+  };
+  return { store, ledger, draft, input };
 }
 
 test("unregistered evidence is rejected before Corti receives patient-scoped data", async (t) => {
@@ -218,6 +271,16 @@ test("approved publication sends the exact proof and draft version into the mapp
     idempotencyKey: "publish-for-agent",
     mcpToken: "mcp-secret",
   });
+  const verified = store
+    .listEvents(0)
+    .filter((event) => event.eventType === "task.publish_verified");
+  assert.equal(verified.length, 1);
+  assert.deepEqual(verified[0]?.payload, {
+    taskId: draft.taskId,
+    threadId: draft.threadId,
+    state: "offered_to_team",
+    version: draft.version + 1,
+  });
 });
 
 test("a completed Corti response cannot claim publication without committed ledger state", async (t) => {
@@ -267,6 +330,188 @@ test("a completed Corti response cannot claim publication without committed ledg
       error.message === "Task publication was not committed",
   );
   assert.equal(ledger.getTask(draft.taskId).state, "draft");
+});
+
+test("concurrent identical publications persist one verification event and one exact result", async (t) => {
+  const { store, ledger, draft, input } = publicationHarness(t);
+  let sends = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      sends += 1;
+      ledger.publishDraft(
+        draft.taskId,
+        input.approvalProof,
+        draft.version,
+        input.idempotencyKey,
+      );
+      return result("ctx-karen", `corti-publish-${sends}`, "completed");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const runner = new AgentRunner(gateway, store, "mcp-secret");
+
+  const results = await Promise.all([
+    runner.publishApproved(input),
+    runner.publishApproved(input),
+  ]);
+
+  assert.equal(sends, 2);
+  assert.deepEqual(results[1], results[0]);
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    1,
+  );
+  assert.deepEqual(
+    store.getProcessedCommand(
+      `publish-verified:${draft.taskId}:${draft.version + 1}`,
+      input.idempotencyKey,
+    ),
+    results[0],
+  );
+});
+
+test("verified publication replay returns its exact result after downstream task progress", async (t) => {
+  const { store, ledger, draft, input } = publicationHarness(t);
+  let sends = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      sends += 1;
+      ledger.publishDraft(
+        draft.taskId,
+        input.approvalProof,
+        draft.version,
+        input.idempotencyKey,
+      );
+      return result("ctx-karen", "corti-publish-exact", "completed");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const runner = new AgentRunner(gateway, store, "mcp-secret");
+  const published = await runner.publishApproved(input);
+  ledger.acceptTask(
+    draft.taskId,
+    draft.version + 1,
+    "nurse-a",
+    "accept-after-verification",
+  );
+
+  const replay = await runner.publishApproved(input);
+
+  assert.deepEqual(replay, published);
+  assert.equal(store.requireTask(draft.taskId).state, "accepted");
+  assert.equal(sends, 1);
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    1,
+  );
+});
+
+test("lost Corti response recovers an exact processed publication without another agent call", async (t) => {
+  const { store, ledger, draft, input } = publicationHarness(t);
+  let sends = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      sends += 1;
+      ledger.publishDraft(
+        draft.taskId,
+        input.approvalProof,
+        draft.version,
+        input.idempotencyKey,
+      );
+      throw new Error("Corti response was lost");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const runner = new AgentRunner(gateway, store, "mcp-secret");
+
+  await assert.rejects(runner.publishApproved(input), /response was lost/);
+  assert.equal(store.requireTask(draft.taskId).state, "offered_to_team");
+  assert.equal(
+    store.getProcessedCommand(
+      `publish-verified:${draft.taskId}:${draft.version + 1}`,
+      input.idempotencyKey,
+    ),
+    null,
+  );
+
+  const recovered = await runner.publishApproved(input);
+
+  assert.deepEqual(recovered, {
+    contextId: "ctx-karen",
+    taskId: null,
+    state: "completed",
+  });
+  assert.equal(sends, 1);
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    1,
+  );
+});
+
+test("verification audit failure rolls back its marker and retry recovers without Corti", async (t) => {
+  const store = new PublishAuditFailureStore(openDatabase(":memory:"));
+  const { ledger, draft, input } = publicationHarness(t, store);
+  let sends = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      sends += 1;
+      ledger.publishDraft(
+        draft.taskId,
+        input.approvalProof,
+        draft.version,
+        input.idempotencyKey,
+      );
+      return result("ctx-karen", "corti-publish", "completed");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const runner = new AgentRunner(gateway, store, "mcp-secret");
+  store.failPublishVerificationOnce = true;
+
+  await assert.rejects(
+    runner.publishApproved(input),
+    /verification audit failure/,
+  );
+  const verificationScope = `publish-verified:${draft.taskId}:${draft.version + 1}`;
+  assert.equal(
+    store.getProcessedCommand(verificationScope, input.idempotencyKey),
+    null,
+  );
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    0,
+  );
+
+  const recovered = await runner.publishApproved(input);
+
+  assert.equal(recovered.state, "completed");
+  assert.equal(sends, 1);
+  assert.deepEqual(
+    store.getProcessedCommand(verificationScope, input.idempotencyKey),
+    recovered,
+  );
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    1,
+  );
 });
 
 test("agent-enabled signal route investigates only after source evidence registration", async (t) => {

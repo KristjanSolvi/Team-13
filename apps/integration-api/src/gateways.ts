@@ -1,5 +1,9 @@
 import { IntegrationError } from "./errors.js";
-import type { PipelineProxyPath, TaskCommand } from "./contracts.js";
+import type {
+  HandoverRequest,
+  PipelineProxyPath,
+  TaskCommand,
+} from "./contracts.js";
 
 export interface RequestMeta {
   correlationId: string;
@@ -34,6 +38,20 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  createHandoverDraft?(
+    patientId: string,
+    input: HandoverRequest,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  finalizeHandover?(
+    handoverId: string,
+    input: {
+      expectedVersion: number;
+      sourceSnapshotHash: string;
+      rendered: unknown;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown>;
   eventStream(
     lastEventId: string | undefined,
     meta: RequestMeta,
@@ -59,6 +77,7 @@ export interface PipelineGateway {
     body: unknown,
     meta: RequestMeta,
   ): Promise<UpstreamJsonResult>;
+  renderHandover?(input: unknown, meta: RequestMeta): Promise<unknown>;
 }
 
 export interface ProfileGateway {
@@ -98,6 +117,7 @@ interface FetchJsonOptions {
   bearerToken?: string;
   meta?: RequestMeta;
   authenticate?: boolean;
+  timeoutMs?: number;
 }
 
 export class JsonHttpClient {
@@ -116,7 +136,10 @@ export class JsonHttpClient {
     options: FetchJsonOptions = {},
   ): Promise<UpstreamJsonResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? this.timeoutMs,
+    );
     const headers = new Headers({ accept: "application/json" });
     if (options.body !== undefined) {
       headers.set("content-type", "application/json");
@@ -226,6 +249,7 @@ export class HttpAgenticGateway implements AgenticGateway {
     private readonly timeoutMs: number,
     private readonly bearerToken: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly handoverTimeoutMs: number = timeoutMs,
   ) {
     this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
   }
@@ -270,6 +294,43 @@ export class HttpAgenticGateway implements AgenticGateway {
       {
         method: "POST",
         body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  createHandoverDraft(
+    patientId: string,
+    input: HandoverRequest,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/handover-drafts`,
+      {
+        method: "POST",
+        body: input,
+        bearerToken: this.bearerToken,
+        meta,
+        timeoutMs: this.handoverTimeoutMs,
+      },
+    );
+  }
+
+  finalizeHandover(
+    handoverId: string,
+    input: {
+      expectedVersion: number;
+      sourceSnapshotHash: string;
+      rendered: unknown;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/handovers/${encodeURIComponent(handoverId)}/finalize`,
+      {
+        method: "POST",
+        body: input,
         bearerToken: this.bearerToken,
         meta,
       },
@@ -350,6 +411,7 @@ export class HttpPipelineGateway implements PipelineGateway {
     baseUrl: string,
     timeoutMs: number,
     fetchImpl: typeof fetch = fetch,
+    private readonly handoverTimeoutMs: number = timeoutMs,
   ) {
     this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
   }
@@ -388,6 +450,28 @@ export class HttpPipelineGateway implements PipelineGateway {
       meta,
       authenticate: false,
     });
+  }
+
+  async renderHandover(input: unknown, meta: RequestMeta): Promise<unknown> {
+    try {
+      return await this.client.request("/api/corti/handovers/render", {
+        method: "POST",
+        body: input,
+        meta,
+        authenticate: false,
+        timeoutMs: this.handoverTimeoutMs,
+      });
+    } catch (error) {
+      if (error instanceof IntegrationError && error.status === 422) {
+        throw new IntegrationError(
+          "HANDOVER_RENDER_FAILED",
+          "The handover renderer rejected its output",
+          502,
+          true,
+        );
+      }
+      throw error;
+    }
   }
 }
 

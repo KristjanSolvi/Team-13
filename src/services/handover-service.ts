@@ -18,6 +18,7 @@ import {
 import type { Task } from "../domain/types.js";
 import type { Clock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
+import { isHandoverAgentDraftVerified } from "./handover-verification.js";
 
 export interface BeginHandoverInput {
   patientId: string;
@@ -46,7 +47,7 @@ interface GroundingState {
 }
 
 type FinalizeOutcome =
-  | { kind: "completed"; handover: HandoverRecord }
+  | { kind: "completed"; handover: HandoverRecord; replayed: boolean }
   | {
       kind: "source_changed";
       handoverId: string;
@@ -98,6 +99,12 @@ function safeActivityPayload(
       "handoverId",
       "reason",
       "focusProvided",
+      "status",
+      "version",
+    ],
+    "handover.context_initialized": [
+      "handoverId",
+      "contextId",
       "status",
       "version",
     ],
@@ -238,7 +245,11 @@ export class HandoverService {
         409,
       );
     }
-    if (handover.status === "requested") {
+    if (
+      handover.status === "requested" ||
+      (handover.status === "draft" &&
+        !isHandoverAgentDraftVerified(this.store, handover))
+    ) {
       throw new DomainError(
         "HANDOVER_IN_PROGRESS",
         "Handover generation is already in progress",
@@ -350,6 +361,20 @@ export class HandoverService {
     expectedSnapshotHash: string,
     rendered: RenderedHandover,
   ): HandoverRecord {
+    return this.finalizeWithReplay(
+      handoverId,
+      expectedVersion,
+      expectedSnapshotHash,
+      rendered,
+    ).handover;
+  }
+
+  finalizeWithReplay(
+    handoverId: string,
+    expectedVersion: number,
+    expectedSnapshotHash: string,
+    rendered: RenderedHandover,
+  ): { handover: HandoverRecord; replayed: boolean } {
     const parsedRendered = renderedHandoverSchema.parse(rendered);
     const outcome: FinalizeOutcome = this.store.transaction(() => {
       const handover = this.store.requireHandover(handoverId);
@@ -360,7 +385,7 @@ export class HandoverService {
           handover.rendered !== null &&
           sameJson(handover.rendered, parsedRendered)
         ) {
-          return { kind: "completed", handover };
+          return { kind: "completed", handover, replayed: true };
         }
         throw this.finalizeConflict();
       }
@@ -391,6 +416,7 @@ export class HandoverService {
         };
       }
 
+      this.validateRenderedUnknowns(handover.packet, parsedRendered);
       const packetSourceRefs = this.packetSourceRefs(handover.packet);
       for (const section of parsedRendered.sections) {
         for (const statement of section.statements) {
@@ -435,9 +461,11 @@ export class HandoverService {
           sectionCount: parsedRendered.sections.length,
         },
       });
-      return { kind: "completed", handover: saved };
+      return { kind: "completed", handover: saved, replayed: false };
     });
-    if (outcome.kind === "completed") return outcome.handover;
+    if (outcome.kind === "completed") {
+      return { handover: outcome.handover, replayed: outcome.replayed };
+    }
 
     const occurredAt = this.clock.now().toISOString();
     this.store.transaction(() => {
@@ -530,6 +558,52 @@ export class HandoverService {
           version: saved.version,
         },
       });
+    });
+  }
+
+  rejectDraft(
+    handoverId: string,
+    code: string,
+    retryable: boolean,
+  ): HandoverRecord {
+    return this.store.transaction(() => {
+      const handover = this.store.requireHandover(handoverId);
+      if (handover.status === "failed") return handover;
+      if (handover.status !== "draft") {
+        throw new DomainError(
+          "HANDOVER_FAILURE_CONFLICT",
+          "Only a saved draft can be rejected",
+          false,
+          409,
+        );
+      }
+      const updatedAt = this.clock.now().toISOString();
+      const saved = this.store.updateHandover(
+        {
+          ...handover,
+          status: "failed",
+          version: handover.version + 1,
+          updatedAt,
+        },
+        handover.version,
+      );
+      this.store.appendEvent({
+        eventType: "handover.failed",
+        occurredAt: updatedAt,
+        correlationId: handover.correlationId,
+        patientId: handover.patientId,
+        interactionId: handover.interactionId,
+        contextId: handover.contextId,
+        actor: { type: "agent", id: "corti" },
+        payload: {
+          handoverId,
+          code,
+          retryable,
+          status: saved.status,
+          version: saved.version,
+        },
+      });
+      return saved;
     });
   }
 
@@ -723,6 +797,39 @@ export class HandoverService {
         );
       }
     }
+  }
+
+  private validateRenderedUnknowns(
+    packet: HandoverPacket,
+    rendered: RenderedHandover,
+  ): void {
+    const unknownSections = rendered.sections.filter(
+      ({ sectionId }) => sectionId === "unknowns",
+    );
+    if (packet.unknowns.length === 0) {
+      if (unknownSections.length === 0) return;
+      throw this.invalidRenderedUnknowns();
+    }
+
+    const renderedUnknowns = unknownSections[0]?.statements.map(
+      ({ statement }) => statement,
+    );
+    if (
+      unknownSections.length !== 1 ||
+      renderedUnknowns === undefined ||
+      !sameJson(renderedUnknowns, packet.unknowns)
+    ) {
+      throw this.invalidRenderedUnknowns();
+    }
+  }
+
+  private invalidRenderedUnknowns(): DomainError {
+    return new DomainError(
+      "HANDOVER_EVIDENCE_NOT_FOUND",
+      "Rendered handover must preserve every packet unknown exactly once",
+      false,
+      409,
+    );
   }
 
   private packetSourceRefs(packet: HandoverPacket): Set<string> {
