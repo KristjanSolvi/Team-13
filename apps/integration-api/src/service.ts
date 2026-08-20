@@ -17,6 +17,7 @@ import type {
 import { IntegrationError } from "./errors.js";
 import type {
   AgenticGateway,
+  DownstreamGateway,
   MockEhrGateway,
   PipelineGateway,
   ProfileGateway,
@@ -446,12 +447,48 @@ const handoverEnvelopeSchema = z
 
 type HandoverEnvelope = z.infer<typeof handoverEnvelopeSchema>;
 
+const publishedTaskSchema = z
+  .object({
+    taskId: z.string().min(1).max(160),
+    patientId: z.string().min(1).max(160),
+    summary: z.string().min(5).max(1_000),
+    taskType: z.string().min(1).max(160),
+    targetTeamId: z
+      .string()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z][a-z0-9-]+$/),
+    dueBy: z.iso.datetime({ offset: true }),
+    state: z.enum([
+      "offered_to_team",
+      "assigned_to_member",
+      "accepted",
+      "completed",
+      "verified",
+      "escalated",
+    ]),
+    version: z.number().int().positive(),
+  })
+  .strip();
+
+const publishedTaskEnvelopeSchema = z
+  .object({ task: publishedTaskSchema })
+  .passthrough();
+
+const referralSnapshotReferenceSchema = z
+  .object({
+    referralId: z.string().min(1).max(160),
+    patientId: z.string().min(1).max(160),
+  })
+  .strip();
+
 export class IntegrationService {
   constructor(
     private readonly agentic: AgenticGateway,
     private readonly pipeline: PipelineGateway,
     private readonly now: () => Date = () => new Date(),
     private readonly ehr?: EhrDependencies,
+    private readonly downstream?: DownstreamGateway,
   ) {}
 
   async readiness() {
@@ -470,19 +507,32 @@ export class IntegrationService {
       liveCortiReady,
       services: { agentic, pipeline },
     };
-    if (this.ehr === undefined) return base;
+    if (this.ehr === undefined && this.downstream === undefined) return base;
 
-    const [profile, mockEhr] = await Promise.all([
-      safeStatus(() => this.ehr?.profile.health() as Promise<unknown>),
-      safeStatus(() => this.ehr?.mockEhr.health() as Promise<unknown>),
+    const [profile, mockEhr, downstream] = await Promise.all([
+      this.ehr === undefined
+        ? Promise.resolve(undefined)
+        : safeStatus(() => this.ehr?.profile.health() as Promise<unknown>),
+      this.ehr === undefined
+        ? Promise.resolve(undefined)
+        : safeStatus(() => this.ehr?.mockEhr.health() as Promise<unknown>),
+      this.downstream === undefined
+        ? Promise.resolve(undefined)
+        : safeStatus(() => this.downstream?.health() as Promise<unknown>),
     ]);
+    const dependenciesReady = [profile, mockEhr, downstream]
+      .filter((status): status is ServiceStatus => status !== undefined)
+      .every((status) => status.reachable);
     return {
       ...base,
-      status:
-        ready && profile.reachable && mockEhr.reachable
-          ? ("ready" as const)
-          : ("degraded" as const),
-      services: { agentic, pipeline, profile, mockEhr },
+      status: ready && dependenciesReady ? ("ready" as const) : ("degraded" as const),
+      services: {
+        agentic,
+        pipeline,
+        ...(profile === undefined ? {} : { profile }),
+        ...(mockEhr === undefined ? {} : { mockEhr }),
+        ...(downstream === undefined ? {} : { downstream }),
+      },
     };
   }
 
@@ -656,13 +706,123 @@ export class IntegrationService {
     };
   }
 
-  executeTaskCommand(
+  createReferralSnapshot(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.requireEhr().profile.createReferralSnapshot(
+      patientId,
+      body,
+      meta,
+    );
+  }
+
+  async listReferralSnapshots(patientId: string, correlationId: string) {
+    return {
+      referrals: await this.requireEhr().profile.listReferralSnapshots(
+        patientId,
+        { correlationId },
+      ),
+    };
+  }
+
+  getReferralSnapshot(referralId: string, correlationId: string) {
+    return this.requireEhr().profile.getReferralSnapshot(referralId, {
+      correlationId,
+    });
+  }
+
+  async executeTaskCommand(
     taskId: string,
     command: TaskCommand,
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown> {
-    return this.agentic.taskCommand(taskId, command, body, meta);
+    const referralSnapshotId =
+      command === "approve" && typeof body.referralSnapshotId === "string"
+        ? body.referralSnapshotId
+        : null;
+    const agenticBody = { ...body };
+    delete agenticBody.referralSnapshotId;
+    const result = await this.agentic.taskCommand(
+      taskId,
+      command,
+      agenticBody,
+      meta,
+    );
+    if (command !== "approve" || this.downstream === undefined) return result;
+
+    const parsed = publishedTaskEnvelopeSchema.safeParse(result);
+    if (!parsed.success || parsed.data.task.taskId !== taskId) {
+      throw invalidPublishedTask();
+    }
+    const task = parsed.data.task;
+    const kind = task.taskType.toLowerCase().includes("referral")
+      ? ("referral" as const)
+      : ("team-task" as const);
+    if (referralSnapshotId !== null) {
+      if (kind !== "referral") {
+        throw new IntegrationError(
+          "REFERRAL_SNAPSHOT_NOT_APPLICABLE",
+          "A referral snapshot can only be attached to a referral task",
+        );
+      }
+      const snapshot = referralSnapshotReferenceSchema.safeParse(
+        await this.requireEhr().profile.getReferralSnapshot(
+          referralSnapshotId,
+          meta,
+        ),
+      );
+      if (
+        !snapshot.success ||
+        snapshot.data.referralId !== referralSnapshotId ||
+        snapshot.data.patientId !== task.patientId
+      ) {
+        throw new IntegrationError(
+          "REFERRAL_SNAPSHOT_MISMATCH",
+          "The referral snapshot does not belong to this patient",
+          409,
+        );
+      }
+    }
+    const delivery = await this.downstream.createDelivery(
+      {
+        idempotencyKey: `delivery:${task.taskId}`,
+        sourceTaskId: task.taskId,
+        patientId: task.patientId,
+        targetSystem: task.targetTeamId,
+        kind,
+        summary: task.summary,
+        instructions: null,
+        dueAt: task.dueBy,
+        referralSnapshotId,
+      },
+      {
+        correlationId: meta.correlationId,
+        actorId: "system:integration-delivery",
+      },
+    );
+    return { ...(result as Record<string, unknown>), delivery };
+  }
+
+  async listTaskDeliveries(taskId: string, correlationId: string) {
+    return {
+      deliveries: await this.requireDownstream().listTaskDeliveries(taskId, {
+        correlationId,
+      }),
+    };
+  }
+
+  simulateDownstreamStatus(
+    deliveryId: string,
+    body: Record<string, unknown>,
+    correlationId: string,
+  ): Promise<unknown> {
+    return this.requireDownstream().simulateStatus(deliveryId, body, {
+      correlationId,
+      actorId: "downstream:demo-provider",
+    });
   }
 
   createDemoSession(
@@ -1001,6 +1161,18 @@ export class IntegrationService {
     }
     return this.ehr;
   }
+
+  private requireDownstream(): DownstreamGateway {
+    if (this.downstream === undefined) {
+      throw new IntegrationError(
+        "DOWNSTREAM_NOT_CONFIGURED",
+        "Downstream task delivery is not configured",
+        503,
+        true,
+      );
+    }
+    return this.downstream;
+  }
 }
 
 function parseHandoverEnvelope(value: unknown): HandoverEnvelope {
@@ -1081,6 +1253,15 @@ function invalidRenderedHandover(): IntegrationError {
   return new IntegrationError(
     "HANDOVER_RENDER_FAILED",
     "The handover renderer returned an invalid response",
+    502,
+    true,
+  );
+}
+
+function invalidPublishedTask(): IntegrationError {
+  return new IntegrationError(
+    "UPSTREAM_INVALID_RESPONSE",
+    "Agentic task publication did not return an authoritative task",
     502,
     true,
   );

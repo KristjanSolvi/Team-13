@@ -155,7 +155,7 @@ export const downstreamOpenApi = {
     },
     "/api/pending-readbacks": {
       get: {
-        summary: "List submitted work awaiting terminal provider status",
+        summary: "List provider work still awaiting status or source acknowledgement",
         security: secured,
         parameters: [correlationParameter],
         responses: {
@@ -191,6 +191,29 @@ export const downstreamOpenApi = {
           "404": errorResponse,
           "409": errorResponse,
           "503": errorResponse,
+        },
+      },
+    },
+    "/api/deliveries/{deliveryId}/acknowledge": {
+      post: {
+        summary: "Acknowledge that a completed outcome reached the source ledger",
+        security: secured,
+        parameters: [deliveryIdParameter, actorParameter, correlationParameter],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AcknowledgeReadback" },
+            },
+          },
+        },
+        responses: {
+          "200": deliveryResponse("Acknowledged delivery"),
+          "400": errorResponse,
+          "401": errorResponse,
+          "403": errorResponse,
+          "404": errorResponse,
+          "409": errorResponse,
         },
       },
     },
@@ -281,6 +304,7 @@ export const downstreamOpenApi = {
           "status",
           "externalReference",
           "outcomeReference",
+          "sourceAcknowledgedAt",
           "statusReason",
           "createdAt",
           "updatedAt",
@@ -310,6 +334,10 @@ export const downstreamOpenApi = {
           },
           externalReference: { type: ["string", "null"] },
           outcomeReference: { type: ["string", "null"] },
+          sourceAcknowledgedAt: {
+            type: ["string", "null"],
+            format: "date-time",
+          },
           statusReason: { type: ["string", "null"] },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
@@ -347,6 +375,14 @@ export const downstreamOpenApi = {
           status: { enum: ["accepted", "completed", "rejected"] },
           outcomeReference: { type: ["string", "null"] },
           reason: { type: ["string", "null"] },
+        },
+      },
+      AcknowledgeReadback: {
+        type: "object",
+        additionalProperties: false,
+        required: ["outcomeReference"],
+        properties: {
+          outcomeReference: { type: "string", minLength: 1, maxLength: 240 },
         },
       },
       Readback: {

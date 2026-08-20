@@ -1102,6 +1102,69 @@ test("patient lists, approval commands, and errors match the integration gateway
   });
 });
 
+test("external readback verification requires a downstream actor and replays exactly", async (t) => {
+  const harness = createAppHarness();
+  const draft = harness.ledger.createKarenDraft(
+    "ctx-karen",
+    "draft-http-external-readback",
+  );
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "approve-http-external-readback",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "publish-http-external-readback",
+  );
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const url = `${baseUrl}/api/tasks/${draft.taskId}/verify-external`;
+  const body = {
+    expectedVersion: offered.version,
+    outcomeRef: "ehr:result-44",
+    deliveryId: "delivery-44",
+    idempotencyKey: "external-readback-http-44",
+  };
+
+  const wrongActor = await fetch(url, {
+    method: "POST",
+    headers: appHeaders("clinician-1"),
+    body: JSON.stringify(body),
+  });
+  assert.equal(wrongActor.status, 403);
+
+  const verify = () =>
+    fetch(url, {
+      method: "POST",
+      headers: appHeaders("downstream:district-nursing"),
+      body: JSON.stringify(body),
+    });
+  const completed = await verify();
+  assert.equal(completed.status, 200);
+  assert.equal(
+    ((await completed.json()) as { state: string }).state,
+    "verified",
+  );
+  const replay = await verify();
+  assert.equal(replay.status, 200);
+  assert.equal(((await replay.json()) as { state: string }).state, "verified");
+  assert.equal(
+    harness.store
+      .listEvents(0)
+      .filter(({ eventType }) => eventType === "task.completion_verified")
+      .length,
+    1,
+  );
+});
+
 test("source revisions expose review-only Change Radar impacts", async (t) => {
   const harness = createAppHarness();
   const draft = harness.ledger.createKarenDraft(

@@ -50,7 +50,7 @@ export const integrationOpenApi = {
     title: "Follow-Through Integration API",
     version: "0.1.0",
     description:
-      "Stateless UI-facing facade for the Corti pipeline and authoritative Agentic/MCP ledger.",
+      "Stateless UI-facing facade for the Corti pipeline, Agentic ledger, synthetic EHR, patient profiles, and downstream delivery.",
   },
   servers: [{ url: "http://127.0.0.1:8790" }],
   paths: {
@@ -78,7 +78,7 @@ export const integrationOpenApi = {
         summary: "Aggregate upstream readiness",
         responses: {
           "200": {
-            description: "Both upstream services are reachable",
+            description: "All configured upstream services are reachable",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/Readiness" },
@@ -774,6 +774,113 @@ export const integrationOpenApi = {
             },
           },
           "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/patients/{patientId}/referral-snapshots": {
+      post: {
+        summary: "Freeze the current patient profile for a referral",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EhrReferralSnapshotCreate" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Immutable referral snapshot" },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+      get: {
+        summary: "List a patient's referral snapshots",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": { description: "Newest-first referral snapshots" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/referral-snapshots/{referralId}": {
+      get: {
+        summary: "Read a referral snapshot and profile-change status",
+        parameters: [
+          {
+            name: "referralId",
+            in: "path",
+            required: true,
+            schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+          },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": { description: "Referral snapshot status" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/tasks/{taskId}/deliveries": {
+      get: {
+        summary: "Read downstream delivery state for an Agentic task",
+        parameters: [
+          {
+            name: "taskId",
+            in: "path",
+            required: true,
+            schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+          },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": { description: "Task delivery attempts and provider state" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/demo/downstream/deliveries/{deliveryId}/status": {
+      post: {
+        summary: "Advance the synthetic downstream provider",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          {
+            name: "deliveryId",
+            in: "path",
+            required: true,
+            schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+          },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DownstreamSimulation" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Independent provider readback" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
           "502": { $ref: "#/components/responses/Error" },
         },
       },
@@ -1626,6 +1733,42 @@ export const integrationOpenApi = {
           reason: { type: "string", minLength: 3, maxLength: 500 },
         },
       },
+      EhrReferralSnapshotCreate: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "idempotencyKey",
+          "referralType",
+          "destination",
+          "clinicalReason",
+          "additionalInstructions",
+        ],
+        properties: {
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          referralType: { type: "string", minLength: 2, maxLength: 160 },
+          destination: { type: "string", minLength: 2, maxLength: 240 },
+          clinicalReason: { type: "string", minLength: 5, maxLength: 4000 },
+          additionalInstructions: {
+            type: ["string", "null"],
+            minLength: 1,
+            maxLength: 2000,
+          },
+        },
+      },
+      DownstreamSimulation: {
+        type: "object",
+        additionalProperties: false,
+        required: ["idempotencyKey", "status", "outcomeReference", "reason"],
+        properties: {
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          status: {
+            type: "string",
+            enum: ["accepted", "completed", "rejected"],
+          },
+          outcomeReference: { type: ["string", "null"], maxLength: 240 },
+          reason: { type: ["string", "null"], maxLength: 500 },
+        },
+      },
       Evidence: {
         type: "object",
         additionalProperties: false,
@@ -1949,6 +2092,10 @@ export const integrationOpenApi = {
           approvalChannel: {
             type: "string",
             enum: ["app_one_tap", "dictation_confirmation"],
+          },
+          referralSnapshotId: {
+            type: ["string", "null"],
+            pattern: "^[A-Za-z0-9:._-]{1,160}$",
           },
           summary: { type: "string" },
           targetTeamId: { type: "string" },

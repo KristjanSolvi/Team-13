@@ -44,6 +44,7 @@ export class DownstreamGatewayService {
       status: "pending_submission",
       externalReference: null,
       outcomeReference: null,
+      sourceAcknowledgedAt: null,
       statusReason: null,
       createdAt: occurredAt,
       updatedAt: occurredAt,
@@ -177,6 +178,26 @@ export class DownstreamGatewayService {
       observedAt,
     );
     return independentReadback(updated, readback, observedAt);
+  }
+
+  acknowledgeReadback(
+    deliveryId: string,
+    outcomeReference: string,
+    actorId: string,
+  ): Delivery {
+    if (!actorId.startsWith("system:")) {
+      throw new DownstreamError(
+        "SYSTEM_ACTOR_REQUIRED",
+        "Readback acknowledgement requires an attributed system actor",
+        403,
+      );
+    }
+    return this.store.acknowledgeReadback(
+      deliveryId,
+      outcomeReference,
+      actorId,
+      this.now().toISOString(),
+    );
   }
 
   private requireDelivery(deliveryId: string): Delivery {

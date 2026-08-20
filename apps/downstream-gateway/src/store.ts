@@ -59,9 +59,9 @@ export class DownstreamStore {
             (delivery_id, idempotency_key, request_hash, source_task_id,
              patient_id, target_system, kind, summary, instructions, due_at,
              referral_snapshot_id, status, external_reference,
-             outcome_reference, status_reason, created_at, updated_at,
+             outcome_reference, source_acknowledged_at, status_reason, created_at, updated_at,
              created_by, correlation_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           delivery.deliveryId,
@@ -78,6 +78,7 @@ export class DownstreamStore {
           delivery.status,
           delivery.externalReference,
           delivery.outcomeReference,
+          delivery.sourceAcknowledgedAt,
           delivery.statusReason,
           delivery.createdAt,
           delivery.updatedAt,
@@ -115,11 +116,52 @@ export class DownstreamStore {
       .prepare(`
         SELECT * FROM downstream_deliveries
         WHERE external_reference IS NOT NULL
-          AND status IN ('submitted', 'accepted')
+          AND (
+            status IN ('submitted', 'accepted')
+            OR (status = 'completed' AND source_acknowledged_at IS NULL)
+          )
         ORDER BY updated_at, delivery_id
       `)
       .all()
       .map(deliveryFromRow);
+  }
+
+  acknowledgeReadback(
+    deliveryId: string,
+    outcomeReference: string,
+    actorId: string,
+    occurredAt: string,
+  ): Delivery {
+    return this.transaction(() => {
+      const current = this.requireDelivery(deliveryId);
+      if (
+        current.status !== "completed" ||
+        current.outcomeReference !== outcomeReference
+      ) {
+        throw new DownstreamError(
+          "READBACK_NOT_VERIFIABLE",
+          "Only the exact completed provider outcome can be acknowledged",
+          409,
+        );
+      }
+      if (current.sourceAcknowledgedAt !== null) return current;
+
+      this.database
+        .prepare(`
+          UPDATE downstream_deliveries
+          SET source_acknowledged_at = ?, updated_at = ?
+          WHERE delivery_id = ? AND source_acknowledged_at IS NULL
+        `)
+        .run(occurredAt, occurredAt, deliveryId);
+      const updated = this.requireDelivery(deliveryId);
+      this.appendEvent(
+        updated,
+        "delivery.source_acknowledged",
+        actorId,
+        { outcomeReference },
+      );
+      return updated;
+    });
   }
 
   recordProviderState(
@@ -404,6 +446,7 @@ function deliveryFromRow(row: object): Delivery {
     status: rowText(row, "status") as Delivery["status"],
     externalReference: rowNullableText(row, "external_reference"),
     outcomeReference: rowNullableText(row, "outcome_reference"),
+    sourceAcknowledgedAt: rowNullableText(row, "source_acknowledged_at"),
     statusReason: rowNullableText(row, "status_reason"),
     createdAt: rowText(row, "created_at"),
     updatedAt: rowText(row, "updated_at"),

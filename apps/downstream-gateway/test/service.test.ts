@@ -209,10 +209,32 @@ describe("downstream gateway service", () => {
       verifierActorId: "downstream:district-nursing",
       independentlyVerifiable: true,
     });
-    expect(service.listPendingReadbacks()).toEqual([]);
+    expect(service.listPendingReadbacks()).toHaveLength(1);
     expect(await service.readback(delivery.deliveryId)).toMatchObject({
       independentlyVerifiable: true,
     });
+
+    expect(() =>
+      service.acknowledgeReadback(
+        delivery.deliveryId,
+        "record:bp-result-1",
+        "clinician-1",
+      ),
+    ).toThrow(/system actor/i);
+    const acknowledged = service.acknowledgeReadback(
+      delivery.deliveryId,
+      "record:bp-result-1",
+      "system:integration-reconciler",
+    );
+    expect(acknowledged.sourceAcknowledgedAt).not.toBeNull();
+    expect(service.listPendingReadbacks()).toEqual([]);
+    expect(
+      service.acknowledgeReadback(
+        delivery.deliveryId,
+        "record:bp-result-1",
+        "system:integration-reconciler",
+      ),
+    ).toEqual(acknowledged);
   });
 
   it("enforces provider transitions and simulation attribution", async () => {

@@ -73,6 +73,7 @@ function harness() {
     listThreads: vi.fn(async () => []),
     listTasks: vi.fn(async () => []),
     taskCommand: vi.fn(async () => ({})),
+    verifyExternal: vi.fn(async () => ({})),
     createDemoSession: vi.fn(async () => ({})),
     getDemoSession: vi.fn(async () => ({})),
     joinDemoSession: vi.fn(async () => ({})),

@@ -63,6 +63,16 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  verifyExternal(
+    taskId: string,
+    body: {
+      expectedVersion: number;
+      outcomeRef: string;
+      deliveryId: string;
+      idempotencyKey: string;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown>;
   createDemoSession(
     body: Record<string, unknown>,
     meta: RequestMeta,
@@ -165,6 +175,40 @@ export interface ProfileGateway {
   getProfile(patientId: string, meta: RequestMeta): Promise<unknown>;
   updateProfile(
     patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  createReferralSnapshot(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  listReferralSnapshots(
+    patientId: string,
+    meta: RequestMeta,
+  ): Promise<unknown[]>;
+  getReferralSnapshot(
+    referralId: string,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+}
+
+export interface DownstreamGateway {
+  health(): Promise<unknown>;
+  createDelivery(
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  listTaskDeliveries(taskId: string, meta: RequestMeta): Promise<unknown[]>;
+  listPendingReadbacks(meta: RequestMeta): Promise<unknown[]>;
+  readback(deliveryId: string, meta: RequestMeta): Promise<unknown>;
+  acknowledgeReadback(
+    deliveryId: string,
+    body: { outcomeReference: string },
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  simulateStatus(
+    deliveryId: string,
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
@@ -398,6 +442,30 @@ export class HttpAgenticGateway implements AgenticGateway {
   ): Promise<unknown> {
     return this.client.request(
       `/api/tasks/${encodeURIComponent(taskId)}/${command}`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+        ...(command === "approve"
+          ? { timeoutMs: this.handoverTimeoutMs }
+          : {}),
+      },
+    );
+  }
+
+  verifyExternal(
+    taskId: string,
+    body: {
+      expectedVersion: number;
+      outcomeRef: string;
+      deliveryId: string;
+      idempotencyKey: string;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/tasks/${encodeURIComponent(taskId)}/verify-external`,
       {
         method: "POST",
         body,
@@ -770,6 +838,133 @@ export class HttpProfileGateway implements ProfileGateway {
         meta,
       },
     );
+  }
+
+  createReferralSnapshot(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/referral-snapshots`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  async listReferralSnapshots(
+    patientId: string,
+    meta: RequestMeta,
+  ): Promise<unknown[]> {
+    const payload = await this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/referral-snapshots`,
+      { bearerToken: this.bearerToken, meta },
+    );
+    return requiredArray(payload, "referrals");
+  }
+
+  async getReferralSnapshot(
+    referralId: string,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return requiredObject(
+      await this.client.request(
+        `/api/referral-snapshots/${encodeURIComponent(referralId)}`,
+        { bearerToken: this.bearerToken, meta },
+      ),
+    );
+  }
+}
+
+export class HttpDownstreamGateway implements DownstreamGateway {
+  private readonly client: JsonHttpClient;
+
+  constructor(
+    baseUrl: string,
+    timeoutMs: number,
+    private readonly bearerToken: string,
+    fetchImpl: typeof fetch = fetch,
+  ) {
+    this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
+  }
+
+  health(): Promise<unknown> {
+    return this.client.request("/healthz", { authenticate: false });
+  }
+
+  createDelivery(
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.request("/api/deliveries", body, meta);
+  }
+
+  async listTaskDeliveries(
+    taskId: string,
+    meta: RequestMeta,
+  ): Promise<unknown[]> {
+    const payload = await this.client.request(
+      `/api/tasks/${encodeURIComponent(taskId)}/deliveries`,
+      { bearerToken: this.bearerToken, meta },
+    );
+    return requiredArray(payload, "deliveries");
+  }
+
+  async listPendingReadbacks(meta: RequestMeta): Promise<unknown[]> {
+    const payload = await this.client.request("/api/pending-readbacks", {
+      bearerToken: this.bearerToken,
+      meta,
+    });
+    return requiredArray(payload, "deliveries");
+  }
+
+  readback(deliveryId: string, meta: RequestMeta): Promise<unknown> {
+    return this.request(
+      `/api/deliveries/${encodeURIComponent(deliveryId)}/readback`,
+      {},
+      meta,
+    );
+  }
+
+  acknowledgeReadback(
+    deliveryId: string,
+    body: { outcomeReference: string },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.request(
+      `/api/deliveries/${encodeURIComponent(deliveryId)}/acknowledge`,
+      body,
+      meta,
+    );
+  }
+
+  simulateStatus(
+    deliveryId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.request(
+      `/api/simulation/deliveries/${encodeURIComponent(deliveryId)}/status`,
+      body,
+      meta,
+    );
+  }
+
+  private request(
+    path: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(path, {
+      method: "POST",
+      body,
+      bearerToken: this.bearerToken,
+      meta,
+    });
   }
 }
 
