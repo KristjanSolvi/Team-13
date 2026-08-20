@@ -280,15 +280,25 @@ h3 {
 }
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 34px;
   border-radius: 0.48rem;
   padding: 0.5rem 0.76rem;
   font-size: 0.73rem;
   font-weight: 700;
+  text-decoration: none;
   transition:
     opacity 120ms ease,
     transform 120ms ease,
     border-color 120ms ease;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .button:hover:not(:disabled) {
@@ -620,6 +630,222 @@ corti-dictation {
 
 .about-popover ul {
   padding-left: 1.2rem;
+}
+
+.evaluation-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) minmax(0, 1.15fr);
+  gap: 1rem;
+  min-height: 0;
+  padding: 1rem 1.4rem;
+}
+
+.evaluation-card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow: hidden;
+  padding: 1.05rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: 0 12px 36px hsl(var(--foreground) / 0.045);
+}
+
+.evaluation-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.evaluation-card > .evaluation-scroll,
+.output-stack {
+  flex: 1 1 auto;
+}
+
+.candidate-card {
+  padding: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.58rem;
+  background: hsl(var(--muted));
+}
+
+.candidate-card + .candidate-card {
+  margin-top: 0.65rem;
+}
+
+.candidate-card h3 {
+  margin-top: 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.candidate-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.evidence-quote {
+  margin: 0.7rem 0 0.35rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid hsl(var(--corti-lime));
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.candidate-card small,
+.approval-box small,
+.check-row small,
+.code-row small {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.approval-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.7rem;
+  border: 1px solid hsl(var(--strong-border));
+  border-radius: 0.58rem;
+  background: hsl(var(--muted));
+  cursor: pointer;
+}
+
+.approval-box input {
+  margin-top: 0.18rem;
+  accent-color: hsl(var(--primary));
+}
+
+.approval-box strong {
+  display: block;
+  margin-bottom: 0.18rem;
+  font-size: 0.74rem;
+}
+
+.output-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.result-panel {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.58rem;
+  overflow: hidden;
+}
+
+.result-content,
+.check-list {
+  padding: 0.7rem;
+}
+
+.result-content h4,
+.coding-group h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+}
+
+.result-content p {
+  margin: 0 0 0.55rem;
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
+.draft-boundary {
+  padding-top: 0.5rem;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--success));
+  font-weight: 700;
+}
+
+.coding-group + .coding-group {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.code-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  padding: 0.48rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.72rem;
+}
+
+.code-row:last-child {
+  border-bottom: 0;
+}
+
+.code-row strong {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.code-row small {
+  grid-column: 1 / -1;
+}
+
+.check-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.check-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: hsl(var(--error-soft));
+  color: hsl(var(--error));
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.check-row[data-passed="true"] .check-mark {
+  background: hsl(var(--success-soft));
+  color: hsl(var(--success));
+}
+
+.check-row strong {
+  display: block;
+  margin-bottom: 0.1rem;
+  font-size: 0.68rem;
+  text-transform: capitalize;
+}
+
+@media (max-width: 1180px) {
+  .evaluation-page {
+    overflow: auto;
+  }
+
+  .evaluation-page .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .evaluation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evaluation-card {
+    min-height: 520px;
+  }
 }
 
 @media (max-width: 1050px) {

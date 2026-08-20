@@ -16,5 +16,13 @@ export default defineConfig({
   build: {
     outDir: "../dist/harness",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        microphone: fileURLToPath(new URL("./harness/index.html", import.meta.url)),
+        evaluation: fileURLToPath(
+          new URL("./harness/evaluation.html", import.meta.url),
+        ),
+      },
+    },
   },
 });

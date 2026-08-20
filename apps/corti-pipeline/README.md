@@ -48,6 +48,13 @@ npm run dev:harness
 Open <http://127.0.0.1:5173> in Chrome and allow microphone access. The header
 must say `Pipeline live · Corti configured` before testing.
 
+The same harness server also exposes the source-grounded Karen evaluator at
+<http://127.0.0.1:5173/evaluation.html>. It runs live candidate Text Generation
+against a visibly labelled preloaded transcript, requires explicit synthetic
+clinician confirmation, then runs supporting-document generation and Medical
+Coding in parallel. It never mutates the ledger or presents fallback output as
+live.
+
 ### Ambient smoke test
 
 1. Click **Start ambient** and confirm the status becomes `Recording`.
@@ -81,6 +88,8 @@ typed editing as the corridor-safe fallback; noise handling never turns an
 uncertain transcript into authorization.
 
 The HTTP and event contracts are documented in [docs/api.md](docs/api.md).
+The complete quiet-room, noisy-room, Text Generation, and Coding acceptance
+procedure is in [docs/testing.md](docs/testing.md).
 Browser adapters consume scoped tokens from this service; they never receive the
 Corti client secret.
 

@@ -10,10 +10,16 @@ export {
 } from "./speech.js";
 export type { SpeechQualityWindow } from "./speech.js";
 export {
+  generateCandidates,
+  generateSupportingDocument,
   getDictationToken,
   investigateCandidate,
+  predictMedicalCodes,
   refreshAmbientToken,
   startAmbientSession,
   submitConfirmedTaskCorrection,
 } from "./http.js";
-export type { CandidateInvestigationResponse } from "./http.js";
+export type {
+  CandidateGenerationResponse,
+  CandidateInvestigationResponse,
+} from "./http.js";

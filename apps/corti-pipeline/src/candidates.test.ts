@@ -78,4 +78,28 @@ describe("normalizeGeneratedCandidates", () => {
     expect(result.rejectedEvidenceCount).toBe(0);
     expect(result.rejectedAudioQualityCount).toBe(1);
   });
+
+  it("retains at most one grounded review item when upstream returns extras", () => {
+    const result = normalizeGeneratedCandidates({
+      generatedValue: [
+        {
+          category: "symptom",
+          summary: "Dizziness was explicitly reported.",
+          sourceQuote: "dizzy since my medication changed",
+        },
+        {
+          category: "medication-concern",
+          summary: "The symptom followed a medication change.",
+          sourceQuote: "my medication changed",
+        },
+      ],
+      patientId: "karen",
+      interactionId: "interaction-1",
+      correlationId: "corr-karen-1",
+      segments,
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.category).toBe("symptom");
+  });
 });

@@ -20,3 +20,14 @@ export {
   locateExactQuote,
   validateCodingEvidence,
 } from "./evidence.js";
+export {
+  evaluateCandidateGrounding,
+  evaluateCodingGrounding,
+  evaluateDocumentGrounding,
+} from "./evaluation.js";
+export {
+  evaluateSupportingDocumentSafety,
+  findUnsupportedLifecycleClaims,
+} from "./document-safety.js";
+export type { UnsupportedLifecycleClaim } from "./document-safety.js";
+export type { EvaluationCheck } from "./evaluation.js";

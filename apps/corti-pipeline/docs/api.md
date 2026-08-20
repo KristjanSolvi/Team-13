@@ -123,8 +123,8 @@ until the clinician confirms it.
 `POST /api/corti/candidates/generate`
 
 Accepts `patientId`, `interactionId`, and normalized transcript `segments`.
-Guided Documents returns at most three conservative candidate items with an
-exact quote. The pipeline drops every generated item whose quote cannot be found
+Guided Documents returns at most one consolidated, conservative candidate with
+an exact quote. The pipeline drops every generated item whose quote cannot be found
 exactly within one final transcript segment or whose span overlaps a Corti
 speech-quality issue. It does not assign an owner,
 deadline, diagnosis, referral, or clinical plan. Developer 2 still checks the
@@ -178,6 +178,13 @@ Allowed document types:
 Only clinician-approved text is accepted by contract. Output is always labeled
 `draft`; the generator is instructed to omit missing information and never add a
 diagnosis, owner, deadline, assurance, or completion status.
+The pipeline also rejects a generated draft that implies an unapproved lifecycle
+state such as created, sent, assigned, accepted, completed, or verified.
+
+The browser package exports `generateSupportingDocument`. It requires the same
+explicit `approvalId`, approved text, document type, and end-to-end correlation
+ID. The developer evaluator uses a visibly synthetic approval ID; the integrated
+product must use the stable identifier returned by the Agentic approval record.
 
 ## Medical coding
 
@@ -203,6 +210,23 @@ The configured default is `icd10int-outpatient`. Confirm tenant entitlement
 before the demo. The response preserves Corti's ordering and keeps `codes` and
 `candidates` separate. Evidence is retained only when its context index and
 inclusive/exclusive offsets reproduce the returned evidence text exactly.
+
+The browser package exports `predictMedicalCodes`. The Karen evaluator runs it
+in parallel with document generation so either call can fail without fabricating
+or removing the successful result.
+
+## Developer evaluation
+
+The harness build contains two pages:
+
+- `/`: real Ambient and separate Dictation microphone paths.
+- `/evaluation.html`: disclosed Karen transcript fallback, live candidate Text
+  Generation, exact-evidence checks, explicit synthetic approval, supporting
+  document, and Medical Coding review.
+
+The evaluator is a boundary test, not a substitute for the Agentic lifecycle.
+It exposes no ledger mutation route. See [testing.md](testing.md) for the full
+acceptance procedure.
 
 ## Ledger boundary
 
