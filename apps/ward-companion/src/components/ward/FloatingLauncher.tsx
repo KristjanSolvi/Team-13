@@ -1,9 +1,18 @@
-import { Sparkles } from "lucide-react";
+import { Maximize2, Minimize2, Sparkles, X } from "lucide-react";
 import { useRef } from "react";
 
-export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+type Props = {
+  open: boolean;
+  maximized: boolean;
+  onToggle: () => void;
+  onMaximize: () => void;
+  onClose: () => void;
+};
+
+export function FloatingLauncher({ open, maximized, onToggle, onMaximize, onClose }: Props) {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedByHover = useRef(false);
+  const suppressHoverUntilLeave = useRef(false);
 
   const clearHoverTimer = () => {
     if (hoverTimer.current !== null) {
@@ -13,7 +22,7 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
   };
 
   const handlePointerEnter = () => {
-    if (open || hoverTimer.current !== null) return;
+    if (open || suppressHoverUntilLeave.current || hoverTimer.current !== null) return;
     hoverTimer.current = setTimeout(() => {
       openedByHover.current = true;
       hoverTimer.current = null;
@@ -24,6 +33,7 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
   const handlePointerLeave = () => {
     clearHoverTimer();
     openedByHover.current = false;
+    suppressHoverUntilLeave.current = false;
   };
 
   const handleClick = () => {
@@ -35,17 +45,41 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
     onToggle();
   };
 
+  const handleClose = () => {
+    clearHoverTimer();
+    suppressHoverUntilLeave.current = true;
+    onClose();
+  };
+
   return (
-    <button
-      type="button"
+    <div
       data-ward-launcher
-      aria-expanded={open}
-      aria-label={open ? "Hide Ward Threads" : "Open Ward Threads"}
-      onClick={handleClick}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
-      className="liquid-glass-subtle liquid-press fixed right-6 top-8 z-50 flex items-center gap-3 rounded-full py-2.5 pl-3 pr-4 text-sm font-medium text-foreground hover:-translate-y-0.5"
+      className="liquid-glass-subtle fixed right-6 top-8 z-50 flex items-center gap-1.5 rounded-full py-2 pl-2 pr-4 text-sm font-medium text-foreground transition-transform hover:-translate-y-0.5"
     >
+      {open && (
+        <>
+          <button
+            type="button"
+            onClick={onMaximize}
+            aria-label={maximized ? "Restore panel size" : "Maximise panel"}
+            title={maximized ? "Restore panel size" : "Maximise panel"}
+            className="flex size-7 items-center justify-center rounded-full border border-white/40 bg-white/50 text-foreground shadow-sm transition-all hover:bg-white/80 active:scale-95"
+          >
+            {maximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Hide panel"
+            title="Hide panel"
+            className="flex size-7 items-center justify-center rounded-full border border-white/40 bg-white/50 text-foreground shadow-sm transition-all hover:bg-white/80 active:scale-95"
+          >
+            <X className="size-3.5" />
+          </button>
+        </>
+      )}
       {open ? (
         <span className="flex items-center gap-2">
           <span className="relative flex size-5 items-center justify-center rounded-full bg-teal/10">
@@ -57,7 +91,13 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
           </span>
         </span>
       ) : (
-        <>
+        <button
+          type="button"
+          aria-expanded={false}
+          aria-label="Open Ward Threads"
+          onClick={handleClick}
+          className="liquid-press flex items-center gap-3"
+        >
           <span className="relative flex size-7 items-center justify-center rounded-full bg-teal/10">
             <Sparkles className="size-4 text-teal" />
             <span className="absolute -right-0.5 -top-0.5 size-2 animate-pulse rounded-full bg-pending" />
@@ -66,8 +106,8 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
           <kbd className="liquid-glass-track rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
             ⇧ ⇧
           </kbd>
-        </>
+        </button>
       )}
-    </button>
+    </div>
   );
 }

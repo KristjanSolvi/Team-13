@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
@@ -55,6 +54,7 @@ function Index() {
   const [threads, setThreads] = useState<Thread[]>(initialThreads);
   const [notes, setNotes] = useState<Record<string, CaseNote[]>>(initialNotes);
   const [open, setOpen] = useState(true);
+  const [maximized, setMaximized] = useState(false);
   const [view, setView] = useState<"board" | "activity" | "insights">("board");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -364,27 +364,17 @@ function Index() {
       {open && (
         <section
           ref={panelRef}
-          className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300"
+          className={`liquid-glass fixed bottom-4 right-4 top-4 z-40 flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[28px] transition-[left,max-width] duration-300 ${
+            maximized ? "left-4 max-w-none" : "max-w-[52rem]"
+          }`}
         >
           <header className="border-b border-white/25 bg-white/12 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <ViewTabs
-                value={view}
-                onChange={(key) => {
-                  setView(key);
-                }}
-              />
-
-              <div className="flex items-center">
-                <button
-                  onClick={() => setOpen(false)}
-                  aria-label="Hide panel"
-                  className="text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            </div>
+            <ViewTabs
+              value={view}
+              onChange={(key) => {
+                setView(key);
+              }}
+            />
           </header>
 
           <div className="min-h-0 flex-1">
@@ -475,7 +465,13 @@ function Index() {
         </section>
       )}
 
-      <FloatingLauncher open={open} onToggle={() => setOpen((current) => !current)} />
+      <FloatingLauncher
+        open={open}
+        maximized={maximized}
+        onToggle={() => setOpen((current) => !current)}
+        onMaximize={() => setMaximized((current) => !current)}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }
