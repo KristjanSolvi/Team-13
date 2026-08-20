@@ -229,7 +229,9 @@ The Thread Resolution Agent retrieves relevant longitudinal context and checks w
 
 ### Asks once
 
-At a natural pause, the clinician approves, corrects, or dismisses the proposed thread through intentional Dictation.
+At a natural pause, the clinician approves or dismisses with one tap, or uses
+intentional Dictation to correct the proposed action, receiving team, deadline,
+or urgency before confirming.
 
 ### Acts
 
@@ -307,9 +309,9 @@ Thread detail:
 - Exact triggering sentence and timestamp
 - Relevant record evidence
 - Why the thread is being tracked
-- Owner and deadline
+- Receiving team, deadline, and owner once accepted
 - Agent activity trail
-- Approve via Dictation or dismiss as already covered
+- Approve with one tap, correct via Dictation, or dismiss as already covered
 
 ### The board—at board round
 
@@ -395,7 +397,8 @@ The agent is not a chat window. Its visible resolution loop is the central produ
 4. The agent calls the Record MCP for patient-scoped context.
 5. It checks existing actions and open threads.
 6. It creates a draft proposal with evidence.
-7. The clinician approves or corrects it through Dictation.
+7. The clinician approves with one authenticated action or corrects it through
+   Dictation, previews the structured change, and then confirms.
 8. Only an approved action may be committed through the Ledger MCP.
 9. The agent reads the action back to verify successful creation.
 10. It later checks status and either verifies completion or escalates.
@@ -472,12 +475,14 @@ The staged WSO2 FHIR MCP can connect through Streamable HTTP to a local HAPI FHI
 | Corti area | Follow-Through role |
 |---|---|
 | Ambient Speech-to-text | Passive capture of rounds, handoffs, and discharge conversations; supplies timestamped evidence |
-| Dictation Speech-to-text | Intentional clinician channel for approval, correction, ownership, deadline, dismissal, or closure |
+| Dictation Speech-to-text | Intentional clinician channel for correcting the action, receiving team, deadline, urgency, dismissal rationale, or closure wording |
 | Agentic Framework | Checks context, selects MCP tools, proposes, waits for approval, acts, verifies, and escalates |
 | Text Generation | Produces concise, evidence-grounded proposal explanations, patient instructions, and handoff wording |
 | Medical Coding | Checks whether a confirmed concern is represented in supported coding/problem concepts and shows evidence-linked candidates |
 
-Dictation is the authority boundary: Ambient is overheard; Dictation is intentional. Only the intentional channel should authorize an action.
+Ambient is observational; one-tap approval and Dictation are intentional.
+Neither speech transcript writes by itself: only an authenticated clinician
+confirmation may authorize an action.
 
 Coding is supportive, not a separate product. Avoid making reimbursement leakage the primary story, particularly in a vendor-neutral or European demonstration.
 
@@ -816,7 +821,8 @@ Show the activity trail retrieving record context, checking existing work, and c
 
 ### 2:05–2:40—clinician authority
 
-Clinician uses Dictation to approve or correct the owner/deadline.
+Clinician uses Dictation to correct the receiving team, deadline, or urgency,
+previews the structured change, and confirms it.
 
 ### 2:40–3:25—act and verify
 
@@ -911,7 +917,8 @@ The prototype is ready when the team can demonstrate, reliably and within five m
 1. A real Corti Ambient transcript segment creates evidence.
 2. The agent retrieves scoped record context through MCP.
 3. It proposes one useful thread without taking autonomous action.
-4. The clinician intentionally approves or corrects through Corti Dictation.
+4. The clinician intentionally approves with one tap or corrects through Corti
+   Dictation and then confirms the preview.
 5. The agent commits to the mock downstream system.
 6. It reads back and verifies the recorded status.
 7. The rail and ward board update from the same thread.
@@ -933,11 +940,10 @@ After the official start:
 - Keep the submission repo focused; do not commit the broad preparation toolbox.
 - Review the final Git diff before every commit.
 
-Suggested first documentation-only commit message after the permitted start:
+Example documentation-only commit message:
 
 ```text
 docs: add Follow-Through team context
 ```
 
-No commit has been created by the preparation of this file.
-
+Keep this context synchronized with the implemented cross-service contracts.

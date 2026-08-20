@@ -11,7 +11,7 @@ import { locateExactQuote } from "./evidence.js";
 
 const generatedCandidateSchema = z.object({
   category: z.enum(candidateCategories),
-  summary: z.string().min(1).max(240),
+  summary: z.string().min(5).max(240),
   sourceQuote: z.string().min(1).max(500),
 });
 
@@ -21,17 +21,23 @@ export interface NormalizeGeneratedCandidatesInput {
   generatedValue: unknown;
   patientId: string;
   interactionId: string;
+  correlationId: string;
   segments: readonly TranscriptSegment[];
   createId?: () => string;
 }
 
 export function normalizeGeneratedCandidates(
   input: NormalizeGeneratedCandidatesInput,
-): { candidates: FollowThroughCandidate[]; rejectedEvidenceCount: number } {
+): {
+  candidates: FollowThroughCandidate[];
+  rejectedEvidenceCount: number;
+  rejectedAudioQualityCount: number;
+} {
   const generated = generatedCandidatesSchema.parse(input.generatedValue);
   const createId = input.createId ?? randomUUID;
   const candidates: FollowThroughCandidate[] = [];
   let rejectedEvidenceCount = 0;
+  let rejectedAudioQualityCount = 0;
 
   for (const item of generated) {
     const evidence = locateExactQuote(input.segments, item.sourceQuote);
@@ -39,8 +45,14 @@ export function normalizeGeneratedCandidates(
       rejectedEvidenceCount += 1;
       continue;
     }
+    if (evidence.audioQuality === "uncertain") {
+      rejectedAudioQualityCount += 1;
+      continue;
+    }
     candidates.push({
+      schemaVersion: "1",
       candidateId: createId(),
+      correlationId: input.correlationId,
       interactionId: input.interactionId,
       patientId: input.patientId,
       category: item.category,
@@ -50,5 +62,5 @@ export function normalizeGeneratedCandidates(
     });
   }
 
-  return { candidates, rejectedEvidenceCount };
+  return { candidates, rejectedEvidenceCount, rejectedAudioQualityCount };
 }

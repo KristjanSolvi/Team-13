@@ -1,6 +1,7 @@
 import "@corti/dictation-web";
 
 import type {
+  AudioEventEventDetail,
   CortiDictation,
   DeltaUsageEventDetail,
   ErrorEventDetail,
@@ -11,6 +12,10 @@ import type { Corti } from "@corti/sdk";
 
 import type { PipelineEvent, ScopedToken } from "../contracts.js";
 import { pipelineEvent } from "../events.js";
+import {
+  normalizeAudioQualityEvent,
+  normalizeSpeechKeyterms,
+} from "./speech.js";
 
 export interface BindDictationOptions {
   element: CortiDictation;
@@ -18,6 +23,7 @@ export interface BindDictationOptions {
   refreshToken: () => Promise<ScopedToken>;
   primaryLanguage: string;
   correlationId: string;
+  keyterms?: string[];
   onEvent: (event: PipelineEvent) => void;
 }
 
@@ -28,6 +34,7 @@ function isDictationTranscript(
 }
 
 export function bindCortiDictation(options: BindDictationOptions) {
+  const keyterms = normalizeSpeechKeyterms(options.keyterms ?? []);
   options.element.authConfig = {
     accessToken: options.token.accessToken,
     expiresIn: options.token.expiresIn,
@@ -38,10 +45,23 @@ export function bindCortiDictation(options: BindDictationOptions) {
     interimResults: true,
     automaticPunctuation: true,
     spokenPunctuation: false,
+    audioEvents: { enabled: true },
+    ...(keyterms.length > 0 ? { keyterms: { terms: keyterms } } : {}),
     formatting: {
       numbers: "numerals_above_nine",
       measurements: "abbreviated",
     },
+  };
+
+  const onAudioEvent = (event: Event) => {
+    const detail = (event as CustomEvent<AudioEventEventDetail>).detail;
+    options.onEvent(
+      pipelineEvent({
+        type: "audio.quality_changed",
+        correlationId: options.correlationId,
+        payload: normalizeAudioQualityEvent("dictation", detail.data),
+      }),
+    );
   };
 
   const onTranscript = (event: Event) => {
@@ -97,12 +117,14 @@ export function bindCortiDictation(options: BindDictationOptions) {
   options.element.addEventListener("transcript", onTranscript);
   options.element.addEventListener("usage", onUsage);
   options.element.addEventListener("delta-usage", onUsage);
+  options.element.addEventListener("audio-event", onAudioEvent);
   options.element.addEventListener("error", onError);
 
   return async () => {
     options.element.removeEventListener("transcript", onTranscript);
     options.element.removeEventListener("usage", onUsage);
     options.element.removeEventListener("delta-usage", onUsage);
+    options.element.removeEventListener("audio-event", onAudioEvent);
     options.element.removeEventListener("error", onError);
     await options.element.closeConnection();
   };

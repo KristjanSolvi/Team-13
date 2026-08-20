@@ -10,9 +10,12 @@ export function pipelineEvent<TType extends PipelineEventType>(input: {
   interactionId?: string;
   payload: PipelineEventMap[TType];
   occurredAt?: Date;
+  eventId?: string;
 }): PipelineEvent<TType> {
   const base = {
     type: input.type,
+    schemaVersion: "1" as const,
+    eventId: input.eventId ?? `evt_${globalThis.crypto.randomUUID()}`,
     occurredAt: (input.occurredAt ?? new Date()).toISOString(),
     correlationId: input.correlationId,
     payload: input.payload,

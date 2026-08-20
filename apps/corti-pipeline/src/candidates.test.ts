@@ -32,22 +32,50 @@ describe("normalizeGeneratedCandidates", () => {
       ],
       patientId: "karen",
       interactionId: "interaction-1",
+      correlationId: "corr-karen-1",
       segments,
       createId: () => "candidate-1",
     });
 
     expect(result.rejectedEvidenceCount).toBe(1);
+    expect(result.rejectedAudioQualityCount).toBe(0);
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]).toMatchObject({
       candidateId: "candidate-1",
+      correlationId: "corr-karen-1",
       category: "medication-concern",
       evidence: [
         {
+          segmentKey: "interaction-1:12",
           sourceQuote: "dizzy since my medication changed",
           startSeconds: 12,
           endSeconds: 16,
+          audioQuality: "clear",
         },
       ],
     });
+  });
+
+  it("withholds candidates whose exact evidence overlaps uncertain audio", () => {
+    const result = normalizeGeneratedCandidates({
+      generatedValue: [
+        {
+          category: "medication-concern",
+          summary: "Dizziness followed a medication change.",
+          sourceQuote: "dizzy since my medication changed",
+        },
+      ],
+      patientId: "karen",
+      interactionId: "interaction-1",
+      correlationId: "corr-karen-1",
+      segments: segments.map((segment) => ({
+        ...segment,
+        audioQuality: "uncertain" as const,
+      })),
+    });
+
+    expect(result.candidates).toEqual([]);
+    expect(result.rejectedEvidenceCount).toBe(0);
+    expect(result.rejectedAudioQualityCount).toBe(1);
   });
 });

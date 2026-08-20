@@ -15,12 +15,16 @@ const segment: TranscriptSegment = {
 
 describe("evidence validation", () => {
   it("retains only an exact transcript quote", () => {
-    expect(locateExactQuote([segment], "dizzy since my medication changed")).toEqual({
+    expect(
+      locateExactQuote([segment], "dizzy since my medication changed"),
+    ).toEqual({
       interactionId: "interaction-1",
+      segmentKey: "interaction-1:12",
       sourceQuote: "dizzy since my medication changed",
       startSeconds: 12,
       endSeconds: 16,
       speakerId: 1,
+      audioQuality: "clear",
     });
     expect(locateExactQuote([segment], "dizzy after my medication changed")).toBeNull();
   });

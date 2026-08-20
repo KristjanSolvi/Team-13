@@ -19,9 +19,11 @@ export function locateExactQuote(
 
     const evidence: EvidenceReference = {
       interactionId: segment.interactionId,
+      segmentKey: segment.segmentKey,
       sourceQuote,
       startSeconds: segment.startSeconds,
       endSeconds: segment.endSeconds,
+      audioQuality: segment.audioQuality ?? "clear",
     };
 
     if (segment.speakerId !== undefined) {

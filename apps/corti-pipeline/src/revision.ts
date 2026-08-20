@@ -6,10 +6,10 @@ import type {
 
 export interface ParseDictatedRevisionInput {
   taskId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
   transcript: string;
   recipientTeams: DirectoryOption[];
-  owners: DirectoryOption[];
-  now?: Date;
 }
 
 function normalizedTerms(option: DirectoryOption): string[] {
@@ -35,7 +35,7 @@ function findMention(
   );
 }
 
-function parseDueAt(transcript: string, now: Date): string | null {
+function parseDueInMs(transcript: string): number | null {
   const match = transcript.match(/\bwithin\s+(\d{1,3})\s+hours?\b/i);
   if (match?.[1] === undefined) {
     return null;
@@ -46,17 +46,15 @@ function parseDueAt(transcript: string, now: Date): string | null {
     return null;
   }
 
-  return new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString();
+  return hours * 60 * 60 * 1000;
 }
 
-function parseDescription(transcript: string): string | null {
+function parseSummary(transcript: string): string | null {
   const match = transcript.match(
-    /\b(?:change\s+(?:the\s+)?action\s+to|action\s+is)\s+(.+?)(?=\s+(?:assign\s+to|route\s+to|owner\s+is|within\s+\d+\s+hours?|mark\s+(?:as\s+)?(?:urgent|routine)|because)\b|[.!?]?$)/i,
+    /\b(?:change\s+(?:the\s+)?action\s+to|action\s+is)\s+(.+?)(?=\s+(?:assign\s+to|route\s+to|within\s+\d+\s+hours?|mark\s+(?:as\s+)?(?:urgent|high|medium|routine)|because)\b|[.!?]?$)/i,
   );
-  const description = match?.[1]?.trim();
-  return description === undefined || description.length === 0
-    ? null
-    : description;
+  const summary = match?.[1]?.trim();
+  return summary === undefined || summary.length === 0 ? null : summary;
 }
 
 function parseReason(transcript: string): string | null {
@@ -73,9 +71,9 @@ export function parseDictatedRevision(
   const warnings: string[] = [];
   const patch: RevisionPatch = {};
 
-  const description = parseDescription(transcript);
-  if (description !== null) {
-    patch.description = description;
+  const summary = parseSummary(transcript);
+  if (summary !== null) {
+    patch.summary = summary;
   }
 
   const recipientTeam = findMention(
@@ -84,29 +82,30 @@ export function parseDictatedRevision(
     /\b(?:assign|route)\s+to\b/i,
   );
   if (recipientTeam !== null) {
-    patch.recipientTeamId = recipientTeam.id;
+    patch.targetTeamId = recipientTeam.id;
   } else if (/\b(?:assign|route)\s+to\b/i.test(transcript)) {
     warnings.push("The receiving team was not found in the allowed directory.");
   }
 
-  const owner = findMention(transcript, input.owners, /\bowner\s+is\b/i);
-  if (owner !== null) {
-    patch.ownerUserId = owner.id;
-  } else if (/\bowner\s+is\b/i.test(transcript)) {
-    warnings.push("The owner was not found in the allowed directory.");
+  if (/\bowner\s+is\b/i.test(transcript)) {
+    warnings.push(
+      "A named owner is selected only after the receiving team accepts the task; no owner was changed.",
+    );
   }
 
-  const dueAt = parseDueAt(transcript, input.now ?? new Date());
-  if (dueAt !== null) {
-    patch.dueAt = dueAt;
+  const dueInMs = parseDueInMs(transcript);
+  if (dueInMs !== null) {
+    patch.dueInMs = dueInMs;
   } else if (/\bwithin\b/i.test(transcript)) {
     warnings.push("Use a deadline between 1 and 168 hours for this prototype.");
   }
 
-  if (/\bmark\s+(?:as\s+)?urgent\b/i.test(transcript)) {
-    patch.priority = "urgent";
+  if (/\bmark\s+(?:as\s+)?(?:urgent|high)\b/i.test(transcript)) {
+    patch.clinicalUrgency = "high";
+  } else if (/\bmark\s+(?:as\s+)?medium\b/i.test(transcript)) {
+    patch.clinicalUrgency = "medium";
   } else if (/\bmark\s+(?:as\s+)?routine\b/i.test(transcript)) {
-    patch.priority = "routine";
+    patch.clinicalUrgency = "routine";
   }
 
   if (Object.keys(patch).length === 0) {
@@ -116,6 +115,8 @@ export function parseDictatedRevision(
   const reason = parseReason(transcript);
   const draft: TaskRevisionPreview["draft"] = {
     taskId: input.taskId,
+    expectedVersion: input.expectedVersion,
+    idempotencyKey: input.idempotencyKey,
     inputMethod: "dictated",
     transcript,
     patch,

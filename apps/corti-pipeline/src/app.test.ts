@@ -26,6 +26,7 @@ function gateway(): CortiGateway {
     generateCandidates: vi.fn(async () => ({
       candidates: [],
       rejectedEvidenceCount: 0,
+      rejectedAudioQualityCount: 0,
       creditsConsumed: 0.01,
     })),
     generateSupportingDocument: vi.fn(async (input) => ({
@@ -94,13 +95,14 @@ describe("pipeline HTTP contract", () => {
   it("previews an allow-listed dictated change without committing it", async () => {
     const app = createPipelineApp({
       gateway: gateway(),
-      now: () => new Date("2026-08-20T10:00:00.000Z"),
     });
     const response = await request(app)
       .post("/api/corti/dictation/revision-preview")
       .send({
         taskId: "task-karen-bp",
-        transcript: "Route to district nursing within 48 hours and mark urgent.",
+        expectedVersion: 1,
+        idempotencyKey: "correct-karen-001",
+        transcript: "Route to district nursing within 48 hours and mark medium.",
         recipientTeams: [
           {
             id: "district-nursing",
@@ -108,7 +110,6 @@ describe("pipeline HTTP contract", () => {
             aliases: ["district nursing"],
           },
         ],
-        owners: [],
       })
       .expect(200);
 
@@ -116,10 +117,12 @@ describe("pipeline HTTP contract", () => {
       requiresConfirmation: true,
       draft: {
         inputMethod: "dictated",
+        expectedVersion: 1,
+        idempotencyKey: "correct-karen-001",
         patch: {
-          recipientTeamId: "district-nursing",
-          dueAt: "2026-08-22T10:00:00.000Z",
-          priority: "urgent",
+          targetTeamId: "district-nursing",
+          dueInMs: 172_800_000,
+          clinicalUrgency: "medium",
         },
       },
     });
@@ -135,5 +138,59 @@ describe("pipeline HTTP contract", () => {
 
     expect(response.body.error.code).toBe("INVALID_REQUEST");
     expect(mockGateway.generateCandidates).not.toHaveBeenCalled();
+  });
+
+  it("rejects a transcript segment whose end precedes its start", async () => {
+    const mockGateway = gateway();
+    const app = createPipelineApp({ gateway: mockGateway });
+
+    await request(app)
+      .post("/api/corti/candidates/generate")
+      .send({
+        patientId: "karen",
+        interactionId: "interaction-1",
+        segments: [
+          {
+            interactionId: "interaction-1",
+            segmentKey: "interaction-1:16",
+            text: "Reversed timing.",
+            startSeconds: 16,
+            endSeconds: 12,
+            isFinal: true,
+          },
+        ],
+      })
+      .expect(400);
+
+    expect(mockGateway.generateCandidates).not.toHaveBeenCalled();
+  });
+
+  it("preserves the caller correlation ID at the candidate boundary", async () => {
+    const mockGateway = gateway();
+    const app = createPipelineApp({ gateway: mockGateway });
+
+    await request(app)
+      .post("/api/corti/candidates/generate")
+      .set("x-correlation-id", "corr-karen-1")
+      .send({
+        patientId: "synthetic-karen",
+        interactionId: "interaction-1",
+        segments: [
+          {
+            interactionId: "interaction-1",
+            segmentKey: "interaction-1:12",
+            text: "I have been dizzy since my medication changed.",
+            startSeconds: 12,
+            endSeconds: 16,
+            isFinal: true,
+            audioQuality: "clear",
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(mockGateway.generateCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: "corr-karen-1" }),
+    );
   });
 });

@@ -11,6 +11,13 @@ import {
   mergeTranscriptSegments,
   normalizeStreamTranscript,
 } from "../transcript.js";
+import {
+  buildSpeechAudioConstraints,
+  markTranscriptAudioQuality,
+  normalizeAudioQualityEvent,
+  normalizeSpeechKeyterms,
+  type SpeechQualityWindow,
+} from "./speech.js";
 
 type AmbientSocket = Awaited<ReturnType<CortiClient["stream"]["connect"]>>;
 type AmbientMessage =
@@ -29,6 +36,8 @@ export interface AmbientCaptureOptions {
   correlationId: string;
   refreshToken: () => Promise<ScopedToken>;
   onEvent: (event: PipelineEvent) => void;
+  keyterms?: string[];
+  audioDeviceId?: string;
   mediaDevices?: MediaDevices;
   mediaRecorder?: typeof MediaRecorder;
 }
@@ -62,6 +71,7 @@ export class AmbientCapture {
   #audioQueue: Promise<void> = Promise.resolve();
   #ended: Promise<void> | null = null;
   #resolveEnded: (() => void) | null = null;
+  #speechQualityWindows: SpeechQualityWindow[] = [];
 
   constructor(options: AmbientCaptureOptions) {
     this.#options = options;
@@ -79,6 +89,7 @@ export class AmbientCapture {
     const MediaRecorderClass = this.#options.mediaRecorder ?? window.MediaRecorder;
     const mediaDevices = this.#options.mediaDevices ?? navigator.mediaDevices;
     const audioType = supportedAudioType(MediaRecorderClass);
+    const keyterms = normalizeSpeechKeyterms(this.#options.keyterms ?? []);
     const client = new CortiClient({
       environment: this.#options.session.environment,
       tenantName: this.#options.session.tenantName,
@@ -103,6 +114,8 @@ export class AmbientCapture {
             type: "facts",
             outputLocale: this.#options.session.outputLanguage,
           },
+          audioEvents: { enabled: true },
+          ...(keyterms.length > 0 ? { keyterms: { terms: keyterms } } : {}),
           retentionPolicy: "none",
           ...(audioType.length > 0 ? { audioFormat: audioType } : {}),
         },
@@ -120,7 +133,10 @@ export class AmbientCapture {
       });
 
       this.#mediaStream = await mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: buildSpeechAudioConstraints(
+          mediaDevices.getSupportedConstraints(),
+          this.#options.audioDeviceId,
+        ),
       });
       this.#recorder =
         audioType.length > 0
@@ -193,7 +209,10 @@ export class AmbientCapture {
   #onMessage(message: AmbientMessage) {
     if (message.type === "transcript") {
       const incoming = message.data.map(normalizeStreamTranscript);
-      this.#segments = mergeTranscriptSegments(this.#segments, incoming);
+      this.#segments = markTranscriptAudioQuality(
+        mergeTranscriptSegments(this.#segments, incoming),
+        this.#speechQualityWindows,
+      );
       const hasFinal = incoming.some((segment) => segment.isFinal);
       this.#options.onEvent(
         pipelineEvent({
@@ -201,6 +220,62 @@ export class AmbientCapture {
           correlationId: this.#options.correlationId,
           interactionId: this.#options.session.interactionId,
           payload: { segments: this.#segments },
+        }),
+      );
+      return;
+    }
+
+    if (message.type === "audioEvent") {
+      const payload = normalizeAudioQualityEvent("ambient", message.data);
+      if (payload.state === "speech-quality-issue") {
+        const alreadyOpen = this.#speechQualityWindows.some(
+          (window) =>
+            window.channel === payload.channel && window.endSeconds === undefined,
+        );
+        if (!alreadyOpen) {
+          this.#speechQualityWindows.push({
+            channel: payload.channel,
+            startSeconds: payload.startSeconds,
+          });
+        }
+      } else if (payload.state === "speech-quality-recovered") {
+        const openWindow = [...this.#speechQualityWindows]
+          .reverse()
+          .find(
+            (window) =>
+              window.channel === payload.channel && window.endSeconds === undefined,
+          );
+        if (openWindow !== undefined) {
+          openWindow.endSeconds = payload.startSeconds;
+        }
+      }
+      const previousSegments = this.#segments;
+      this.#segments = markTranscriptAudioQuality(
+        this.#segments,
+        this.#speechQualityWindows,
+      );
+      const qualityChanged = this.#segments.some(
+        (segment, index) =>
+          segment.audioQuality !== previousSegments[index]?.audioQuality,
+      );
+      if (qualityChanged && this.#segments.length > 0) {
+        this.#options.onEvent(
+          pipelineEvent({
+            type: this.#segments.some((segment) => segment.isFinal)
+              ? "transcript.final"
+              : "transcript.interim",
+            correlationId: this.#options.correlationId,
+            interactionId: this.#options.session.interactionId,
+            payload: { segments: this.#segments },
+          }),
+        );
+      }
+      this.#options.onEvent(
+        pipelineEvent({
+          type: "audio.quality_changed",
+          correlationId: this.#options.correlationId,
+          interactionId: this.#options.session.interactionId,
+          payload,
         }),
       );
       return;
@@ -247,5 +322,6 @@ export class AmbientCapture {
     this.#recorder = null;
     this.#resolveEnded = null;
     this.#ended = null;
+    this.#speechQualityWindows = [];
   }
 }
