@@ -311,6 +311,59 @@ test("teams, members, and context mappings round-trip in stable order", (t) => {
   assert.equal(store.contextForInteraction("missing"), null);
 });
 
+test("a context can remap to a different interaction and patient", (t) => {
+  const store = createStore(t);
+  store.putPatient("patient-1", "Patient One", { synthetic: true });
+  store.putPatient("patient-2", "Patient Two", { synthetic: true });
+  store.putContextMapping("context-1", "interaction-1", "patient-1", now);
+
+  store.putContextMapping(
+    "context-1",
+    "interaction-2",
+    "patient-2",
+    "2026-08-20T10:01:00.000Z",
+  );
+
+  assert.equal(store.patientForContext("context-1"), "patient-2");
+  assert.equal(store.contextForInteraction("interaction-1"), null);
+  assert.equal(store.contextForInteraction("interaction-2"), "context-1");
+});
+
+test("an interaction can remap to a different context and patient", (t) => {
+  const store = createStore(t);
+  store.putPatient("patient-1", "Patient One", { synthetic: true });
+  store.putPatient("patient-2", "Patient Two", { synthetic: true });
+  store.putContextMapping("context-1", "interaction-1", "patient-1", now);
+
+  store.putContextMapping(
+    "context-2",
+    "interaction-1",
+    "patient-2",
+    "2026-08-20T10:01:00.000Z",
+  );
+
+  assert.equal(store.patientForContext("context-1"), null);
+  assert.equal(store.patientForContext("context-2"), "patient-2");
+  assert.equal(store.contextForInteraction("interaction-1"), "context-2");
+});
+
+test("context remapping still enforces the patient foreign key", (t) => {
+  const store = createStore(t);
+
+  assert.throws(
+    () =>
+      store.putContextMapping(
+        "context-orphan",
+        "interaction-orphan",
+        "missing-patient",
+        now,
+      ),
+    /FOREIGN KEY constraint failed/,
+  );
+  assert.equal(store.patientForContext("context-orphan"), null);
+  assert.equal(store.contextForInteraction("interaction-orphan"), null);
+});
+
 test("events map actors, payloads, nullable contexts, and sequence cursors", (t) => {
   const store = createStore(t);
   const first = store.appendEvent({

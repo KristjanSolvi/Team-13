@@ -412,13 +412,9 @@ export class SqliteStore {
   ): void {
     this.database
       .prepare(`
-        INSERT INTO context_mappings
+        INSERT OR REPLACE INTO context_mappings
           (context_id, interaction_id, patient_id, created_at)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT(context_id) DO UPDATE SET
-          interaction_id = excluded.interaction_id,
-          patient_id = excluded.patient_id,
-          created_at = excluded.created_at
       `)
       .run(contextId, interactionId, patientId, createdAt);
   }
