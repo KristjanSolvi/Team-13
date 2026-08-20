@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { DomainError } from "../src/domain/errors.js";
@@ -33,9 +36,12 @@ const BEGIN_INPUT = {
   idempotencyKey: "handover-1",
 };
 
-function harness(t: TestContext) {
-  const store = new SqliteStore(openDatabase(":memory:"));
-  t.after(() => store.close());
+function harness(
+  t: TestContext,
+  store = new SqliteStore(openDatabase(":memory:")),
+  registerCleanup = true,
+) {
+  if (registerCleanup) t.after(() => store.close());
   seedKaren(store, NOW);
   store.putContextMapping(
     LEDGER_CONTEXT_ID,
@@ -128,8 +134,12 @@ function packetFor(
   };
 }
 
-function prepareRequested(t: TestContext) {
-  const setup = harness(t);
+function prepareRequested(
+  t: TestContext,
+  store?: SqliteStore,
+  registerCleanup = true,
+) {
+  const setup = harness(t, store, registerCleanup);
   const task = setup.ledger.createKarenDraft(
     LEDGER_CONTEXT_ID,
     `task-${Math.random()}`,
@@ -144,8 +154,12 @@ function prepareRequested(t: TestContext) {
   return { ...setup, task, requested, packet: packetFor(task) };
 }
 
-function savePreparedDraft(t: TestContext) {
-  const setup = prepareRequested(t);
+function savePreparedDraft(
+  t: TestContext,
+  store?: SqliteStore,
+  registerCleanup = true,
+) {
+  const setup = prepareRequested(t, store, registerCleanup);
   const draft = setup.service.saveDraft({
     handoverId: setup.requested.handoverId,
     patientId: PATIENT_ID,
@@ -180,6 +194,63 @@ function replacePacketTask(
   assert.ok(item);
   copy.outstandingTasks[0] = { ...item, ...patch };
   return copy;
+}
+
+class AuditFailureStore extends SqliteStore {
+  failEventType: string | null = null;
+
+  override appendEvent(
+    input: Parameters<SqliteStore["appendEvent"]>[0],
+  ): ReturnType<SqliteStore["appendEvent"]> {
+    if (input.eventType === this.failEventType) {
+      throw new Error(`Injected audit failure: ${input.eventType}`);
+    }
+    return super.appendEvent(input);
+  }
+}
+
+class AtomicityHookStore extends SqliteStore {
+  beforeNextTransaction: (() => void) | null = null;
+  beforeNextUpdate: (() => void) | null = null;
+
+  override transaction<T>(operation: () => T): T {
+    const hook = this.beforeNextTransaction;
+    this.beforeNextTransaction = null;
+    hook?.();
+    return super.transaction(operation);
+  }
+
+  override updateHandover(
+    value: HandoverRecord,
+    expectedVersion: number,
+  ): HandoverRecord {
+    const hook = this.beforeNextUpdate;
+    this.beforeNextUpdate = null;
+    hook?.();
+    return super.updateHandover(value, expectedVersion);
+  }
+}
+
+function fileStores(): {
+  primary: AtomicityHookStore;
+  competitor: SqliteStore;
+  cleanup: () => void;
+} {
+  const directory = mkdtempSync(path.join(tmpdir(), "handover-atomicity-"));
+  const databasePath = path.join(directory, "test.sqlite");
+  const primary = new AtomicityHookStore(openDatabase(databasePath));
+  const competitorDatabase = openDatabase(databasePath);
+  competitorDatabase.exec("PRAGMA busy_timeout = 0");
+  const competitor = new SqliteStore(competitorDatabase);
+  return {
+    primary,
+    competitor,
+    cleanup: () => {
+      primary.close();
+      competitor.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
 }
 
 test("beginRequest creates an attributable requested handover and safe event", (t) => {
@@ -812,6 +883,190 @@ test("saveDraft exact replay emits nothing while any second draft change conflic
       }),
     "HANDOVER_DRAFT_CONFLICT",
     409,
+  );
+});
+
+test("saveDraft waiter re-reads and replays a durable identical winner", (t) => {
+  const { primary, competitor, cleanup } = fileStores();
+  t.after(cleanup);
+  const setup = prepareRequested(t, primary, false);
+  const winnerService = new HandoverService(competitor, setup.clock);
+  const input = {
+    handoverId: setup.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: setup.packet,
+  };
+  let winner: HandoverRecord | null = null;
+  primary.beforeNextTransaction = () => {
+    winner = winnerService.saveDraft(input);
+  };
+
+  const replay = setup.service.saveDraft(input);
+
+  assert.deepEqual(replay, winner);
+  assert.deepEqual(
+    competitor
+      .listEvents(0)
+      .filter(
+        ({ eventType, payload }) =>
+          payload.handoverId === setup.requested.handoverId &&
+          (eventType === "handover.sources_retrieved" ||
+            eventType === "handover.draft_saved"),
+      )
+      .map(({ eventType }) => eventType),
+    ["handover.sources_retrieved", "handover.draft_saved"],
+  );
+});
+
+test("finalize waiter re-reads and replays a durable identical winner", (t) => {
+  const { primary, competitor, cleanup } = fileStores();
+  t.after(cleanup);
+  const setup = savePreparedDraft(t, primary, false);
+  const winnerService = new HandoverService(competitor, setup.clock);
+  const rendered = renderedFor(setup.packet);
+  let winner: HandoverRecord | null = null;
+  primary.beforeNextTransaction = () => {
+    winner = winnerService.finalize(
+      setup.draft.handoverId,
+      setup.draft.version,
+      setup.draft.sourceSnapshotHash as string,
+      rendered,
+    );
+  };
+
+  const replay = setup.service.finalize(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+
+  assert.deepEqual(replay, winner);
+  assert.equal(
+    competitor
+      .listEvents(0)
+      .filter(
+        ({ eventType, payload }) =>
+          payload.handoverId === setup.draft.handoverId &&
+          eventType === "handover.rendered",
+      ).length,
+    1,
+  );
+});
+
+test("audit failures roll draft and rendered state back with their success events", (t) => {
+  const draftFailureStore = new AuditFailureStore(openDatabase(":memory:"));
+  const draftSetup = prepareRequested(t, draftFailureStore);
+  draftFailureStore.failEventType = "handover.draft_saved";
+
+  assert.throws(
+    () =>
+      draftSetup.service.saveDraft({
+        handoverId: draftSetup.requested.handoverId,
+        patientId: PATIENT_ID,
+        contextId: HANDOVER_CONTEXT_ID,
+        packet: draftSetup.packet,
+      }),
+    /Injected audit failure: handover\.draft_saved/,
+  );
+  assert.deepEqual(
+    draftFailureStore.requireHandover(draftSetup.requested.handoverId),
+    draftSetup.requested,
+  );
+  assert.deepEqual(
+    draftFailureStore
+      .listEvents(0)
+      .filter(({ eventType }) =>
+        ["handover.sources_retrieved", "handover.draft_saved"].includes(
+          eventType,
+        ),
+      ),
+    [],
+  );
+
+  const renderFailureStore = new AuditFailureStore(openDatabase(":memory:"));
+  const renderSetup = savePreparedDraft(t, renderFailureStore);
+  renderFailureStore.failEventType = "handover.rendered";
+
+  assert.throws(
+    () =>
+      renderSetup.service.finalize(
+        renderSetup.draft.handoverId,
+        renderSetup.draft.version,
+        renderSetup.draft.sourceSnapshotHash as string,
+        renderedFor(renderSetup.packet),
+      ),
+    /Injected audit failure: handover\.rendered/,
+  );
+  assert.deepEqual(
+    renderFailureStore.requireHandover(renderSetup.draft.handoverId),
+    renderSetup.draft,
+  );
+  assert.equal(
+    renderFailureStore
+      .listEvents(0)
+      .some(({ eventType }) => eventType === "handover.rendered"),
+    false,
+  );
+});
+
+test("outer write lock blocks patient source changes immediately before draft and render CAS", (t) => {
+  const { primary, competitor, cleanup } = fileStores();
+  t.after(cleanup);
+  const setup = prepareRequested(t, primary, false);
+  const recordItem = competitor.listRecordItems(PATIENT_ID)[0];
+  assert.ok(recordItem);
+  const blockedErrors: unknown[] = [];
+  primary.beforeNextUpdate = () => {
+    try {
+      competitor.putRecordItem({
+        ...recordItem,
+        text: "Competing write before draft CAS",
+      });
+    } catch (error) {
+      blockedErrors.push(error);
+    }
+  };
+
+  const draft = setup.service.saveDraft({
+    handoverId: setup.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: setup.packet,
+  });
+  assert.equal(blockedErrors.length, 1);
+  assert.ok(blockedErrors[0] instanceof Error);
+  assert.equal(draft.status, "draft");
+
+  primary.beforeNextUpdate = () => {
+    try {
+      competitor.putRecordItem({
+        ...recordItem,
+        text: "Competing write before render CAS",
+      });
+    } catch (error) {
+      blockedErrors.push(error);
+    }
+  };
+  const finalized = setup.service.finalize(
+    draft.handoverId,
+    draft.version,
+    draft.sourceSnapshotHash as string,
+    renderedFor(setup.packet),
+  );
+
+  assert.equal(blockedErrors.length, 2);
+  assert.ok(blockedErrors[1] instanceof Error);
+  assert.equal(finalized.status, "rendered");
+  const currentSnapshot = buildHandoverSourceSnapshot(
+    primary.listRecordItems(PATIENT_ID),
+    primary.listOpenThreads(PATIENT_ID),
+    primary.listPatientTasks(PATIENT_ID),
+  );
+  assert.equal(
+    finalized.sourceSnapshotHash,
+    handoverSourceSnapshotHash(currentSnapshot),
   );
 });
 

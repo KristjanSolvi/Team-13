@@ -45,6 +45,21 @@ interface GroundingState {
   allowedSourceRefs: Set<string>;
 }
 
+type FinalizeOutcome =
+  | { kind: "completed"; handover: HandoverRecord }
+  | {
+      kind: "source_changed";
+      handoverId: string;
+      correlationId: string;
+      patientId: string;
+      interactionId: string;
+      contextId: string | null;
+      expectedSnapshotHash: string;
+      currentSnapshotHash: string;
+      status: "draft";
+      version: number;
+    };
+
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -244,53 +259,55 @@ export class HandoverService {
 
   saveDraft(input: SaveHandoverDraftInput): HandoverRecord {
     const packet = handoverPacketSchema.parse(input.packet);
-    const handover = this.store.requireHandover(input.handoverId);
-    if (handover.patientId !== input.patientId) {
-      throw new DomainError(
-        "PATIENT_SCOPE_DENIED",
-        "Patient scope is unavailable",
-        false,
-        403,
-      );
-    }
-    if (handover.status === "draft" && handover.contextId !== input.contextId) {
-      throw this.draftConflict();
-    }
-    this.requireContextScope(handover, input.contextId);
-    const grounding = this.currentGrounding(input.patientId);
-
-    if (handover.status === "draft") {
-      if (
-        handover.packet !== null &&
-        handover.sourceSnapshot !== null &&
-        handover.sourceSnapshotHash === grounding.snapshotHash &&
-        sameJson(handover.packet, packet) &&
-        sameJson(handover.sourceSnapshot, grounding.snapshot)
-      ) {
-        return handover;
-      }
-      throw this.draftConflict();
-    }
-    if (handover.status !== "requested") {
-      throw this.draftConflict();
-    }
-
-    this.validatePacket(packet, grounding);
-    const updatedAt = this.clock.now().toISOString();
-    const draft: HandoverRecord = {
-      ...handover,
-      contextId: input.contextId,
-      status: "draft",
-      version: handover.version + 1,
-      packet,
-      rendered: null,
-      sourceSnapshot: grounding.snapshot,
-      sourceSnapshotHash: grounding.snapshotHash,
-      updatedAt,
-      generatedAt: null,
-    };
-
     return this.store.transaction(() => {
+      const handover = this.store.requireHandover(input.handoverId);
+      if (handover.patientId !== input.patientId) {
+        throw new DomainError(
+          "PATIENT_SCOPE_DENIED",
+          "Patient scope is unavailable",
+          false,
+          403,
+        );
+      }
+      if (
+        handover.status === "draft" &&
+        handover.contextId !== input.contextId
+      ) {
+        throw this.draftConflict();
+      }
+      this.requireContextScope(handover, input.contextId);
+      const grounding = this.currentGrounding(input.patientId);
+
+      if (handover.status === "draft") {
+        if (
+          handover.packet !== null &&
+          handover.sourceSnapshot !== null &&
+          handover.sourceSnapshotHash === grounding.snapshotHash &&
+          sameJson(handover.packet, packet) &&
+          sameJson(handover.sourceSnapshot, grounding.snapshot)
+        ) {
+          return handover;
+        }
+        throw this.draftConflict();
+      }
+      if (handover.status !== "requested") {
+        throw this.draftConflict();
+      }
+
+      this.validatePacket(packet, grounding);
+      const updatedAt = this.clock.now().toISOString();
+      const draft: HandoverRecord = {
+        ...handover,
+        contextId: input.contextId,
+        status: "draft",
+        version: handover.version + 1,
+        packet,
+        rendered: null,
+        sourceSnapshot: grounding.snapshot,
+        sourceSnapshotHash: grounding.snapshotHash,
+        updatedAt,
+        generatedAt: null,
+      };
       const saved = this.store.updateHandover(draft, handover.version);
       const eventBase = {
         occurredAt: updatedAt,
@@ -334,84 +351,73 @@ export class HandoverService {
     rendered: RenderedHandover,
   ): HandoverRecord {
     const parsedRendered = renderedHandoverSchema.parse(rendered);
-    const handover = this.store.requireHandover(handoverId);
-    if (handover.status === "rendered") {
-      if (
-        expectedVersion === handover.version - 1 &&
-        expectedSnapshotHash === handover.sourceSnapshotHash &&
-        handover.rendered !== null &&
-        sameJson(handover.rendered, parsedRendered)
-      ) {
-        return handover;
+    const outcome: FinalizeOutcome = this.store.transaction(() => {
+      const handover = this.store.requireHandover(handoverId);
+      if (handover.status === "rendered") {
+        if (
+          expectedVersion === handover.version - 1 &&
+          expectedSnapshotHash === handover.sourceSnapshotHash &&
+          handover.rendered !== null &&
+          sameJson(handover.rendered, parsedRendered)
+        ) {
+          return { kind: "completed", handover };
+        }
+        throw this.finalizeConflict();
       }
-      throw this.finalizeConflict();
-    }
-    if (
-      handover.status !== "draft" ||
-      handover.packet === null ||
-      handover.sourceSnapshot === null ||
-      handover.sourceSnapshotHash === null ||
-      expectedVersion !== handover.version ||
-      expectedSnapshotHash !== handover.sourceSnapshotHash
-    ) {
-      throw this.finalizeConflict();
-    }
+      if (
+        handover.status !== "draft" ||
+        handover.packet === null ||
+        handover.sourceSnapshot === null ||
+        handover.sourceSnapshotHash === null ||
+        expectedVersion !== handover.version ||
+        expectedSnapshotHash !== handover.sourceSnapshotHash
+      ) {
+        throw this.finalizeConflict();
+      }
 
-    const grounding = this.currentGrounding(handover.patientId);
-    if (grounding.snapshotHash !== handover.sourceSnapshotHash) {
-      const occurredAt = this.clock.now().toISOString();
-      this.store.appendEvent({
-        eventType: "handover.source_changed",
-        occurredAt,
-        correlationId: handover.correlationId,
-        patientId: handover.patientId,
-        interactionId: handover.interactionId,
-        contextId: handover.contextId,
-        actor: { type: "agent", id: "corti" },
-        payload: {
+      const grounding = this.currentGrounding(handover.patientId);
+      if (grounding.snapshotHash !== handover.sourceSnapshotHash) {
+        return {
+          kind: "source_changed",
           handoverId,
+          correlationId: handover.correlationId,
+          patientId: handover.patientId,
+          interactionId: handover.interactionId,
+          contextId: handover.contextId,
           expectedSnapshotHash: handover.sourceSnapshotHash,
           currentSnapshotHash: grounding.snapshotHash,
           status: handover.status,
           version: handover.version,
-        },
-      });
-      throw new DomainError(
-        "HANDOVER_SOURCE_CHANGED",
-        "Handover sources changed after the draft was saved",
-        true,
-        409,
-      );
-    }
+        };
+      }
 
-    const packetSourceRefs = this.packetSourceRefs(handover.packet);
-    for (const section of parsedRendered.sections) {
-      for (const statement of section.statements) {
-        if (
-          statement.sourceRefs.some(
-            (sourceRef) => !packetSourceRefs.has(sourceRef),
-          )
-        ) {
-          throw new DomainError(
-            "HANDOVER_EVIDENCE_NOT_FOUND",
-            "Rendered handover introduced evidence outside the saved packet",
-            false,
-            409,
-          );
+      const packetSourceRefs = this.packetSourceRefs(handover.packet);
+      for (const section of parsedRendered.sections) {
+        for (const statement of section.statements) {
+          if (
+            statement.sourceRefs.some(
+              (sourceRef) => !packetSourceRefs.has(sourceRef),
+            )
+          ) {
+            throw new DomainError(
+              "HANDOVER_EVIDENCE_NOT_FOUND",
+              "Rendered handover introduced evidence outside the saved packet",
+              false,
+              409,
+            );
+          }
         }
       }
-    }
 
-    const generatedAt = this.clock.now().toISOString();
-    const finalized: HandoverRecord = {
-      ...handover,
-      status: "rendered",
-      version: handover.version + 1,
-      rendered: parsedRendered,
-      updatedAt: generatedAt,
-      generatedAt,
-    };
-    return this.store.transaction(() => {
+      const generatedAt = this.clock.now().toISOString();
+      const finalized: HandoverRecord = {
+        ...handover,
+        status: "rendered",
+        version: handover.version + 1,
+        rendered: parsedRendered,
+        updatedAt: generatedAt,
+        generatedAt,
+      };
       const saved = this.store.updateHandover(finalized, handover.version);
       this.store.appendEvent({
         eventType: "handover.rendered",
@@ -429,8 +435,35 @@ export class HandoverService {
           sectionCount: parsedRendered.sections.length,
         },
       });
-      return saved;
+      return { kind: "completed", handover: saved };
     });
+    if (outcome.kind === "completed") return outcome.handover;
+
+    const occurredAt = this.clock.now().toISOString();
+    this.store.transaction(() => {
+      this.store.appendEvent({
+        eventType: "handover.source_changed",
+        occurredAt,
+        correlationId: outcome.correlationId,
+        patientId: outcome.patientId,
+        interactionId: outcome.interactionId,
+        contextId: outcome.contextId,
+        actor: { type: "agent", id: "corti" },
+        payload: {
+          handoverId: outcome.handoverId,
+          expectedSnapshotHash: outcome.expectedSnapshotHash,
+          currentSnapshotHash: outcome.currentSnapshotHash,
+          status: outcome.status,
+          version: outcome.version,
+        },
+      });
+    });
+    throw new DomainError(
+      "HANDOVER_SOURCE_CHANGED",
+      "Handover sources changed after the draft was saved",
+      true,
+      409,
+    );
   }
 
   markRenderRequested(handoverId: string): HandoverRecord {
