@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { RecordClosure } from "@/components/ehr/RecordClosure";
 import type { ActivityEntry, CaseNote, DocId, Patient } from "@/data/ward";
 import { documents, patients } from "@/data/ward";
@@ -51,7 +51,7 @@ function Panel({
   );
 }
 
-function Row({ left, right }: { left: string; right?: string }) {
+function Row({ left, right }: { left: string; right?: ReactNode }) {
   return (
     <div className="flex cursor-default justify-between gap-3 border-b border-ehr-line/70 py-[3px] last:border-0 hover:bg-ehr-accent/5">
       <span className="truncate">{left}</span>
@@ -124,13 +124,6 @@ export function NervecentreShell({
             {current.name.split(" ").slice(-1)[0]!.toUpperCase()}, {current.name.split(" ")[0]}
           </span>
           <span className="text-[11px] text-ehr-muted">NHS 943 476 5919 · 62y</span>
-        </div>
-        <div className="flex gap-4 text-[11px] text-ehr-muted">
-          <span>Admitted 05 Jul 2026 10:57</span>
-          <span>
-            Bed {current.bed} · {current.bay}
-          </span>
-          <span className="font-semibold text-ehr-alert">NEWS2 3</span>
         </div>
       </div>
 
@@ -309,6 +302,12 @@ export function NervecentreShell({
           </div>
 
           <div className="space-y-2">
+            <Panel title="Location">
+              <Row left="Location" right={current.bay} />
+              <Row left="Bed" right={current.bed} />
+              <Row left="Admitted" right="05 Jul 2026 10:57" />
+              <Row left="NEWS2" right={<span className="font-semibold text-ehr-alert">3</span>} />
+            </Panel>
             <Panel title="Care Plans">
               <Row left="COPD exacerbation" right="Active" />
               <Row left="Pressure area care" right="Active" />
