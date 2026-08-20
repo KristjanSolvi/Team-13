@@ -8,8 +8,15 @@ export { normalizeGeneratedCandidates } from "./candidates.js";
 export { normalizeCodingResult } from "./coding.js";
 export { parseDictatedRevision } from "./revision.js";
 export {
+  buildIntegrationCandidateRequest,
+  buildTaskCorrectionCommand,
+} from "./integration-handoff.js";
+export {
   canonicalTranscriptText,
   mergeTranscriptSegments,
   normalizeStreamTranscript,
 } from "./transcript.js";
-export { locateExactQuote, validateCodingEvidence } from "./evidence.js";
+export {
+  locateExactQuote,
+  validateCodingEvidence,
+} from "./evidence.js";

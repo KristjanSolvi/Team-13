@@ -11,24 +11,21 @@ export function appendFinalTranscript(current: string, incoming: string): string
 
 export function presentRevisionPatch(patch: RevisionPatch): PatchField[] {
   const fields: Array<PatchField | null> = [
-    patch.description === undefined
+    patch.summary === undefined
       ? null
-      : { label: "Action", value: patch.description },
-    patch.recipientTeamId === undefined
+      : { label: "Action", value: patch.summary },
+    patch.targetTeamId === undefined
       ? null
-      : { label: "Receiving team", value: patch.recipientTeamId },
-    patch.ownerUserId === undefined
+      : { label: "Receiving team", value: patch.targetTeamId },
+    patch.dueInMs === undefined
       ? null
       : {
-          label: "Accountable owner",
-          value: patch.ownerUserId ?? "Unassigned until acceptance",
+          label: "Deadline",
+          value: `${Math.round(patch.dueInMs / 3_600_000)} hours from approval`,
         },
-    patch.dueAt === undefined
+    patch.clinicalUrgency === undefined
       ? null
-      : { label: "Deadline", value: patch.dueAt },
-    patch.priority === undefined
-      ? null
-      : { label: "Priority", value: patch.priority },
+      : { label: "Clinical urgency", value: patch.clinicalUrgency },
   ];
 
   return fields.filter((field): field is PatchField => field !== null);

@@ -221,16 +221,22 @@ export class CortiSdkGateway implements CortiGateway {
         ),
       );
 
-      const { candidates, rejectedEvidenceCount } = normalizeGeneratedCandidates({
+      const {
+        candidates,
+        rejectedEvidenceCount,
+        rejectedAudioQualityCount,
+      } = normalizeGeneratedCandidates({
         generatedValue: firstStructuredSection(response),
         patientId: input.patientId,
         interactionId: input.interactionId,
+        correlationId: input.correlationId,
         segments: input.segments,
       });
 
       return {
         candidates,
         rejectedEvidenceCount,
+        rejectedAudioQualityCount,
         creditsConsumed: response.usageInfo.creditsConsumed,
       };
     } catch (error) {

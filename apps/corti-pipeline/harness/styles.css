@@ -68,11 +68,13 @@ body {
 }
 
 button,
+select,
 corti-dictation {
   font: inherit;
 }
 
 button:focus-visible,
+select:focus-visible,
 corti-dictation:focus-visible {
   outline: 3px solid hsl(var(--corti-lime));
   outline-offset: 2px;
@@ -254,6 +256,23 @@ h3 {
   gap: 0.45rem;
 }
 
+.device-select {
+  min-width: 118px;
+  max-width: 180px;
+  min-height: 34px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.48rem;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  padding: 0.45rem 1.8rem 0.45rem 0.58rem;
+  font-size: 0.7rem;
+}
+
+.device-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .button,
 .text-button {
   cursor: pointer;
@@ -342,6 +361,10 @@ h3 {
   color: hsl(var(--muted-foreground));
   font-size: 0.7rem;
   line-height: 1.4;
+}
+
+.notice .status-pill {
+  margin-left: auto;
 }
 
 .recording-mark {

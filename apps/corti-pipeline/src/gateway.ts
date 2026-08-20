@@ -12,12 +12,14 @@ import type {
 export interface GenerateCandidatesInput {
   patientId: string;
   interactionId: string;
+  correlationId: string;
   segments: TranscriptSegment[];
 }
 
 export interface GenerateCandidatesResult {
   candidates: FollowThroughCandidate[];
   rejectedEvidenceCount: number;
+  rejectedAudioQualityCount: number;
   creditsConsumed: number;
 }
 

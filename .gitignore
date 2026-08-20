@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 coverage/
+.playwright-cli/
 .DS_Store
 
 # Credentials and local overrides

@@ -9,6 +9,7 @@ import express, {
 import { z, ZodError } from "zod";
 
 import {
+  audioQualityStates,
   codingSystems,
   supportingDocumentTypes,
   type DirectoryOption,
@@ -18,15 +19,21 @@ import { PipelineError } from "./errors.js";
 import type { CortiGateway } from "./gateway.js";
 import { parseDictatedRevision } from "./revision.js";
 
-const transcriptSegmentSchema = z.object({
-  interactionId: z.string().min(1),
-  segmentKey: z.string().min(1),
-  text: z.string(),
-  startSeconds: z.number().nonnegative(),
-  endSeconds: z.number().nonnegative(),
-  speakerId: z.number().int().optional(),
-  isFinal: z.boolean(),
-});
+const transcriptSegmentSchema = z
+  .object({
+    interactionId: z.string().min(1),
+    segmentKey: z.string().min(1),
+    text: z.string(),
+    startSeconds: z.number().nonnegative(),
+    endSeconds: z.number().nonnegative(),
+    speakerId: z.number().int().optional(),
+    isFinal: z.boolean(),
+    audioQuality: z.enum(audioQualityStates).optional(),
+  })
+  .refine((segment) => segment.endSeconds >= segment.startSeconds, {
+    message: "Transcript segment end must not precede its start",
+    path: ["endSeconds"],
+  });
 
 const ambientSessionSchema = z.object({
   encounterIdentifier: z.string().min(1).max(120).optional(),
@@ -58,9 +65,10 @@ const directoryOptionSchema = z.object({
 
 const revisionPreviewSchema = z.object({
   taskId: z.string().min(1).max(120),
+  expectedVersion: z.number().int().positive(),
+  idempotencyKey: z.string().min(8).max(160),
   transcript: z.string().max(2_000),
   recipientTeams: z.array(directoryOptionSchema).max(100),
-  owners: z.array(directoryOptionSchema).max(500),
 });
 
 const safeCorrelationId = /^[A-Za-z0-9._-]{1,100}$/;
@@ -78,6 +86,9 @@ function transcriptSegment(
   };
   if (input.speakerId !== undefined) {
     segment.speakerId = input.speakerId;
+  }
+  if (input.audioQuality !== undefined) {
+    segment.audioQuality = input.audioQuality;
   }
   return segment;
 }
@@ -115,7 +126,6 @@ function route(
 export interface CreatePipelineAppOptions {
   gateway: CortiGateway | null;
   allowedOrigins?: string[];
-  now?: () => Date;
   missingCortiVariables?: string[];
 }
 
@@ -198,6 +208,7 @@ export function createPipelineApp(options: CreatePipelineAppOptions) {
         await requireGateway().generateCandidates({
           patientId: input.patientId,
           interactionId: input.interactionId,
+          correlationId: correlationId(response),
           segments: input.segments.map(transcriptSegment),
         }),
       );
@@ -211,10 +222,10 @@ export function createPipelineApp(options: CreatePipelineAppOptions) {
       response.json(
         parseDictatedRevision({
           taskId: input.taskId,
+          expectedVersion: input.expectedVersion,
+          idempotencyKey: input.idempotencyKey,
           transcript: input.transcript,
           recipientTeams: input.recipientTeams.map(directoryOption),
-          owners: input.owners.map(directoryOption),
-          now: options.now?.() ?? new Date(),
         }),
       );
     }),

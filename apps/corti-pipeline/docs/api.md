@@ -5,6 +5,7 @@ Default development base URL: `http://127.0.0.1:8787`.
 Every response includes `x-correlation-id`. The caller may supply a safe ID in
 that header to correlate UI, agent, ledger, and pipeline activity. Error bodies
 have a stable `code`, user-safe `message`, `retryable` flag, and correlation ID.
+Normalized pipeline events include `schemaVersion: "1"` and a unique `eventId`.
 
 ## Health
 
@@ -42,9 +43,16 @@ the package's `./browser` entry. `AmbientCapture.start()`:
 1. Chooses a supported Opus format.
 2. Connects with facts mode, single-mic diarization, and no transcript/fact
    retention.
-3. Waits for Corti to accept the configuration.
-4. Requests the microphone and starts recording.
-5. Emits normalized transcript and usage events.
+3. Enables Corti audio-quality events and a small reviewed keyterm list.
+4. Waits for Corti to accept the configuration.
+5. Requests the selected microphone with every supported browser speech-audio
+   control: echo cancellation, noise suppression, automatic gain control, and
+   mono capture.
+6. Emits normalized transcript, quality, and usage events.
+
+Speech-quality issue windows mark overlapping transcript segments
+`audioQuality: "uncertain"`. Candidate extraction may retain those words for
+review, but must not turn them into an Agentic signal.
 
 `stop()` stops the recorder, drains queued audio, sends the end frame, waits for
 `ENDED`, then releases the socket and microphone. The UI must always show a
@@ -66,6 +74,8 @@ from Ambient.
 - `authConfig`, including refresh callback
 - Interim results
 - Automatic punctuation
+- Corti audio-quality events
+- A small reviewed keyterm list
 - Numerals above nine
 - Abbreviated measurements
 
@@ -79,30 +89,34 @@ events. A final transcript is still only input for a preview.
 ```json
 {
   "taskId": "task-karen-bp",
-  "transcript": "Route to district nursing within 48 hours and mark urgent.",
+  "expectedVersion": 1,
+  "idempotencyKey": "correct-karen-001",
+  "transcript": "Route to district nursing within 48 hours and mark medium.",
   "recipientTeams": [
     {
       "id": "district-nursing",
       "label": "District Nursing Team",
       "aliases": ["district nursing"]
     }
-  ],
-  "owners": []
+  ]
 }
 ```
 
-Only allow-listed team/owner labels become IDs. The deterministic prototype
-parser supports:
+Only allow-listed receiving-team labels become IDs. Named ownership is not a
+pre-publication Dictation field: the team receives the task first, then one
+eligible person accepts it. The deterministic prototype parser supports:
 
 - `assign to …` or `route to …`
-- `owner is …`
 - `within 1–168 hours`
-- `mark urgent` or `mark routine`
+- `mark high`, `mark medium`, or `mark routine`; natural `mark urgent` maps to
+  `high`
 - `change the action to …` or `action is …`
 - trailing `because …` rationale
 
-The response always has `requiresConfirmation: true`. Developer 2's ledger must
-not accept this preview until the clinician confirms it.
+The patch uses Developer 2's field names directly: `summary`, `targetTeamId`,
+`clinicalUrgency`, and `dueInMs`. The response always has
+`requiresConfirmation: true`. Developer 2's ledger must not accept this preview
+until the clinician confirms it.
 
 ## Candidate extraction
 
@@ -111,9 +125,37 @@ not accept this preview until the clinician confirms it.
 Accepts `patientId`, `interactionId`, and normalized transcript `segments`.
 Guided Documents returns at most three conservative candidate items with an
 exact quote. The pipeline drops every generated item whose quote cannot be found
-exactly within one final transcript segment. It does not assign an owner,
+exactly within one final transcript segment or whose span overlaps a Corti
+speech-quality issue. It does not assign an owner,
 deadline, diagnosis, referral, or clinical plan. Developer 2 still checks the
 record and ledger before proposing a thread.
+
+Each retained evidence item carries the exact quote, `segmentKey`, timestamps,
+speaker when available, and audio-quality state. The pipeline does not invent a
+second opaque evidence identifier; the integration service owns any mapping
+needed by the internal Agentic/MCP contract.
+
+## Integration API handoff
+
+`buildIntegrationCandidateRequest(candidate)` validates the final handoff and
+returns the body and correlation ID for:
+
+```text
+POST http://<integration-api>/api/candidates/investigate
+x-correlation-id: corr-karen-1
+body: FollowThroughCandidate
+```
+
+`investigateCandidate` performs that browser call. The integration API validates
+the candidate, creates the internal Agentic signal shape, and keeps the Agentic
+application bearer out of the browser. The pipeline must not call
+`POST /api/signals` directly.
+
+`buildTaskCorrectionCommand(preview.draft)` flattens a preview into the exact
+body accepted by the integration API. Only after the clinician confirms it,
+`submitConfirmedTaskCorrection` sends it to
+`POST /api/tasks/:taskId/correct` with `x-actor-id` and the shared
+`x-correlation-id`. The integration and Agentic services own the mutation.
 
 ## Supporting document
 

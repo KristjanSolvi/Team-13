@@ -24,6 +24,11 @@ type Tone = "neutral" | "active" | "success" | "error";
 
 const isButton = (element: HTMLElement): element is HTMLButtonElement =>
   element instanceof HTMLButtonElement;
+const isSelect = (element: HTMLElement): element is HTMLSelectElement =>
+  element instanceof HTMLSelectElement;
+
+const sessionCorrelationId = crypto.randomUUID();
+const speechKeyterms = ["Karen", "district nursing", "blood pressure"];
 
 function requireElement<TElement extends HTMLElement>(
   id: string,
@@ -94,7 +99,10 @@ async function responseJson<T>(response: Response): Promise<T> {
 async function postJson<T>(path: string, body: object): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-correlation-id": sessionCorrelationId,
+    },
     body: JSON.stringify(body),
   });
   return responseJson<T>(response);
@@ -106,13 +114,16 @@ const pipelineIndicator = requireHtmlElement("pipeline-indicator");
 const ambientStart = requireElement("ambient-start", isButton);
 const ambientStop = requireElement("ambient-stop", isButton);
 const ambientReset = requireElement("ambient-reset", isButton);
+const ambientDevice = requireElement("ambient-device", isSelect);
 const ambientStatus = requireHtmlElement("ambient-status");
+const ambientAudioQuality = requireHtmlElement("ambient-audio-quality");
 const ambientCredits = requireHtmlElement("ambient-credits");
 const ambientTranscript = requireHtmlElement("ambient-transcript");
 const ambientSegmentCount = requireHtmlElement("ambient-segment-count");
 const ambientError = requireHtmlElement("ambient-error");
 
 const dictationStatus = requireHtmlElement("dictation-status");
+const dictationAudioQuality = requireHtmlElement("dictation-audio-quality");
 const dictationCredits = requireHtmlElement("dictation-credits");
 const dictationFinalElement = requireHtmlElement("dictation-final");
 const dictationInterim = requireHtmlElement("dictation-interim");
@@ -135,6 +146,51 @@ let finalDictation = "";
 let dictationCreditValue: number | null = null;
 let dictationActive = false;
 let releaseDictation: (() => Promise<void>) | null = null;
+
+function renderAudioQuality(
+  element: HTMLElement,
+  state: Extract<PipelineEvent, { type: "audio.quality_changed" }>["payload"]["state"],
+): void {
+  switch (state) {
+    case "speech-quality-issue":
+      setStatus(element, "Audio unclear · move closer", "error");
+      break;
+    case "speech-quality-recovered":
+      setStatus(element, "Audio clear again", "success");
+      break;
+    case "long-silence":
+      setStatus(element, "No speech detected", "neutral");
+      break;
+    case "speech-resumed":
+      setStatus(element, "Listening", "active");
+      break;
+  }
+}
+
+async function refreshAmbientDevices(): Promise<void> {
+  try {
+    const selected = ambientDevice.value;
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+      (device) => device.kind === "audioinput",
+    );
+    ambientDevice.replaceChildren();
+    const fallback = document.createElement("option");
+    fallback.value = "";
+    fallback.textContent = "Default microphone";
+    ambientDevice.append(fallback);
+    devices.forEach((device, index) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.textContent = device.label || `Microphone ${index + 1}`;
+      ambientDevice.append(option);
+    });
+    if ([...ambientDevice.options].some((option) => option.value === selected)) {
+      ambientDevice.value = selected;
+    }
+  } catch {
+    // The browser may hide the device list before microphone permission is granted.
+  }
+}
 
 function renderAmbientSegments(segments: TranscriptSegment[]): void {
   ambientTranscript.replaceChildren();
@@ -164,7 +220,11 @@ function renderAmbientSegments(segments: TranscriptSegment[]): void {
 
     const state = document.createElement("span");
     state.className = "transcript-state";
-    state.textContent = segment.isFinal ? "Final" : "Listening";
+    state.textContent = segment.isFinal
+      ? segment.audioQuality === "uncertain"
+        ? "Final · audio uncertain"
+        : "Final"
+      : "Listening";
 
     const copy = document.createElement("p");
     copy.textContent = segment.text;
@@ -189,6 +249,9 @@ function handleAmbientEvent(event: PipelineEvent): void {
     case "transcript.interim":
     case "transcript.final":
       renderAmbientSegments(event.payload.segments);
+      break;
+    case "audio.quality_changed":
+      renderAudioQuality(ambientAudioQuality, event.payload.state);
       break;
     case "usage.updated":
       if (event.payload.product === "ambient") {
@@ -217,20 +280,29 @@ async function startAmbient(): Promise<void> {
   ambientCredits.textContent = formatCredits(null, true);
   ambientStart.disabled = true;
   ambientStop.disabled = true;
+  ambientDevice.disabled = true;
+  setStatus(ambientAudioQuality, "Checking audio", "active");
   renderAmbientSegments([]);
 
   try {
     const session = await startAmbientSession(
       window.location.origin,
       `karen-mic-lab-${Date.now()}`,
+      sessionCorrelationId,
     );
     ambientCapture = new AmbientCapture({
       session,
-      correlationId: crypto.randomUUID(),
-      refreshToken: () => refreshAmbientToken(window.location.origin),
+      correlationId: sessionCorrelationId,
+      refreshToken: () =>
+        refreshAmbientToken(window.location.origin, sessionCorrelationId),
+      keyterms: speechKeyterms,
+      ...(ambientDevice.value.length > 0
+        ? { audioDeviceId: ambientDevice.value }
+        : {}),
       onEvent: handleAmbientEvent,
     });
     await ambientCapture.start();
+    await refreshAmbientDevices();
     ambientStop.disabled = false;
   } catch (error) {
     ambientCapture = null;
@@ -238,6 +310,7 @@ async function startAmbient(): Promise<void> {
     setStatus(ambientStatus, "Could not start", "error");
     setError(ambientError, safeMicrophoneError(error, "Ambient"));
     ambientStart.disabled = false;
+    ambientDevice.disabled = false;
   }
 }
 
@@ -257,6 +330,7 @@ async function stopAmbient(): Promise<void> {
     ambientCapture = null;
     ambientActive = false;
     ambientStart.disabled = false;
+    ambientDevice.disabled = false;
     ambientCredits.textContent = formatCredits(ambientCreditValue, false);
   }
 }
@@ -268,6 +342,7 @@ async function resetAmbient(): Promise<void> {
   renderAmbientSegments([]);
   setError(ambientError);
   setStatus(ambientStatus, "Idle", "neutral");
+  setStatus(ambientAudioQuality, "Audio not checked", "neutral");
   ambientStart.disabled = false;
   ambientStop.disabled = true;
 }
@@ -326,6 +401,9 @@ function handleDictationEvent(event: PipelineEvent): void {
       dictationInterim.textContent = "";
       previewRevision.disabled = finalDictation.length === 0;
       break;
+    case "audio.quality_changed":
+      renderAudioQuality(dictationAudioQuality, event.payload.state);
+      break;
     case "usage.updated":
       if (event.payload.product === "dictation") {
         dictationCreditValue = event.payload.creditsConsumed;
@@ -353,6 +431,7 @@ function handleDictationState(event: Event): void {
     case "recording":
       dictationActive = true;
       setStatus(dictationStatus, "Recording", "active");
+      setStatus(dictationAudioQuality, "Checking audio", "active");
       dictationCredits.textContent = formatCredits(dictationCreditValue, true);
       break;
     case "stopping":
@@ -373,15 +452,20 @@ async function setupDictation(): Promise<void> {
   dictationControl.style.opacity = "0.55";
 
   try {
-    const token = await getDictationToken(window.location.origin);
+    const token = await getDictationToken(
+      window.location.origin,
+      sessionCorrelationId,
+    );
     dictationControl.settingsEnabled = ["device", "language"];
     dictationControl.allowButtonFocus = true;
     releaseDictation = bindCortiDictation({
       element: dictationControl,
       token,
-      refreshToken: () => getDictationToken(window.location.origin),
+      refreshToken: () =>
+        getDictationToken(window.location.origin, sessionCorrelationId),
       primaryLanguage: "en",
-      correlationId: crypto.randomUUID(),
+      correlationId: sessionCorrelationId,
+      keyterms: speechKeyterms,
       onEvent: handleDictationEvent,
     });
     dictationControl.addEventListener("recording-state-changed", handleDictationState);
@@ -407,6 +491,8 @@ async function buildRevisionPreview(): Promise<void> {
       "/api/corti/dictation/revision-preview",
       {
         taskId: "task-karen-bp",
+        expectedVersion: 1,
+        idempotencyKey: `correct-${crypto.randomUUID()}`,
         transcript: finalDictation,
         recipientTeams: [
           {
@@ -415,10 +501,6 @@ async function buildRevisionPreview(): Promise<void> {
             aliases: ["district nursing"],
           },
           { id: "gp-practice", label: "GP Practice", aliases: ["GP"] },
-        ],
-        owners: [
-          { id: "nurse-anna", label: "Anna Jensen", aliases: ["Anna"] },
-          { id: "dr-larsen", label: "Dr Larsen", aliases: ["Larsen"] },
         ],
       },
     );
@@ -467,6 +549,12 @@ async function checkPipeline(): Promise<void> {
 ambientStart.addEventListener("click", () => void startAmbient());
 ambientStop.addEventListener("click", () => void stopAmbient());
 ambientReset.addEventListener("click", () => void resetAmbient());
+ambientDevice.addEventListener("change", () =>
+  setStatus(ambientAudioQuality, "Audio not checked", "neutral"),
+);
+navigator.mediaDevices.addEventListener("devicechange", () =>
+  void refreshAmbientDevices(),
+);
 previewRevision.addEventListener("click", () => void buildRevisionPreview());
 dictationClear.addEventListener("click", clearDictation);
 
@@ -479,4 +567,4 @@ window.addEventListener("pagehide", () => {
   }
 });
 
-await Promise.all([checkPipeline(), setupDictation()]);
+await Promise.all([checkPipeline(), setupDictation(), refreshAmbientDevices()]);

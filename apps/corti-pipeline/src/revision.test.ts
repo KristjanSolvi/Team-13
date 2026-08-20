@@ -10,30 +10,31 @@ const directory = {
       aliases: ["district nursing"],
     },
   ],
-  owners: [{ id: "user-larsen", label: "Dr Larsen" }],
 };
 
 describe("parseDictatedRevision", () => {
   it("creates a preview from allow-listed terms without committing anything", () => {
     const preview = parseDictatedRevision({
       taskId: "task-karen-bp",
+      expectedVersion: 1,
+      idempotencyKey: "correct-karen-001",
       transcript:
-        "Route to district nursing, owner is Dr Larsen, within 48 hours and mark urgent.",
-      now: new Date("2026-08-20T10:00:00.000Z"),
+        "Route to district nursing within 48 hours and mark medium.",
       ...directory,
     });
 
     expect(preview).toEqual({
       draft: {
         taskId: "task-karen-bp",
+        expectedVersion: 1,
+        idempotencyKey: "correct-karen-001",
         inputMethod: "dictated",
         transcript:
-          "Route to district nursing, owner is Dr Larsen, within 48 hours and mark urgent.",
+          "Route to district nursing within 48 hours and mark medium.",
         patch: {
-          recipientTeamId: "district-nursing",
-          ownerUserId: "user-larsen",
-          dueAt: "2026-08-22T10:00:00.000Z",
-          priority: "urgent",
+          targetTeamId: "district-nursing",
+          dueInMs: 172_800_000,
+          clinicalUrgency: "medium",
         },
       },
       warnings: [],
@@ -41,16 +42,30 @@ describe("parseDictatedRevision", () => {
     });
   });
 
-  it("does not invent an unknown owner", () => {
+  it("keeps named ownership at the receiving-team acceptance boundary", () => {
     const preview = parseDictatedRevision({
       taskId: "task-1",
-      transcript: "Owner is Doctor Unknown.",
+      expectedVersion: 2,
+      idempotencyKey: "correct-owner-001",
+      transcript: "Owner is Dr Larsen.",
       ...directory,
     });
 
     expect(preview.draft.patch).toEqual({});
     expect(preview.warnings).toContain(
-      "The owner was not found in the allowed directory.",
+      "A named owner is selected only after the receiving team accepts the task; no owner was changed.",
     );
+  });
+
+  it("maps the natural word urgent onto the shared high urgency enum", () => {
+    const preview = parseDictatedRevision({
+      taskId: "task-1",
+      expectedVersion: 2,
+      idempotencyKey: "correct-urgent-001",
+      transcript: "Mark urgent.",
+      ...directory,
+    });
+
+    expect(preview.draft.patch).toEqual({ clinicalUrgency: "high" });
   });
 });

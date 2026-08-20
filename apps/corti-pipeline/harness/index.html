@@ -54,6 +54,9 @@
             <button id="ambient-start" class="button primary">Start ambient</button>
             <button id="ambient-stop" class="button secondary" disabled>Stop</button>
             <button id="ambient-reset" class="button ghost">Reset</button>
+            <select id="ambient-device" class="device-select" aria-label="Ambient microphone">
+              <option value="">Default microphone</option>
+            </select>
             <div class="credit-readout">
               <span>Credits</span>
               <strong id="ambient-credits">—</strong>
@@ -62,8 +65,13 @@
 
           <div class="notice" role="note">
             <span class="recording-mark" aria-hidden="true"></span>
-            Use synthetic details only. A visible recording state remains on screen while
-            the microphone is active.
+            <span>
+              Use synthetic details only. A visible recording state remains on screen
+              while the microphone is active.
+            </span>
+            <span id="ambient-audio-quality" class="status-pill" data-tone="neutral">
+              Audio not checked
+            </span>
           </div>
 
           <div class="script-block">
@@ -102,6 +110,9 @@
 
           <div class="dictation-control-row">
             <corti-dictation id="dictation-control"></corti-dictation>
+            <span id="dictation-audio-quality" class="status-pill" data-tone="neutral">
+              Audio not checked
+            </span>
             <div class="credit-readout">
               <span>Credits</span>
               <strong id="dictation-credits">—</strong>
@@ -111,7 +122,7 @@
           <div class="script-block">
             <span class="script-label">Suggested test phrase</span>
             <p>
-              “Route to district nursing within 48 hours and mark urgent because Karen
+              “Route to district nursing within 48 hours and mark medium because Karen
               needs a blood pressure check.”
             </p>
           </div>
