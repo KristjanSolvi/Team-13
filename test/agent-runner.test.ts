@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
+import { FOLLOW_THROUGH_PROMPT } from "../src/agent/prompt.js";
 import { type AgentGateway, AgentRunner } from "../src/agent/runner.js";
 import { seedKaren } from "../src/fixtures/karen.js";
 import { createApp } from "../src/http/app.js";
@@ -21,6 +22,17 @@ import {
 const PATIENT_ID = "synthetic-karen";
 const INTERACTION_ID = "interaction-karen-1";
 const EVIDENCE_REF = "encounter:sentence-42";
+
+test("task agent prompt pins the canonical MVP routing arguments", () => {
+  assert.match(
+    FOLLOW_THROUGH_PROMPT,
+    /requiredCapabilities: \["blood-pressure"\]/,
+  );
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "blood-pressure-check"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /targetTeamId: "district-nursing"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /clinicalUrgency: "medium"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /dueInMs: 172800000/);
+});
 
 function result(contextId: string, taskId: string, state: string) {
   return { contextId, taskId, state };
