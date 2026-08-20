@@ -392,7 +392,7 @@ function Index() {
           </div>
 
           <footer className="flex items-center justify-between border-t border-border bg-background/60 px-6 py-3 text-xs font-medium text-muted-foreground">
-            <span>Follow-Through · simulated Nervecentre overlay</span>
+            <span>Ward Threads · connected to Nervecentre</span>
             <span>← → to switch views · Esc to hide</span>
           </footer>
         </section>
