@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
@@ -8,17 +8,9 @@ import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward
 import { ViewTabs } from "@/components/ward/ViewTabs";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
-import {
-  demoActors,
-  executeTaskCommand,
-  FollowThroughApiError,
-  getWardCompanionOverview,
-  type ChangeImpact,
-  type WardTaskCommand,
-} from "@/lib/follow-through-api";
-import { loadWardState, saveWardState } from "@/lib/ward-persistence";
-import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
-import { initialNotes, initialThreads, patients, statusLabels } from "@/data/ward";
+import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
+import type { ThreadStatus } from "@/data/ward";
+import { patients } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,57 +32,31 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const ledgerCommandNotes: Record<WardTaskCommand, string> = {
-  approve: "approved and sent to the receiving team.",
-  correct: "corrected before approval.",
-  dismiss: "dismissed as already covered.",
-  reopen: "reopened with a fresh deadline.",
-  accept: "accepted by the receiving team.",
-  decline: "declined by the receiving team.",
-  complete: "reported complete, awaiting verification.",
-  verify: "completion independently verified.",
-};
-
 function Index() {
-  const [threads, setThreads] = useState<Thread[]>(initialThreads);
-  const [changeImpacts, setChangeImpacts] = useState<Record<string, ChangeImpact[]>>({});
-  const [notes, setNotes] = useState<Record<string, CaseNote[]>>(initialNotes);
+  const runtime = useWardRuntime();
+  const {
+    threads,
+    changeImpacts,
+    notes,
+    ledgerBusy,
+    ledgerErrors,
+    refreshPatientThreads,
+    addNote,
+    runLedgerCommand,
+    changeStatus,
+    assignThread,
+    addActivity,
+    createThread,
+  } = runtime;
   const [open, setOpen] = useState(true);
   const [maximized, setMaximized] = useState(false);
   const [view, setView] = useState<"board" | "activity" | "insights">("board");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [scopeId, setScopeId] = useState<string>("p1");
-  const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId}` : view);
-
-  const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
-    const patient = patients.find((candidate) => candidate.id === uiPatientId);
-    if (patient === undefined) return;
-    try {
-      const overview = await getWardCompanionOverview(
-        patient.pipelinePatientId,
-        crypto.randomUUID(),
-      );
-      if (overview.patientId !== patient.pipelinePatientId) return;
-      const authoritative = overview.threads.map((thread) => ({
-        ...thread,
-        patientId: uiPatientId,
-      }));
-      setThreads((current) => [
-        ...current.filter((thread) => thread.patientId !== uiPatientId),
-        ...authoritative,
-      ]);
-      setChangeImpacts((current) => ({
-        ...current,
-        [uiPatientId]: overview.changeImpacts,
-      }));
-    } catch {
-      // Retain current local work when authoritative services are unavailable.
-    }
-  }, []);
 
   useEffect(() => {
     if (open && view === "activity") void refreshPatientThreads(scopeId);
@@ -110,22 +76,6 @@ function Index() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
-
-  useEffect(() => {
-    const persisted = loadWardState(window.localStorage);
-    if (persisted !== null) {
-      // Preserve real saved work. An empty state from the earlier fixture-free
-      // phase is reseeded so the hackathon demo is useful again after refresh.
-      setThreads(persisted.threads.length > 0 ? persisted.threads : initialThreads);
-      setNotes(persisted.notes);
-    }
-    setPersistenceReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!persistenceReady) return;
-    saveWardState(window.localStorage, { threads, notes });
-  }, [notes, persistenceReady, threads]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,184 +121,13 @@ function Index() {
     return base;
   }, [threads]);
 
-  const stamp = () =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-
-  const updateThread = (id: string, fn: (t: Thread) => Thread) =>
-    setThreads((prev) => prev.map((t) => (t.id === id ? fn(t) : t)));
-
-  const addNote = (
-    patientId: string,
-    text: string,
-    doc: DocId = "medical",
-    source: CaseNote["source"] = "agent",
-    author = "Ward Threads agent",
-  ) =>
-    setNotes((prev) => ({
-      ...prev,
-      [patientId]: [
-        ...(prev[patientId] ?? []),
-        {
-          id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          doc,
-          at: stamp(),
-          author,
-          source,
-          text,
-        },
-      ],
-    }));
-
-  const [ledgerBusy, setLedgerBusy] = useState<string | null>(null);
-  const [ledgerErrors, setLedgerErrors] = useState<Record<string, string>>({});
-
-  const handleLedgerCommand = async (thread: Thread, command: WardTaskCommand) => {
-    const backend = thread.backend;
-    if (backend?.taskId == null || backend.taskVersion == null || ledgerBusy !== null) {
-      return;
-    }
-    setLedgerBusy(`${command}-${thread.id}`);
-    setLedgerErrors((prev) => {
-      const next = { ...prev };
-      delete next[thread.id];
-      return next;
-    });
-    const extras: Record<string, unknown> =
-      command === "approve"
-        ? { approvalChannel: "app_one_tap" }
-        : command === "dismiss"
-          ? { reason: "Dismissed on the ward round as already covered." }
-          : command === "reopen"
-            ? { dueInMs: 24 * 3_600_000 }
-            : command === "complete" || command === "verify"
-              ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
-              : {};
-    const actorId =
-      command === "accept" || command === "decline" || command === "complete"
-        ? (thread.assignee ?? demoActors.teamMember)
-        : demoActors.clinician;
-    try {
-      await executeTaskCommand({
-        taskId: backend.taskId,
-        command,
-        actorId,
-        correlationId: crypto.randomUUID(),
-        body: {
-          expectedVersion: backend.taskVersion,
-          idempotencyKey: `${command}-${crypto.randomUUID()}`,
-          ...extras,
-        },
-      });
-      addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
-      await refreshPatientThreads(thread.patientId);
-    } catch (error) {
-      setLedgerErrors((prev) => ({
-        ...prev,
-        [thread.id]:
-          error instanceof FollowThroughApiError
-            ? `${error.message}${error.retryable ? " · safe to retry" : ""}`
-            : "The ledger did not accept the command; the task is unchanged.",
-      }));
-    } finally {
-      setLedgerBusy(null);
-    }
-  };
-
-  const handleStatusChange = (id: string, status: ThreadStatus) => {
-    const th = threads.find((t) => t.id === id);
-    if (th) {
-      addNote(th.patientId, `${th.title} — moved to ${statusLabels[status].toLowerCase()}.`);
-      if (status === "verified")
-        addNote(th.patientId, `Completed and verified: ${th.title}.`, "discharge");
-      if (status === "escalated")
-        addNote(th.patientId, `Escalated — still outstanding: ${th.title}.`, "discharge");
-    }
-    updateThread(id, (t) => ({
-      ...t,
-      status,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text: `Moved to ${statusLabels[status].toLowerCase()}.`,
-          kind: "action" as const,
-        },
-      ],
-    }));
-  };
-
-  const handleAssign = (id: string, assignee: string | null) => {
-    const th = threads.find((t) => t.id === id);
-    if (th)
-      addNote(
-        th.patientId,
-        assignee
-          ? `${th.title} — picked up by ${assignee}.`
-          : `${th.title} — released, open to anyone free.`,
-      );
-    updateThread(id, (t) => ({
-      ...t,
-      assignee,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text: assignee ? `${assignee} picked this up.` : "Released — open to anyone free.",
-          kind: "action" as const,
-        },
-      ],
-    }));
-  };
-
-  const handleAddActivity = (id: string, text: string) => {
-    const th = threads.find((t) => t.id === id);
-    if (th) addNote(th.patientId, `${th.title} — ${text}`);
-    updateThread(id, (t) => ({
-      ...t,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text,
-          kind: "note" as const,
-        },
-      ],
-    }));
-  };
-
   const handleAddThread = (patientId: string, title: string) => {
-    const id = `t-${Date.now()}`;
-    setThreads((prev) => [
-      ...prev,
-      {
-        id,
-        patientId,
-        title,
-        status: "pending",
-        heard: "Added by hand on the ward.",
-        matters: "Flagged as worth following through to completion.",
-        suggestion: "Awaiting assignment.",
-        assignee: null,
-        candidates: [],
-        due: "Today",
-        activity: [
-          { id: `${id}-1`, at: stamp(), actor: "You", text: "Thread created.", kind: "system" },
-        ],
-      },
-    ]);
+    const id = createThread(patientId, title);
     setActiveThreadId(id);
     setEhrPatientId(patientId);
     setScopeId(patientId);
     setView("activity");
     setOpen(true);
-    addNote(patientId, `New thread started: ${title}. Tracking through to completion.`);
-    addNote(patientId, `Outstanding before discharge: ${title}.`, "discharge");
   };
 
   return (
@@ -411,12 +190,12 @@ function Index() {
                   }}
                   activeThreadId={activeThreadId}
                   onSelect={setActiveThreadId}
-                  onStatusChange={handleStatusChange}
-                  onAssign={handleAssign}
-                  onLedgerCommand={(thread, command) => void handleLedgerCommand(thread, command)}
+                  onStatusChange={changeStatus}
+                  onAssign={assignThread}
+                  onLedgerCommand={(thread, command) => void runLedgerCommand(thread, command)}
                   ledgerBusy={ledgerBusy}
                   ledgerErrors={ledgerErrors}
-                  onAddActivity={handleAddActivity}
+                  onAddActivity={addActivity}
                   onAddThread={handleAddThread}
                   onRefreshPatient={refreshPatientThreads}
                   onBackToBoard={() => {
