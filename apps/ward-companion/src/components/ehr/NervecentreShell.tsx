@@ -175,113 +175,113 @@ export function NervecentreShell({
           onAddNote={onAddNote}
         />
       ) : (
-      <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_1.6fr_1fr]">
-        <div className="space-y-2">
-          <Panel title="ED Clinical">
-            <Row left="Triage category" right="Amber" />
-            <Row left="Presenting complaint" right="Breathlessness" />
-            <Row left="Allergies" right="Penicillin" />
-            <Row left="Comorbidities" right="COPD, T2DM" />
-            <Row left="Management plan" right="Nebs + steroids" />
-            <Row left="Diagnosis" right="Infective exacerbation" />
-          </Panel>
-          <Panel title="Alerts & Flags">
-            <Row left="Falls risk" right="Moderate" />
-            <Row left="Infection control" right="Side room" />
-            <Row left="DNACPR" right="Not in place" />
-          </Panel>
-          <Panel title="Fluid Balance">
-            <Row left="Input 24h" right="1450 ml" />
-            <Row left="Output 24h" right="1120 ml" />
-            <Row left="Balance" right="+330 ml" />
-          </Panel>
-        </div>
+        <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_1.6fr_1fr]">
+          <div className="space-y-2">
+            <Panel title="ED Clinical">
+              <Row left="Triage category" right="Amber" />
+              <Row left="Presenting complaint" right="Breathlessness" />
+              <Row left="Allergies" right="Penicillin" />
+              <Row left="Comorbidities" right="COPD, T2DM" />
+              <Row left="Management plan" right="Nebs + steroids" />
+              <Row left="Diagnosis" right="Infective exacerbation" />
+            </Panel>
+            <Panel title="Alerts & Flags">
+              <Row left="Falls risk" right="Moderate" />
+              <Row left="Infection control" right="Side room" />
+              <Row left="DNACPR" right="Not in place" />
+            </Panel>
+            <Panel title="Fluid Balance">
+              <Row left="Input 24h" right="1450 ml" />
+              <Row left="Output 24h" right="1120 ml" />
+              <Row left="Balance" right="+330 ml" />
+            </Panel>
+          </div>
 
-        <div className="space-y-2">
-          <Panel title="e-Observations">
-            <table className="w-full border-collapse text-[10px]">
-              <thead>
-                <tr className="text-ehr-muted">
-                  <th className="border border-ehr-line px-1 py-[2px] text-left font-medium">
-                    Obs
-                  </th>
-                  {["06:00", "10:00", "14:00", "18:00", "22:00"].map((h) => (
-                    <th key={h} className="border border-ehr-line px-1 py-[2px] font-medium">
-                      {h}
+          <div className="space-y-2">
+            <Panel title="e-Observations">
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="text-ehr-muted">
+                    <th className="border border-ehr-line px-1 py-[2px] text-left font-medium">
+                      Obs
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {obsRows.map((r) => (
-                  <tr key={r.label}>
-                    <td className="border border-ehr-line px-1 py-[2px] text-left">{r.label}</td>
-                    {r.values.map((v, i) => (
-                      <td
-                        key={i}
-                        className="border border-ehr-line px-1 py-[2px] text-center tabular-nums"
-                      >
-                        {v}
-                      </td>
+                    {["06:00", "10:00", "14:00", "18:00", "22:00"].map((h) => (
+                      <th key={h} className="border border-ehr-line px-1 py-[2px] font-medium">
+                        {h}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </Panel>
-          <Panel title="Current Medications (EPMA)">
-            <Row left="Salbutamol 5mg NEB" right="QDS · due 12:00" />
-            <Row left="Prednisolone 30mg PO" right="OD · given 08:10" />
-            <Row left="Amoxicillin 500mg PO" right="TDS · due 14:00" />
-            <Row left="Enoxaparin 40mg SC" right="ON" />
-          </Panel>
-          <Panel title="Assessments">
-            <Row left="MUST score" right="1 · 04 Jul" />
-            <Row left="Waterlow" right="12 · 04 Jul" />
-            <Row left="Sepsis screen" right="Negative" />
-          </Panel>
-        </div>
+                </thead>
+                <tbody>
+                  {obsRows.map((r) => (
+                    <tr key={r.label}>
+                      <td className="border border-ehr-line px-1 py-[2px] text-left">{r.label}</td>
+                      {r.values.map((v, i) => (
+                        <td
+                          key={i}
+                          className="border border-ehr-line px-1 py-[2px] text-center tabular-nums"
+                        >
+                          {v}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
+            <Panel title="Current Medications (EPMA)">
+              <Row left="Salbutamol 5mg NEB" right="QDS · due 12:00" />
+              <Row left="Prednisolone 30mg PO" right="OD · given 08:10" />
+              <Row left="Amoxicillin 500mg PO" right="TDS · due 14:00" />
+              <Row left="Enoxaparin 40mg SC" right="ON" />
+            </Panel>
+            <Panel title="Assessments">
+              <Row left="MUST score" right="1 · 04 Jul" />
+              <Row left="Waterlow" right="12 · 04 Jul" />
+              <Row left="Sepsis screen" right="Negative" />
+            </Panel>
+          </div>
 
-        <div className="space-y-2">
-          <Panel title="Care Plans">
-            <Row left="COPD exacerbation" right="Active" />
-            <Row left="Pressure area care" right="Active" />
-            <Row left="Discharge planning" right="Started" />
-          </Panel>
-          <Panel title="All Tasks">
-            <Row left="Repeat obs (NEWS 3)" right="Due 12:00" />
-            <Row left="Chase CT chest report" right="Unassigned" />
-            <Row left="Physio review" right="Accepted" />
-            <Row left="Bloods — U&E" right="Overdue" />
-          </Panel>
-          <Panel title="Staff">
-            <Row left="Consultant" right="Dr R. Duthagray" />
-            <Row left="Nurse in charge" right="V. Kilfoy" />
-            <Row left="Ward clerk" right="S. Marriott" />
-          </Panel>
-          <Panel title="Visit History">
-            <Row left="ED attendance" right="12 Mar 2026" />
-            <Row left="Resp clinic" right="28 Jan 2026" />
-            <Row left="Inpatient — COPD" right="09 Nov 2025" />
-          </Panel>
-          <Panel title="Clinical Documents">
-            {documents.map((d) => (
-              <Row
-                key={d.id}
-                left={d.title}
-                right={`${notes.filter((n) => n.doc === d.id).length} entries`}
-              />
-            ))}
-            <button
-              type="button"
-              onClick={() => setActiveTab("Notes")}
-              className="mt-2 w-full bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
-            >
-              Open Notes
-            </button>
-          </Panel>
+          <div className="space-y-2">
+            <Panel title="Care Plans">
+              <Row left="COPD exacerbation" right="Active" />
+              <Row left="Pressure area care" right="Active" />
+              <Row left="Discharge planning" right="Started" />
+            </Panel>
+            <Panel title="All Tasks">
+              <Row left="Repeat obs (NEWS 3)" right="Due 12:00" />
+              <Row left="Chase CT chest report" right="Unassigned" />
+              <Row left="Physio review" right="Accepted" />
+              <Row left="Bloods — U&E" right="Overdue" />
+            </Panel>
+            <Panel title="Staff">
+              <Row left="Consultant" right="Dr R. Duthagray" />
+              <Row left="Nurse in charge" right="V. Kilfoy" />
+              <Row left="Ward clerk" right="S. Marriott" />
+            </Panel>
+            <Panel title="Visit History">
+              <Row left="ED attendance" right="12 Mar 2026" />
+              <Row left="Resp clinic" right="28 Jan 2026" />
+              <Row left="Inpatient — COPD" right="09 Nov 2025" />
+            </Panel>
+            <Panel title="Clinical Documents">
+              {documents.map((d) => (
+                <Row
+                  key={d.id}
+                  left={d.title}
+                  right={`${notes.filter((n) => n.doc === d.id).length} entries`}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => setActiveTab("Notes")}
+                className="mt-2 w-full bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
+              >
+                Open Notes
+              </button>
+            </Panel>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
@@ -298,7 +298,10 @@ function splitEntry(text: string) {
   if (idx === -1) return { body: text.trim(), plan: null as string | null };
   return {
     body: text.slice(0, idx).trim(),
-    plan: text.slice(idx).replace(/^\s*Plan\s*:\s*/i, "").trim(),
+    plan: text
+      .slice(idx)
+      .replace(/^\s*Plan\s*:\s*/i, "")
+      .trim(),
   };
 }
 
@@ -378,7 +381,9 @@ function NotesWorkspace({
                     <span className="flex items-center gap-1.5">
                       <span className="font-semibold text-ehr-foreground">{n.author}</span>
                       {badge && (
-                        <span className="rounded bg-ehr-accent/15 px-1 text-ehr-accent">{badge}</span>
+                        <span className="rounded bg-ehr-accent/15 px-1 text-ehr-accent">
+                          {badge}
+                        </span>
                       )}
                     </span>
                     <span className="tabular-nums">{n.at}</span>
@@ -441,7 +446,9 @@ function NotesWorkspace({
             </h3>
             <ol className="mt-1.5 space-y-1.5">
               {activity.length === 0 && (
-                <li className="text-[11px] text-ehr-muted">No tracked activity for this patient.</li>
+                <li className="text-[11px] text-ehr-muted">
+                  No tracked activity for this patient.
+                </li>
               )}
               {activity.map((a) => (
                 <li key={a.id} className="flex gap-2 text-[11px] leading-snug">

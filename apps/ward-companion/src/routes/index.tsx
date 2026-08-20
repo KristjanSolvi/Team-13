@@ -8,13 +8,7 @@ import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { getWardCompanionOverview } from "@/lib/follow-through-api";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
-import {
-  initialNotes,
-  initialThreads,
-  patients,
-  statusDotClass,
-  statusLabels,
-} from "@/data/ward";
+import { initialNotes, initialThreads, patients, statusDotClass, statusLabels } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -246,9 +240,7 @@ function Index() {
       <NervecentreShell
         patient={patients.find((p) => p.id === ehrPatientId)}
         notes={notes[ehrPatientId] ?? []}
-        activity={threads
-          .filter((t) => t.patientId === ehrPatientId)
-          .flatMap((t) => t.activity)}
+        activity={threads.filter((t) => t.patientId === ehrPatientId).flatMap((t) => t.activity)}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
