@@ -1,7 +1,19 @@
 import { useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Plus, Send, TriangleAlert, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  ChevronDown,
+  CircleSlash,
+  Plus,
+  RotateCcw,
+  Send,
+  TriangleAlert,
+  UserPlus,
+} from "lucide-react";
 import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, staff, statusDotClass, statusLabels } from "@/data/ward";
+import type { WardTaskCommand } from "@/lib/follow-through-api";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
@@ -16,6 +28,9 @@ type Props = {
   onSelect: (id: string | null) => void;
   onStatusChange: (id: string, status: ThreadStatus) => void;
   onAssign: (id: string, assignee: string | null) => void;
+  onLedgerCommand: (thread: Thread, command: WardTaskCommand) => void;
+  ledgerBusy: string | null;
+  ledgerErrors: Record<string, string>;
   onAddActivity: (id: string, text: string) => void;
   onAddThread: (patientId: string, title: string) => void;
   onSelectPatient: (id: string) => void;
@@ -30,6 +45,44 @@ const kindDot: Record<string, string> = {
   action: "bg-verified",
 };
 
+const ledgerCommandMeta: Record<
+  WardTaskCommand,
+  { label: string; Icon: typeof Check; tone: string }
+> = {
+  approve: {
+    label: "Approve & send to team",
+    Icon: Check,
+    tone: "bg-foreground text-background",
+  },
+  correct: { label: "Correct", Icon: Check, tone: "border border-border bg-panel" },
+  dismiss: {
+    label: "Dismiss · already covered",
+    Icon: CircleSlash,
+    tone: "border border-border bg-panel text-muted-foreground",
+  },
+  reopen: {
+    label: "Reopen · 24h deadline",
+    Icon: RotateCcw,
+    tone: "bg-escalated-soft text-escalated-strong",
+  },
+  accept: { label: "Accept task", Icon: UserPlus, tone: "bg-foreground text-background" },
+  decline: {
+    label: "Decline",
+    Icon: CircleSlash,
+    tone: "border border-border bg-panel text-foreground",
+  },
+  complete: {
+    label: "Mark completed",
+    Icon: Check,
+    tone: "bg-verified-soft text-verified-strong",
+  },
+  verify: {
+    label: "Verify done",
+    Icon: CheckCheck,
+    tone: "bg-verified-soft text-verified-strong",
+  },
+};
+
 export function PatientActivity({
   threads,
   patientId,
@@ -39,6 +92,9 @@ export function PatientActivity({
   onSelect,
   onStatusChange,
   onAssign,
+  onLedgerCommand,
+  ledgerBusy,
+  ledgerErrors,
   onAddActivity,
   onAddThread,
   onSelectPatient,
@@ -252,9 +308,49 @@ export function PatientActivity({
                         {thread.heard}
                       </p>
 
-                      {!done && <TaskCorrectionPanel thread={thread} />}
+                      {!done &&
+                        (thread.backend === undefined ||
+                          thread.backend.availableCommands.includes("correct")) && (
+                          <TaskCorrectionPanel
+                            thread={thread}
+                            onApplied={() => void onRefreshPatient(thread.patientId)}
+                          />
+                        )}
 
-                      {!done && (
+                      {ledgerErrors[thread.id] !== undefined && (
+                        <p className="rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">
+                          {ledgerErrors[thread.id]}
+                        </p>
+                      )}
+
+                      {!done && thread.backend !== undefined && (
+                        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                          {thread.backend.availableCommands
+                            .filter((command) => command !== "correct")
+                            .map((command) => {
+                              const busy = ledgerBusy === `${command}-${thread.id}`;
+                              const meta = ledgerCommandMeta[command];
+                              return (
+                                <button
+                                  key={command}
+                                  type="button"
+                                  disabled={ledgerBusy !== null}
+                                  onClick={() => onLedgerCommand(thread, command)}
+                                  className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium hover:opacity-85 disabled:opacity-45 ${meta.tone}`}
+                                >
+                                  {busy ? (
+                                    <Spinner className="size-3.5" />
+                                  ) : (
+                                    <meta.Icon className="size-3.5" />
+                                  )}
+                                  {meta.label}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+
+                      {!done && thread.backend === undefined && (
                         <div className="flex flex-wrap gap-2">
                           <button
                             disabled={pending === `assign-you-${thread.id}`}
@@ -361,42 +457,46 @@ export function PatientActivity({
                         </button>
                       </form>
 
-                      <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
-                        {(
-                          [
+                      {thread.backend === undefined && (
+                        <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
+                          {(
                             [
-                              "verified",
-                              "Verify done",
-                              Check,
-                              "bg-verified-soft text-verified-strong",
-                            ],
-                            [
-                              "escalated",
-                              "Ask for help",
-                              TriangleAlert,
-                              "bg-escalated-soft text-escalated-strong",
-                            ],
-                          ] as [ThreadStatus, string, typeof Check, string][]
-                        ).map(([status, label, Icon, tone]) => {
-                          const actionId = `${status}-${thread.id}`;
-                          const busy = pending === actionId;
-                          return (
-                            <button
-                              key={status}
-                              disabled={busy}
-                              onClick={() => run(actionId, () => onStatusChange(thread.id, status))}
-                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium hover:opacity-85 ${tone}`}
-                            >
-                              {busy ? (
-                                <Spinner className="size-3" />
-                              ) : (
-                                <Icon className="size-3.5" />
-                              )}
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                              [
+                                "verified",
+                                "Verify done",
+                                Check,
+                                "bg-verified-soft text-verified-strong",
+                              ],
+                              [
+                                "escalated",
+                                "Ask for help",
+                                TriangleAlert,
+                                "bg-escalated-soft text-escalated-strong",
+                              ],
+                            ] as [ThreadStatus, string, typeof Check, string][]
+                          ).map(([status, label, Icon, tone]) => {
+                            const actionId = `${status}-${thread.id}`;
+                            const busy = pending === actionId;
+                            return (
+                              <button
+                                key={status}
+                                disabled={busy}
+                                onClick={() =>
+                                  run(actionId, () => onStatusChange(thread.id, status))
+                                }
+                                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium hover:opacity-85 ${tone}`}
+                              >
+                                {busy ? (
+                                  <Spinner className="size-3" />
+                                ) : (
+                                  <Icon className="size-3.5" />
+                                )}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </li>

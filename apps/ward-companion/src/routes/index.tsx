@@ -9,7 +9,13 @@ import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward
 import { ViewTabs } from "@/components/ward/ViewTabs";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
-import { getWardCompanionOverview } from "@/lib/follow-through-api";
+import {
+  demoActors,
+  executeTaskCommand,
+  FollowThroughApiError,
+  getWardCompanionOverview,
+  type WardTaskCommand,
+} from "@/lib/follow-through-api";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
 import { initialNotes, initialThreads, patients, statusDotClass, statusLabels } from "@/data/ward";
 
@@ -32,6 +38,17 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
+
+const ledgerCommandNotes: Record<WardTaskCommand, string> = {
+  approve: "approved and sent to the receiving team.",
+  correct: "corrected before approval.",
+  dismiss: "dismissed as already covered.",
+  reopen: "reopened with a fresh deadline.",
+  accept: "accepted by the receiving team.",
+  decline: "declined by the receiving team.",
+  complete: "reported complete, awaiting verification.",
+  verify: "completion independently verified.",
+};
 
 function Index() {
   const [threads, setThreads] = useState<Thread[]>(initialThreads);
@@ -138,6 +155,61 @@ function Index() {
         },
       ],
     }));
+
+  const [ledgerBusy, setLedgerBusy] = useState<string | null>(null);
+  const [ledgerErrors, setLedgerErrors] = useState<Record<string, string>>({});
+
+  const handleLedgerCommand = async (thread: Thread, command: WardTaskCommand) => {
+    const backend = thread.backend;
+    if (backend?.taskId == null || backend.taskVersion == null || ledgerBusy !== null) {
+      return;
+    }
+    setLedgerBusy(`${command}-${thread.id}`);
+    setLedgerErrors((prev) => {
+      const next = { ...prev };
+      delete next[thread.id];
+      return next;
+    });
+    const extras: Record<string, unknown> =
+      command === "approve"
+        ? { approvalChannel: "app_one_tap" }
+        : command === "dismiss"
+          ? { reason: "Dismissed on the ward round as already covered." }
+          : command === "reopen"
+            ? { dueInMs: 24 * 3_600_000 }
+            : command === "complete" || command === "verify"
+              ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
+              : {};
+    const actorId =
+      command === "accept" || command === "decline" || command === "complete"
+        ? (thread.assignee ?? demoActors.teamMember)
+        : demoActors.clinician;
+    try {
+      await executeTaskCommand({
+        taskId: backend.taskId,
+        command,
+        actorId,
+        correlationId: crypto.randomUUID(),
+        body: {
+          expectedVersion: backend.taskVersion,
+          idempotencyKey: `${command}-${crypto.randomUUID()}`,
+          ...extras,
+        },
+      });
+      addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
+      await refreshPatientThreads(thread.patientId);
+    } catch (error) {
+      setLedgerErrors((prev) => ({
+        ...prev,
+        [thread.id]:
+          error instanceof FollowThroughApiError
+            ? `${error.message}${error.retryable ? " · safe to retry" : ""}`
+            : "The ledger did not accept the command; the task is unchanged.",
+      }));
+    } finally {
+      setLedgerBusy(null);
+    }
+  };
 
   const handleStatusChange = (id: string, status: ThreadStatus) => {
     const th = threads.find((t) => t.id === id);
@@ -318,6 +390,9 @@ function Index() {
                   onSelect={setActiveThreadId}
                   onStatusChange={handleStatusChange}
                   onAssign={handleAssign}
+                  onLedgerCommand={(thread, command) => void handleLedgerCommand(thread, command)}
+                  ledgerBusy={ledgerBusy}
+                  ledgerErrors={ledgerErrors}
                   onAddActivity={handleAddActivity}
                   onAddThread={handleAddThread}
                   onSelectPatient={setEhrPatientId}

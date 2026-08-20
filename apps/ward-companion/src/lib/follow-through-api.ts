@@ -169,6 +169,37 @@ export async function investigateCandidate(
   );
 }
 
+export type WardTaskCommand = NonNullable<Thread["backend"]>["availableCommands"][number];
+
+/**
+ * Demo actor identities seeded by the agentic backend's Karen fixture.
+ * Clinician commands (approve/correct/dismiss/reopen) are attributed to the
+ * clinician; accept/decline/complete must come from an eligible team member.
+ */
+export const demoActors = {
+  clinician: "clinician-1",
+  teamMember: "nurse-a",
+} as const;
+
+export async function executeTaskCommand(input: {
+  taskId: string;
+  command: WardTaskCommand;
+  actorId: string;
+  correlationId: string;
+  body: Record<string, unknown>;
+}): Promise<unknown> {
+  return responseJson<unknown>(
+    await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(input.taskId)}/${input.command}`), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(input.correlationId),
+        "x-actor-id": input.actorId,
+      },
+      body: JSON.stringify(input.body),
+    }),
+  );
+}
+
 export async function getWardCompanionOverview(
   patientId: string,
   correlationId: string,

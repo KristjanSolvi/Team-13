@@ -3,7 +3,13 @@ import { ChevronDown, LoaderCircle, Mic2, ShieldCheck } from "lucide-react";
 import type { CortiDictation } from "@corti/dictation-web";
 import type { PipelineEvent, TaskRevisionPreview } from "@pipeline/contracts.js";
 import type { Thread } from "@/data/ward";
-import { buildDictationRevisionPreview, getDictationToken } from "@/lib/follow-through-api";
+import {
+  buildDictationRevisionPreview,
+  demoActors,
+  executeTaskCommand,
+  FollowThroughApiError,
+  getDictationToken,
+} from "@/lib/follow-through-api";
 
 const recipientTeams = [
   { id: "ward-nursing", label: "Ward Nursing Team", aliases: ["ward nursing", "nurses"] },
@@ -47,9 +53,9 @@ function previewFields(preview: TaskRevisionPreview) {
   ].filter((field): field is string[] => field !== null);
 }
 
-type Props = { thread: Thread };
+type Props = { thread: Thread; onApplied?: () => void };
 
-export function TaskCorrectionPanel({ thread }: Props) {
+export function TaskCorrectionPanel({ thread, onApplied }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [message, setMessage] = useState("Voice is optional; typing always remains available.");
@@ -57,6 +63,7 @@ export function TaskCorrectionPanel({ thread }: Props) {
   const [interim, setInterim] = useState("");
   const [preview, setPreview] = useState<TaskRevisionPreview | null>(null);
   const [building, setBuilding] = useState(false);
+  const [applying, setApplying] = useState(false);
   const elementRef = useRef<CortiDictation | null>(null);
   const correlationIdRef = useRef(crypto.randomUUID());
 
@@ -160,6 +167,51 @@ export function TaskCorrectionPanel({ thread }: Props) {
     }
   };
 
+  const applyCorrection = async () => {
+    const backend = thread.backend;
+    if (
+      preview === null ||
+      backend?.taskId == null ||
+      backend.taskVersion == null ||
+      Object.keys(preview.draft.patch).length === 0
+    ) {
+      return;
+    }
+    setApplying(true);
+    try {
+      await executeTaskCommand({
+        taskId: backend.taskId,
+        command: "correct",
+        actorId: demoActors.clinician,
+        correlationId: correlationIdRef.current,
+        body: {
+          expectedVersion: backend.taskVersion,
+          idempotencyKey: preview.draft.idempotencyKey,
+          ...preview.draft.patch,
+        },
+      });
+      setPreview(null);
+      setText("");
+      setMessage("Correction applied · the tracked task now holds the confirmed change.");
+      onApplied?.();
+    } catch (error) {
+      setMessage(
+        error instanceof FollowThroughApiError
+          ? `Correction not applied · ${error.message}`
+          : "Correction not applied · the task is unchanged.",
+      );
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const canApply =
+    preview !== null &&
+    Object.keys(preview.draft.patch).length > 0 &&
+    thread.backend?.taskId != null &&
+    thread.backend.taskVersion != null &&
+    thread.backend.availableCommands.includes("correct");
+
   if (!open) {
     return (
       <button
@@ -258,8 +310,23 @@ export function TaskCorrectionPanel({ thread }: Props) {
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal" />
             {thread.backend?.taskId === null || thread.backend?.taskVersion == null
               ? "Preview only · explicit clinician confirmation and an authoritative task version are required before this can change tracked work."
-              : "Preview only · this uses the authoritative task version, but explicit clinician confirmation is still required before mutation."}
+              : "Preview only until confirmed · applying uses the authoritative task version and is recorded against the clinician."}
           </p>
+          {canApply && (
+            <button
+              type="button"
+              onClick={() => void applyCorrection()}
+              disabled={applying}
+              className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-2 text-[12.5px] font-medium text-background disabled:opacity-45"
+            >
+              {applying ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : (
+                <ShieldCheck className="size-3.5" />
+              )}
+              Confirm and apply correction
+            </button>
+          )}
         </div>
       )}
     </section>
