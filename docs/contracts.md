@@ -36,6 +36,28 @@ Errors use a stable, non-sensitive envelope:
 Consumers must tolerate additive fields and reject events whose major
 `schemaVersion` is not `"1"`.
 
+## Transcript review boundary
+
+`POST /api/corti/transcripts/review` is non-mutating decision support over final
+Corti Ambient segments. The browser sends the same interaction-scoped segment
+objects used for candidate generation, optional clinical context hints, and
+explicit protected terms such as the selected patient's name. The integration
+API exposes only this exact allow-listed pipeline path; Corti credentials stay
+server-side.
+
+Text Generation may return at most three possible minimal phrase replacements.
+The pipeline retains only high-confidence suggestions grounded by one exact,
+unique source span. It independently rejects changes involving negation,
+dosage, numbers, units, allergies, dates, times, protected names, overlapping
+spans, or capitalization alone. Context never authorizes a replacement.
+
+Every retained item has `requiresConfirmation: true`. The response always has
+`originalTranscriptPreserved: true`; it contains suggestions and source offsets,
+not a corrected transcript. The UI runs review concurrently with follow-through
+candidate extraction, displays the pending state only for the real request,
+and asks the clinician to keep the original or confirm the suggested
+interpretation. Neither choice silently rewrites the source transcript.
+
 ## Pipeline signal and evidence boundary
 
 `POST /api/signals` always retains a valid signal before any agent action is

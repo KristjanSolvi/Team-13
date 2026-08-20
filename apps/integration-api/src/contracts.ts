@@ -37,6 +37,7 @@ export const pipelineProxyPaths = [
   "/api/corti/ambient/session",
   "/api/corti/ambient/token",
   "/api/corti/dictation/token",
+  "/api/corti/transcripts/review",
   "/api/corti/candidates/generate",
   "/api/corti/dictation/revision-preview",
   "/api/corti/documents/generate",

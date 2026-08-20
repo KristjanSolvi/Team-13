@@ -24,6 +24,13 @@ function gateway(): CortiGateway {
       accessToken: "dictation-token",
       expiresIn: 300,
     })),
+    reviewTranscript: vi.fn(async () => ({
+      status: "reviewed" as const,
+      suggestions: [],
+      rejectedSuggestionCount: 0,
+      creditsConsumed: 0.005,
+      originalTranscriptPreserved: true as const,
+    })),
     generateCandidates: vi.fn(async () => ({
       candidates: [],
       rejectedEvidenceCount: 0,
@@ -165,6 +172,67 @@ describe("pipeline HTTP contract", () => {
 
     expect(response.body.error.code).toBe("INVALID_REQUEST");
     expect(mockGateway.generateCandidates).not.toHaveBeenCalled();
+  });
+
+  it("reviews only validated final transcript input and preserves correlation", async () => {
+    const mockGateway = gateway();
+    const app = createPipelineApp({ gateway: mockGateway });
+
+    const response = await request(app)
+      .post("/api/corti/transcripts/review")
+      .set("x-correlation-id", "corr-review-1")
+      .send({
+        interactionId: "interaction-1",
+        contextTerms: ["paracetamol"],
+        protectedTerms: ["Karen Jensen"],
+        segments: [
+          {
+            interactionId: "interaction-1",
+            segmentKey: "interaction-1:12",
+            text: "The patient has been taking parachutes.",
+            startSeconds: 12,
+            endSeconds: 16,
+            isFinal: true,
+            audioQuality: "clear",
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: "reviewed",
+      suggestions: [],
+      originalTranscriptPreserved: true,
+    });
+    expect(mockGateway.reviewTranscript).toHaveBeenCalledWith({
+      interactionId: "interaction-1",
+      correlationId: "corr-review-1",
+      contextTerms: ["paracetamol"],
+      protectedTerms: ["Karen Jensen"],
+      segments: [
+        expect.objectContaining({
+          segmentKey: "interaction-1:12",
+          text: "The patient has been taking parachutes.",
+          isFinal: true,
+        }),
+      ],
+    });
+  });
+
+  it("rejects an invalid transcript review before invoking Corti", async () => {
+    const mockGateway = gateway();
+    const app = createPipelineApp({ gateway: mockGateway });
+
+    await request(app)
+      .post("/api/corti/transcripts/review")
+      .send({
+        interactionId: "interaction-1",
+        contextTerms: [""],
+        segments: [],
+      })
+      .expect(400);
+
+    expect(mockGateway.reviewTranscript).not.toHaveBeenCalled();
   });
 
   it("rejects a transcript segment whose end precedes its start", async () => {

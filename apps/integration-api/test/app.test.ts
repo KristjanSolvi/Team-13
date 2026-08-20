@@ -198,6 +198,9 @@ describe("integration API", () => {
       "/api/corti/candidates/generate",
     );
     expect(response.body.paths).toHaveProperty(
+      "/api/corti/transcripts/review",
+    );
+    expect(response.body.paths).toHaveProperty(
       "/api/patients/{patientId}/overview",
     );
     expect(response.body.paths).toHaveProperty(
@@ -447,10 +450,29 @@ describe("integration API", () => {
       { correlationId: "corr-pipeline-1" },
     );
     await request(app)
+      .post("/api/corti/transcripts/review")
+      .set("x-correlation-id", "corr-review-1")
+      .send({
+        interactionId: "interaction-karen-1",
+        segments: [],
+        contextTerms: [],
+      })
+      .expect(200);
+    expect(pipeline.request).toHaveBeenNthCalledWith(
+      2,
+      "/api/corti/transcripts/review",
+      {
+        interactionId: "interaction-karen-1",
+        segments: [],
+        contextTerms: [],
+      },
+      { correlationId: "corr-review-1" },
+    );
+    await request(app)
       .post("/api/corti/handovers/render")
       .send({ packet: handoverPacket })
       .expect(404);
-    expect(pipeline.request).toHaveBeenCalledOnce();
+    expect(pipeline.request).toHaveBeenCalledTimes(2);
   });
 
   it.each([
