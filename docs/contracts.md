@@ -39,34 +39,8 @@ claimed. A synthetic evidence reference is not itself evidence. An
 agent-suggested draft can use a reference only after the corresponding exact
 source content has been registered in this patient's scoped record.
 
-The currently merged integration gateway sends references only:
-
-```json
-{
-  "patientId": "synthetic-karen",
-  "interactionId": "interaction-karen-1",
-  "signalText": "Dizziness needs follow-through",
-  "evidenceRefs": ["encounter:candidate-a1b2.1"],
-  "idempotencyKey": "candidate-a1b2"
-}
-```
-
-The backend returns `202` without pretending that `signalText` is an exact
-quote:
-
-```json
-{
-  "signalEventId": "event-uuid",
-  "status": "retained",
-  "investigationStatus": "blocked_missing_source_evidence",
-  "recovery": "RESUBMIT_WITH_SOURCE_EVIDENCE_OR_CREATE_MANUAL_TASK",
-  "missingEvidenceRefs": ["encounter:candidate-a1b2.1"]
-}
-```
-
-To make the signal available for evidence-grounded agent drafting, the
-integration gateway must forward the already validated candidate evidence as a
-one-to-one `sourceEvidence` array:
+The current integration gateway forwards every validated evidence item as a
+one-to-one `sourceEvidence` entry. This is the evidence-grounded happy path:
 
 ```json
 {
@@ -84,6 +58,20 @@ one-to-one `sourceEvidence` array:
     }
   ],
   "idempotencyKey": "candidate-a1b2"
+}
+```
+
+References-only requests remain backward compatible, but are deliberately
+blocked from agent investigation. The backend returns `202` without pretending
+that `signalText` is an exact quote:
+
+```json
+{
+  "signalEventId": "event-uuid",
+  "status": "retained",
+  "investigationStatus": "blocked_missing_source_evidence",
+  "recovery": "RESUBMIT_WITH_SOURCE_EVIDENCE_OR_CREATE_MANUAL_TASK",
+  "missingEvidenceRefs": ["encounter:candidate-a1b2.1"]
 }
 ```
 

@@ -1,9 +1,10 @@
 import express, { type Express } from "express";
 
+import type { AgentRunner } from "../agent/runner.js";
 import type { DemoClock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
-import { mountMcp } from "../mcp/transport.js";
 import { createFollowThroughMcp } from "../mcp/tools.js";
+import { mountMcp } from "../mcp/transport.js";
 import type { LedgerService } from "../services/ledger-service.js";
 import type { RecordService } from "../services/record-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
@@ -18,6 +19,7 @@ export interface AppDependencies {
   uiOrigin: string;
   appBearerToken: string;
   mcpBearerToken: string;
+  runner?: AgentRunner;
 }
 
 export function createApp(dependencies: AppDependencies): Express {

@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import {
-  Router,
   type NextFunction,
   type Request,
   type Response,
+  Router,
 } from "express";
-import { z, ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 import { DomainError } from "../domain/errors.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
@@ -66,7 +66,7 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
 
   router.post(
     "/signals",
-    asyncRoute((request, response) => {
+    asyncRoute(async (request, response) => {
       const body = signalSchema.parse(request.body);
       const actorId = requireActor(request);
       const commandScope = `signal:${body.interactionId}`;
@@ -172,14 +172,53 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
                   ? missingEvidenceRefs
                   : body.evidenceRefs,
             };
-        dependencies.store.saveProcessedCommand(
-          commandScope,
-          body.idempotencyKey,
-          commandResult,
-          occurredAt,
-        );
+        if (!evidenceComplete || !dependencies.runner) {
+          dependencies.store.saveProcessedCommand(
+            commandScope,
+            body.idempotencyKey,
+            commandResult,
+            occurredAt,
+          );
+        }
         return commandResult;
       });
+      if (evidenceComplete && dependencies.runner) {
+        try {
+          const agent = await dependencies.runner.investigate({
+            patientId: body.patientId,
+            interactionId: body.interactionId,
+            signalText: body.signalText,
+            evidenceRefs: body.evidenceRefs,
+            idempotencyKey: body.idempotencyKey,
+          });
+          const agentResult = {
+            signalEventId: result.signalEventId,
+            contextId: agent.contextId,
+            cortiTaskId: agent.taskId,
+            agentState: agent.state,
+            ...(agent.credits === undefined ? {} : { credits: agent.credits }),
+          };
+          dependencies.store.saveProcessedCommand(
+            commandScope,
+            body.idempotencyKey,
+            agentResult,
+            occurredAt,
+          );
+          response.status(202).json(agentResult);
+          return;
+        } catch {
+          response.status(502).json({
+            error: {
+              code: "AGENT_INVESTIGATION_FAILED",
+              message: "Corti investigation failed; the signal was retained",
+              retryable: true,
+            },
+            signalEventId: result.signalEventId,
+            recovery: "MANUAL_TASK_AVAILABLE",
+          });
+          return;
+        }
+      }
       response.status(202).json(result);
     }),
   );
@@ -225,7 +264,7 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
 
   router.post(
     "/tasks/:taskId/approve",
-    asyncRoute((request, response) => {
+    asyncRoute(async (request, response) => {
       const body = z
         .object({
           ...commandBase,
@@ -235,6 +274,8 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
         })
         .parse(request.body);
       const taskId = pathParam(request, "taskId");
+      const task = dependencies.ledger.getTask(taskId);
+      const thread = dependencies.store.requireThread(task.threadId);
       const approval = dependencies.ledger.approveDraft(
         taskId,
         body.expectedVersion,
@@ -242,6 +283,38 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
         body.approvalChannel,
         body.idempotencyKey,
       );
+      if (dependencies.runner) {
+        try {
+          const agent = await dependencies.runner.publishApproved({
+            patientId: task.patientId,
+            interactionId: thread.interactionId,
+            taskId,
+            expectedVersion: body.expectedVersion,
+            approvalProof: approval.proof,
+            idempotencyKey: body.idempotencyKey,
+          });
+          response.json({
+            task: dependencies.ledger.getTask(taskId),
+            contextId: agent.contextId,
+            cortiTaskId: agent.taskId,
+            agentState: agent.state,
+            ...(agent.credits === undefined ? {} : { credits: agent.credits }),
+          });
+          return;
+        } catch {
+          response.status(502).json({
+            error: {
+              code: "MANUAL_PUBLICATION_REQUIRED",
+              message: "Corti publication could not be confirmed",
+              retryable: true,
+            },
+            taskId,
+            approvalProof: approval.proof,
+            expiresAt: approval.expiresAt,
+          });
+          return;
+        }
+      }
       response.json({
         taskId,
         approvalProof: approval.proof,

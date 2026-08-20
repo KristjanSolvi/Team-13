@@ -1,3 +1,5 @@
+import { CortiSdkGateway } from "./agent/corti-gateway.js";
+import { AgentRunner } from "./agent/runner.js";
 import { parseConfig } from "./config.js";
 import { seedKaren } from "./fixtures/karen.js";
 import { createApp } from "./http/app.js";
@@ -19,6 +21,13 @@ const records = new RecordService(store);
 const scheduler = new SchedulerService(store, clock);
 scheduler.tick();
 setInterval(() => scheduler.tick(), 15_000).unref();
+const runner = config.cortiAgentId
+  ? new AgentRunner(
+      new CortiSdkGateway(config.cortiAgentId, config),
+      store,
+      config.mcpBearerToken,
+    )
+  : undefined;
 
 createApp({
   store,
@@ -29,6 +38,7 @@ createApp({
   appBearerToken: config.appBearerToken,
   mcpBearerToken: config.mcpBearerToken,
   uiOrigin: config.uiOrigin,
+  ...(runner ? { runner } : {}),
 }).listen(config.port, "127.0.0.1", () => {
   console.error(`Follow-Through listening on http://127.0.0.1:${config.port}`);
 });
