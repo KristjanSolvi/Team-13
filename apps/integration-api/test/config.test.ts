@@ -25,6 +25,7 @@ describe("integration API config", () => {
         "https://ui-preview.example.test",
       ],
       upstreamTimeoutMs: 8_000,
+      handoverUpstreamTimeoutMs: 600_000,
       integrationApiBearerToken: "public-secret",
     });
   });
@@ -67,5 +68,35 @@ describe("integration API config", () => {
 
     expect(config.host).toBe("0.0.0.0");
     expect(config.port).toBe(8080);
+  });
+
+  it("accepts a dedicated live handover timeout up to fifteen minutes", () => {
+    const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
+      AGENTIC_APP_BEARER_TOKEN: "app-secret",
+      PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+      MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      HANDOVER_UPSTREAM_TIMEOUT_MS: "900000",
+    });
+
+    expect(config.handoverUpstreamTimeoutMs).toBe(900_000);
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "public-secret",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        HANDOVER_UPSTREAM_TIMEOUT_MS: "479999",
+      }),
+    ).toThrow();
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "public-secret",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        HANDOVER_UPSTREAM_TIMEOUT_MS: "900001",
+      }),
+    ).toThrow();
   });
 });

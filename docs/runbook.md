@@ -163,6 +163,13 @@ their matching private service tokens. Generate a separate
 public handover endpoint; never reuse `AGENTIC_APP_BEARER_TOKEN`. Add the actual
 Lovable preview origin to `UI_ORIGINS`; do not use a wildcard.
 
+Keep `UPSTREAM_TIMEOUT_MS=8000` for ordinary service calls and
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for live handover generation. A draft may
+run two Corti agent phases, and each phase allows up to 60 seconds for the SDK
+send plus 180 seconds for polling (480 seconds total worst case). The ten-minute
+integration timeout leaves headroom for that work and the Corti Text Generation
+render; handover finalization still uses the ordinary timeout.
+
 Confirm the handover path is ready before spending credit:
 
 ```bash

@@ -15,10 +15,14 @@ const agentic = new HttpAgenticGateway(
   config.agenticBaseUrl,
   config.upstreamTimeoutMs,
   config.agenticBearerToken,
+  fetch,
+  config.handoverUpstreamTimeoutMs,
 );
 const pipeline = new HttpPipelineGateway(
   config.pipelineBaseUrl,
   config.upstreamTimeoutMs,
+  fetch,
+  config.handoverUpstreamTimeoutMs,
 );
 const profile = new HttpProfileGateway(
   config.patientProfileBaseUrl,

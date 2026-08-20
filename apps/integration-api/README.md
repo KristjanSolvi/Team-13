@@ -106,6 +106,13 @@ Agentic/MCP backend's private application token. Set
 `PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
 private-service values. Never commit `.env`.
 
+Keep ordinary upstream calls on `UPSTREAM_TIMEOUT_MS=8000`. Use
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover draft generation and Corti
+rendering. The draft can contain two Corti agent phases, each allowing up to 60
+seconds to send and 180 seconds to poll, so the dedicated value cannot be lower
+than 480000 and may be raised to at most 900000. Finalization remains on the
+ordinary timeout because it is a local snapshot-checked ledger write.
+
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
 port `5173` are accepted by the example configuration. Add the deployed or
 Lovable preview origin explicitly to `UI_ORIGINS`; wildcard origins are

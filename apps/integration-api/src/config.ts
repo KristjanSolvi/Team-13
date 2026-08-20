@@ -17,6 +17,12 @@ const environmentSchema = z.object({
     .string()
     .default("http://127.0.0.1:5173,http://localhost:5173"),
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(250).max(120_000).default(8_000),
+  HANDOVER_UPSTREAM_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(480_000)
+    .max(900_000)
+    .default(600_000),
 });
 
 export function parseConfig(environment: NodeJS.ProcessEnv) {
@@ -44,5 +50,6 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     mockEhrBearerToken: value.MOCK_EHR_BEARER_TOKEN,
     allowedOrigins,
     upstreamTimeoutMs: value.UPSTREAM_TIMEOUT_MS,
+    handoverUpstreamTimeoutMs: value.HANDOVER_UPSTREAM_TIMEOUT_MS,
   };
 }

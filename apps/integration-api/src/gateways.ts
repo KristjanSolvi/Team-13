@@ -117,6 +117,7 @@ interface FetchJsonOptions {
   bearerToken?: string;
   meta?: RequestMeta;
   authenticate?: boolean;
+  timeoutMs?: number;
 }
 
 export class JsonHttpClient {
@@ -135,7 +136,10 @@ export class JsonHttpClient {
     options: FetchJsonOptions = {},
   ): Promise<UpstreamJsonResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      options.timeoutMs ?? this.timeoutMs,
+    );
     const headers = new Headers({ accept: "application/json" });
     if (options.body !== undefined) {
       headers.set("content-type", "application/json");
@@ -245,6 +249,7 @@ export class HttpAgenticGateway implements AgenticGateway {
     private readonly timeoutMs: number,
     private readonly bearerToken: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly handoverTimeoutMs: number = timeoutMs,
   ) {
     this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
   }
@@ -307,6 +312,7 @@ export class HttpAgenticGateway implements AgenticGateway {
         body: input,
         bearerToken: this.bearerToken,
         meta,
+        timeoutMs: this.handoverTimeoutMs,
       },
     );
   }
@@ -405,6 +411,7 @@ export class HttpPipelineGateway implements PipelineGateway {
     baseUrl: string,
     timeoutMs: number,
     fetchImpl: typeof fetch = fetch,
+    private readonly handoverTimeoutMs: number = timeoutMs,
   ) {
     this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
   }
@@ -452,6 +459,7 @@ export class HttpPipelineGateway implements PipelineGateway {
         body: input,
         meta,
         authenticate: false,
+        timeoutMs: this.handoverTimeoutMs,
       });
     } catch (error) {
       if (error instanceof IntegrationError && error.status === 422) {
