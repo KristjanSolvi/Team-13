@@ -281,7 +281,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                 <ShieldCheck className="size-3" aria-hidden="true" />
                 Clinician-reviewed source · Corti draft
               </span>
-              {document?.status !== "filed" && (
+              {document === null && (
                 <button
                   type="button"
                   onClick={startOver}
