@@ -5,6 +5,7 @@ import {
   canTransition,
   requireTransition,
 } from "../src/domain/state-machine.js";
+import { DomainError } from "../src/domain/errors.js";
 import type { TaskState } from "../src/domain/types.js";
 
 const states: TaskState[] = [
@@ -28,6 +29,10 @@ const expected: Record<TaskState, TaskState[]> = {
   escalated: ["offered_to_team", "assigned_to_member", "accepted"],
   dismissed: [],
 };
+
+test("state iteration covers every transition fixture row exactly once", () => {
+  assert.deepEqual([...states].sort(), Object.keys(expected).sort());
+});
 
 test("transition table permits exactly the reviewed state pairs", () => {
   for (const from of states) {
@@ -55,9 +60,34 @@ test("allows deterministic timeout assignment and human recovery", () => {
   assert.equal(canTransition("escalated", "offered_to_team"), true);
 });
 
+test("requires a valid transition without throwing", () => {
+  assert.doesNotThrow(() => requireTransition("accepted", "completed"));
+});
+
 test("rejects self-verification shortcuts", () => {
   assert.equal(canTransition("draft", "verified"), false);
-  assert.throws(() => requireTransition("accepted", "verified"), {
-    code: "INVALID_TRANSITION",
-  });
+
+  let caught: unknown;
+  try {
+    requireTransition("accepted", "verified");
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof DomainError);
+  assert.equal(caught.name, "DomainError");
+  assert.equal(caught.code, "INVALID_TRANSITION");
+  assert.equal(caught.message, "accepted cannot transition to verified");
+  assert.equal(caught.retryable, false);
+  assert.equal(caught.status, 409);
+});
+
+test("DomainError applies non-retryable bad-request defaults", () => {
+  const error = new DomainError("TEST_ERROR", "test failure");
+
+  assert.equal(error.name, "DomainError");
+  assert.equal(error.code, "TEST_ERROR");
+  assert.equal(error.message, "test failure");
+  assert.equal(error.retryable, false);
+  assert.equal(error.status, 400);
 });
