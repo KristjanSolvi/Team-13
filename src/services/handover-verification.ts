@@ -10,6 +10,12 @@ interface VerifyHandoverAgentDraftInput {
   idempotencyKey: string;
 }
 
+interface ClaimHandoverAgentContextInput {
+  handoverId: string;
+  contextId: string;
+  occurredAt: string;
+}
+
 interface HandoverAgentVerificationMarker {
   handoverId: string;
   contextId: string;
@@ -18,6 +24,49 @@ interface HandoverAgentVerificationMarker {
 
 export function handoverAgentVerificationScope(handoverId: string): string {
   return `${HANDOVER_AGENT_VERIFICATION_SCOPE}:${handoverId}`;
+}
+
+export function claimHandoverAgentContext(
+  store: SqliteStore,
+  input: ClaimHandoverAgentContextInput,
+): boolean {
+  return store.transaction(() => {
+    const handover = store.requireHandover(input.handoverId);
+    if (handover.status !== "requested") {
+      throw new DomainError(
+        "HANDOVER_CONTEXT_INITIALIZATION_CONFLICT",
+        "Only a requested handover can initialize an agent context",
+        false,
+        409,
+      );
+    }
+    if (
+      !store.claimFreshContext(
+        input.contextId,
+        handover.interactionId,
+        handover.patientId,
+        input.occurredAt,
+      )
+    ) {
+      return false;
+    }
+    store.appendEvent({
+      eventType: "handover.context_initialized",
+      occurredAt: input.occurredAt,
+      correlationId: handover.correlationId,
+      patientId: handover.patientId,
+      interactionId: handover.interactionId,
+      contextId: input.contextId,
+      actor: { type: "agent", id: "corti" },
+      payload: {
+        handoverId: handover.handoverId,
+        contextId: input.contextId,
+        status: handover.status,
+        version: handover.version,
+      },
+    });
+    return true;
+  });
 }
 
 export function verifyHandoverAgentDraft(

@@ -102,6 +102,12 @@ function safeActivityPayload(
       "status",
       "version",
     ],
+    "handover.context_initialized": [
+      "handoverId",
+      "contextId",
+      "status",
+      "version",
+    ],
     "handover.sources_retrieved": [
       "handoverId",
       "sourceSnapshotHash",

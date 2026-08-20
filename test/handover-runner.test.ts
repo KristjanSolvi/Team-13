@@ -24,6 +24,7 @@ import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
 import { HandoverService } from "../src/services/handover-service.js";
 import {
+  claimHandoverAgentContext,
   handoverAgentVerificationScope,
   verifyHandoverAgentDraft,
 } from "../src/services/handover-verification.js";
@@ -114,6 +115,17 @@ class VerificationMarkerFailureStore extends SqliteStore {
   ): void {
     if (this.failMarker) throw new Error("verification marker write failed");
     super.saveProcessedCommand(scope, key, result, createdAt);
+  }
+}
+
+class ContextAuditFailureStore extends SqliteStore {
+  override appendEvent(
+    input: Parameters<SqliteStore["appendEvent"]>[0],
+  ): ReturnType<SqliteStore["appendEvent"]> {
+    if (input.eventType === "handover.context_initialized") {
+      throw new Error("context audit write failed");
+    }
+    return super.appendEvent(input);
   }
 }
 
@@ -289,6 +301,64 @@ test("runtime constructs only configured agents with their distinct MCP names", 
   ]);
 });
 
+test("handover context initialization audit is atomic and the fresh claim is idempotent", (t) => {
+  const failingStore = new ContextAuditFailureStore(openDatabase(":memory:"));
+  const failing = harness(t, failingStore);
+  failingStore.putContextMapping(
+    "ctx-stale",
+    failing.handover.interactionId,
+    PATIENT_ID,
+    NOW,
+  );
+
+  assert.throws(
+    () =>
+      claimHandoverAgentContext(failingStore, {
+        handoverId: failing.handover.handoverId,
+        contextId: "ctx-new",
+        occurredAt: NOW,
+      }),
+    /context audit write failed/,
+  );
+  assert.equal(
+    failingStore.contextForInteraction(failing.handover.interactionId),
+    "ctx-stale",
+  );
+  assert.equal(failingStore.patientForContext("ctx-new"), null);
+  assert.equal(
+    failingStore
+      .listEvents(0)
+      .some(({ eventType }) => eventType === "handover.context_initialized"),
+    false,
+  );
+
+  const successful = harness(t);
+  successful.store.putContextMapping(
+    "ctx-stale-success",
+    successful.handover.interactionId,
+    PATIENT_ID,
+    NOW,
+  );
+  const input = {
+    handoverId: successful.handover.handoverId,
+    contextId: "ctx-new-success",
+    occurredAt: NOW,
+  };
+  assert.equal(claimHandoverAgentContext(successful.store, input), true);
+  assert.equal(claimHandoverAgentContext(successful.store, input), false);
+  const events = successful.store
+    .listEvents(0)
+    .filter(({ eventType }) => eventType === "handover.context_initialized");
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0]?.actor, { type: "agent", id: "corti" });
+  assert.deepEqual(events[0]?.payload, {
+    handoverId: successful.handover.handoverId,
+    contextId: "ctx-new-success",
+    status: "requested",
+    version: 1,
+  });
+});
+
 test("a handover always uses a fresh data-free context and verifies one persisted draft", async (t) => {
   const { store, handovers, handover } = harness(t);
   store.putContextMapping("ctx-stale", handover.interactionId, PATIENT_ID, NOW);
@@ -355,6 +425,18 @@ test("a handover always uses a fresh data-free context and verifies one persiste
   assert.equal(
     store.listEvents(0).some((event) => event.eventType.startsWith("task.")),
     false,
+  );
+  assert.deepEqual(
+    store
+      .listEvents(0)
+      .filter(({ payload }) => payload.handoverId === handover.handoverId)
+      .map(({ eventType }) => eventType),
+    [
+      "handover.requested",
+      "handover.context_initialized",
+      "handover.sources_retrieved",
+      "handover.draft_saved",
+    ],
   );
   const verificationScope = handoverAgentVerificationScope(handover.handoverId);
   const expectedMarker = {

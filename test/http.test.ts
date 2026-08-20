@@ -12,7 +12,10 @@ import type {
   HandoverRecord,
   RenderedHandover,
 } from "../src/domain/handover.js";
-import { verifyHandoverAgentDraft } from "../src/services/handover-verification.js";
+import {
+  claimHandoverAgentContext,
+  verifyHandoverAgentDraft,
+} from "../src/services/handover-verification.js";
 import {
   appHeaders,
   close,
@@ -113,11 +116,13 @@ function createSavingHandoverHarness(
   const harness = createAppHarness({ handoverRunner: runner });
   implementation = async (input) => {
     const contextId = `ctx-http-${input.handoverId}`;
-    harness.store.putContextMapping(
-      contextId,
-      `handover:${input.handoverId}`,
-      input.patientId,
-      harness.clock.now().toISOString(),
+    assert.equal(
+      claimHandoverAgentContext(harness.store, {
+        handoverId: input.handoverId,
+        contextId,
+        occurredAt: harness.clock.now().toISOString(),
+      }),
+      true,
     );
     const saved = harness.handovers.saveDraft({
       handoverId: input.handoverId,
@@ -318,6 +323,7 @@ test("handover draft creation and replay expose only the safe lifecycle envelope
     createdBody.handover.activity.map(({ eventType }) => eventType),
     [
       "handover.requested",
+      "handover.context_initialized",
       "handover.sources_retrieved",
       "handover.draft_saved",
       "handover.render_requested",

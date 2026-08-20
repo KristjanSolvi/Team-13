@@ -1,7 +1,10 @@
 import { DomainError } from "../domain/errors.js";
 import type { HandoverReason, HandoverRecord } from "../domain/handover.js";
 import type { SqliteStore } from "../infra/store.js";
-import { verifyHandoverAgentDraft } from "../services/handover-verification.js";
+import {
+  claimHandoverAgentContext,
+  verifyHandoverAgentDraft,
+} from "../services/handover-verification.js";
 import type { AgentGateway, AgentResult } from "./runner.js";
 
 export interface GenerateHandoverInput {
@@ -81,12 +84,11 @@ export class HandoverAgentRunner {
     }
 
     if (
-      !this.store.claimFreshContext(
-        warmup.contextId,
-        requested.interactionId,
-        input.patientId,
-        new Date().toISOString(),
-      )
+      !claimHandoverAgentContext(this.store, {
+        handoverId: input.handoverId,
+        contextId: warmup.contextId,
+        occurredAt: new Date().toISOString(),
+      })
     ) {
       throw new DomainError(
         "AGENT_CONTEXT_INITIALIZATION_FAILED",
