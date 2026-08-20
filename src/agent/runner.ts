@@ -85,7 +85,10 @@ export class AgentRunner {
       return existing;
     }
 
-    const submitted = await this.gateway.send({ text: WARMUP_PROMPT });
+    const submitted = await this.gateway.send({
+      text: WARMUP_PROMPT,
+      data: { mcpToken: this.mcpToken },
+    });
     const warmup = await this.gateway.waitForCompletion(submitted);
     if (warmup.state !== "completed" || warmup.contextId.length === 0) {
       throw new DomainError(
