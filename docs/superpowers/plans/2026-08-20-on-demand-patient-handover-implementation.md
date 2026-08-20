@@ -794,7 +794,7 @@ git commit -m "feat: expose constrained handover MCP"
 - Modify: `scripts/provision-agent.ts`
 - Modify: `src/index.ts`
 
-- [ ] **Step 1: Write failing runner and configuration tests**
+- [x] **Step 1: Write failing runner and configuration tests**
 
 Test that every new handover:
 
@@ -815,7 +815,7 @@ handoverMcpPublicUrl: "https://example.test/mcp/handover"
 cortiHandoverAgentId: undefined
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```bash
 npm run build
@@ -823,7 +823,7 @@ npm run build
 
 Expected: compile failure for the missing runner and config keys.
 
-- [ ] **Step 3: Add the handover prompt**
+- [x] **Step 3: Add the handover prompt**
 
 Export `HANDOVER_PROMPT` with this exact behavioral contract:
 
@@ -851,7 +851,7 @@ Rules:
 - Return safe observable milestones, never hidden reasoning.`;
 ```
 
-- [ ] **Step 4: Implement the fresh-context runner**
+- [x] **Step 4: Implement the fresh-context runner**
 
 Create `HandoverAgentRunner` with:
 
@@ -881,14 +881,14 @@ export class HandoverAgentRunner {
 context and completed state, then requires the handover row to be `draft` with
 that context. Never reuse `AgentRunner.ensureContext`.
 
-- [ ] **Step 5: Move task publication readback auditing into `AgentRunner`**
+- [x] **Step 5: Move task publication readback auditing into `AgentRunner`**
 
 After `publishApproved` verifies `offered_to_team` and `version + 1`, append one
 `task.publish_verified` event there. This preserves the existing publication
 audit while keeping the MCP read pure. Adjust the runner test to expect one
 event after publication and the MCP test to expect none after arbitrary reads.
 
-- [ ] **Step 6: Parameterize the Corti gateway MCP name**
+- [x] **Step 6: Parameterize the Corti gateway MCP name**
 
 Change the constructor to:
 
@@ -905,7 +905,7 @@ constructor(
 The token data must use the instance MCP name, ensuring the handover bearer is
 attached to `follow-through-handover` rather than the task MCP name.
 
-- [ ] **Step 7: Add configuration and provisioning**
+- [x] **Step 7: Add configuration and provisioning**
 
 Add:
 
@@ -937,7 +937,7 @@ Construct `HandoverService` unconditionally in `src/index.ts`. Construct
 `HandoverAgentRunner` only when `cortiHandoverAgentId` is non-empty, using the
 handover MCP name.
 
-- [ ] **Step 8: Run focused and full root checks**
+- [x] **Step 8: Run focused and full root checks**
 
 ```bash
 npm run build
@@ -947,7 +947,7 @@ npm run check
 
 Expected: all pass without a network call or Corti credit use.
 
-- [ ] **Step 9: Commit the dedicated agent**
+- [x] **Step 9: Commit the dedicated agent**
 
 ```bash
 git add .env.example src/agent/handover-prompt.ts src/agent/handover-runner.ts src/agent/runner.ts src/agent/corti-gateway.ts src/config.ts src/index.ts scripts/provision-agent.ts test/handover-runner.test.ts test/agent-runner.test.ts test/config.test.ts
@@ -1081,7 +1081,7 @@ git commit -m "feat: expose internal handover lifecycle"
 - Modify: `apps/corti-pipeline/src/app.test.ts`
 - Modify: `apps/corti-pipeline/docs/api.md`
 
-- [ ] **Step 1: Write RED normalization and safety tests**
+- [x] **Step 1: Write RED normalization and safety tests**
 
 Add tests for:
 
@@ -1107,7 +1107,7 @@ Use a generated candidate shape like:
 ]
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```bash
 npm --prefix apps/corti-pipeline test -- src/handover.test.ts
@@ -1115,7 +1115,7 @@ npm --prefix apps/corti-pipeline test -- src/handover.test.ts
 
 Expected: failure because `src/handover.ts` is missing.
 
-- [ ] **Step 3: Add duplicated wire types and strict normalizer**
+- [x] **Step 3: Add duplicated wire types and strict normalizer**
 
 In pipeline contracts, duplicate only the cross-process wire shape from
 `src/domain/handover.ts`; do not import outside the package. Export:
@@ -1160,7 +1160,7 @@ from the model:
 `${task.summary} — state: ${task.state}; team: ${task.targetTeamId}; owner: ${task.assignedMemberId ?? "unassigned"}; urgency: ${task.clinicalUrgency}; accept by: ${task.acceptBy}; due by: ${task.dueBy}.`
 ```
 
-- [ ] **Step 4: Add the gateway method and Corti call**
+- [x] **Step 4: Add the gateway method and Corti call**
 
 Extend `CortiGateway`:
 
@@ -1180,14 +1180,14 @@ Do not invoke Text Generation when all three narrative sections are empty. In
 that case return only deterministic task and unknown sections with
 `creditsConsumed: 0`.
 
-- [ ] **Step 5: Add the strict HTTP route**
+- [x] **Step 5: Add the strict HTTP route**
 
 Add `POST /api/corti/handovers/render`. Validate the complete nested packet,
 UUID, patient ID, and snapshot hash before calling the gateway. Add
 `/api/corti/handovers/render` to the pipeline API documentation with a complete
 request/response example.
 
-- [ ] **Step 6: Run pipeline checks**
+- [x] **Step 6: Run pipeline checks**
 
 ```bash
 npm --prefix apps/corti-pipeline run typecheck
@@ -1197,7 +1197,7 @@ npm --prefix apps/corti-pipeline run build:pipeline
 
 Expected: all pass; fake gateway tests use no network or credits.
 
-- [ ] **Step 7: Commit the renderer**
+- [x] **Step 7: Commit the renderer**
 
 ```bash
 git add apps/corti-pipeline/src/contracts.ts apps/corti-pipeline/src/handover.ts apps/corti-pipeline/src/handover.test.ts apps/corti-pipeline/src/gateway.ts apps/corti-pipeline/src/corti-gateway.ts apps/corti-pipeline/src/app.ts apps/corti-pipeline/src/app.test.ts apps/corti-pipeline/docs/api.md
