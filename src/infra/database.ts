@@ -109,6 +109,32 @@ export function openDatabase(databasePath: string): DatabaseSync {
       PRIMARY KEY (command_scope, idempotency_key)
     );
 
+    CREATE TABLE IF NOT EXISTS handovers (
+      handover_id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      interaction_id TEXT NOT NULL UNIQUE,
+      context_id TEXT,
+      requested_by TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      focus TEXT,
+      correlation_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      status TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      packet_json TEXT,
+      rendered_json TEXT,
+      source_snapshot_json TEXT,
+      source_snapshot_hash TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      generated_at TEXT,
+      UNIQUE (requested_by, idempotency_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_handovers_patient_created
+      ON handovers(patient_id, created_at, handover_id);
+
     CREATE TABLE IF NOT EXISTS task_declines (
       task_id TEXT NOT NULL REFERENCES tasks(task_id),
       member_id TEXT NOT NULL,
