@@ -96,6 +96,69 @@ describe("HTTP gateways", () => {
     expect(options?.method).toBe("POST");
   });
 
+  it("maps dedicated renderer 422 failures to a safe retryable gateway error", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "UNSAFE_RENDERED_HANDOVER",
+            message: "hidden unsafe output included a private prompt",
+            retryable: false,
+          },
+        }),
+        { status: 422 },
+      ),
+    );
+    const gateway = new HttpPipelineGateway(
+      "http://pipeline.test",
+      1_000,
+      fetchImpl,
+    );
+
+    await expect(
+      gateway.renderHandover(
+        { handoverId: "11111111-1111-4111-8111-111111111111" },
+        { correlationId: "corr-handover-1" },
+      ),
+    ).rejects.toMatchObject({
+      code: "HANDOVER_RENDER_FAILED",
+      message: "The handover renderer rejected its output",
+      status: 502,
+      retryable: true,
+    });
+  });
+
+  it("preserves 422 errors for generic allow-listed pipeline requests", async () => {
+    const gateway = new HttpPipelineGateway(
+      "http://pipeline.test",
+      1_000,
+      vi.fn<typeof fetch>(async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PIPELINE_VALIDATION_FAILED",
+              message: "Candidate input was invalid",
+              retryable: false,
+            },
+          }),
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(
+      gateway.request(
+        "/api/corti/candidates/generate",
+        {},
+        { correlationId: "corr-generic-422" },
+      ),
+    ).rejects.toMatchObject({
+      code: "PIPELINE_VALIDATION_FAILED",
+      status: 422,
+      retryable: false,
+    });
+  });
+
   it("keeps the agentic credential server-side and forwards request metadata", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ signalEventId: "event-1" }), {

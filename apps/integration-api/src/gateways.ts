@@ -445,13 +445,25 @@ export class HttpPipelineGateway implements PipelineGateway {
     });
   }
 
-  renderHandover(input: unknown, meta: RequestMeta): Promise<unknown> {
-    return this.client.request("/api/corti/handovers/render", {
-      method: "POST",
-      body: input,
-      meta,
-      authenticate: false,
-    });
+  async renderHandover(input: unknown, meta: RequestMeta): Promise<unknown> {
+    try {
+      return await this.client.request("/api/corti/handovers/render", {
+        method: "POST",
+        body: input,
+        meta,
+        authenticate: false,
+      });
+    } catch (error) {
+      if (error instanceof IntegrationError && error.status === 422) {
+        throw new IntegrationError(
+          "HANDOVER_RENDER_FAILED",
+          "The handover renderer rejected its output",
+          502,
+          true,
+        );
+      }
+      throw error;
+    }
   }
 }
 

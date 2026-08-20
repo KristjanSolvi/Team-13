@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import { z } from "zod";
 
@@ -31,9 +32,16 @@ export interface EhrDependencies {
 }
 
 const sourceSnapshotHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const handoverIdSchema = z.string().uuid();
+const trimmedString = (maximum: number) =>
+  z
+    .string()
+    .min(1)
+    .max(maximum)
+    .refine((value) => value === value.trim(), "Expected trimmed text");
 const groundedStatementSchema = z
   .object({
-    statement: z.string().trim().min(1).max(1_000),
+    statement: trimmedString(1_000),
     sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
   })
   .strict();
@@ -67,24 +75,24 @@ const handoverPacketSchema = z
     outstandingTasks: z.array(handoverTaskItemSchema).max(50),
     awaitingVerification: z.array(handoverTaskItemSchema).max(50),
     escalations: z.array(handoverTaskItemSchema).max(50),
-    unknowns: z.array(z.string().trim().min(1).max(500)).max(20),
+    unknowns: z.array(trimmedString(500)).max(20),
   })
   .strict();
 const renderedStatementSchema = z
   .object({
-    statement: z.string().trim().min(1).max(1_000),
+    statement: trimmedString(1_000),
     sourceRefs: z.array(z.string().min(1).max(240)).max(20),
   })
   .strict();
 const renderedHandoverSchema = z
   .object({
-    title: z.string().trim().min(1).max(160),
+    title: trimmedString(160),
     sections: z
       .array(
         z
           .object({
-            sectionId: z.string().trim().min(1).max(80),
-            heading: z.string().trim().min(1).max(160),
+            sectionId: trimmedString(80),
+            heading: trimmedString(160),
             statements: z.array(renderedStatementSchema).max(50),
           })
           .strict(),
@@ -93,9 +101,125 @@ const renderedHandoverSchema = z
     creditsConsumed: z.number().nonnegative(),
   })
   .strict();
+const handoverActivityActorSchema = z
+  .object({
+    type: z.enum(["agent", "clinician", "team_member", "router", "system"]),
+    id: z.string().min(1).max(160),
+  })
+  .strict();
+const handoverActivityBase = {
+  occurredAt: z.string().datetime(),
+  actor: handoverActivityActorSchema,
+};
+const handoverActivitySchema = z.discriminatedUnion("eventType", [
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.requested"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          reason: z.enum(["assignment", "on_demand"]),
+          focusProvided: z.boolean(),
+          status: z.literal("requested"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.sources_retrieved"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          sourceSnapshotHash: sourceSnapshotHashSchema,
+          recordItemCount: z.number().int().nonnegative(),
+          threadCount: z.number().int().nonnegative(),
+          taskCount: z.number().int().nonnegative(),
+          status: z.literal("draft"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.draft_saved"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          sourceSnapshotHash: sourceSnapshotHashSchema,
+          status: z.literal("draft"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.render_requested"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          status: z.literal("draft"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.source_changed"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          expectedSnapshotHash: sourceSnapshotHashSchema,
+          currentSnapshotHash: sourceSnapshotHashSchema,
+          status: z.literal("draft"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.rendered"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          sourceSnapshotHash: sourceSnapshotHashSchema,
+          version: z.number().int().positive(),
+          creditsConsumed: z.number().nonnegative(),
+          sectionCount: z.number().int().nonnegative(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
+      eventType: z.literal("handover.failed"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          code: z.string().min(1).max(160),
+          retryable: z.boolean(),
+          status: z.literal("failed"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
 const publicHandoverSchema = z
   .object({
-    handoverId: z.string().uuid(),
+    handoverId: handoverIdSchema,
     patientId: z.string().min(1).max(160),
     status: z.literal("draft"),
     renderingStatus: z.enum(["pending", "rendered"]),
@@ -106,7 +230,7 @@ const publicHandoverSchema = z
     sourceSnapshotHash: sourceSnapshotHashSchema,
     packet: handoverPacketSchema,
     rendered: renderedHandoverSchema.nullable(),
-    activity: z.array(z.record(z.string(), z.unknown())),
+    activity: z.array(handoverActivitySchema),
   })
   .strict();
 const handoverEnvelopeSchema = z
@@ -120,7 +244,8 @@ const handoverEnvelopeSchema = z
     const isRendered = value.lifecycleStatus === "rendered";
     if (
       (value.handover.renderingStatus === "rendered") !== isRendered ||
-      (value.handover.rendered !== null) !== isRendered
+      (value.handover.rendered !== null) !== isRendered ||
+      (value.handover.generatedAt !== null) !== isRendered
     ) {
       context.addIssue({
         code: "custom",
@@ -353,7 +478,11 @@ export class IntegrationService {
     const draftEnvelope = parseHandoverEnvelope(
       await createDraft.call(this.agentic, patientId, input, meta),
     );
-    if (draftEnvelope.handover.patientId !== patientId) {
+    if (
+      draftEnvelope.handover.patientId !== patientId ||
+      draftEnvelope.handover.reason !== input.reason ||
+      draftEnvelope.handover.requestedBy !== meta.actorId
+    ) {
       throw invalidUpstreamHandover();
     }
     if (draftEnvelope.lifecycleStatus === "rendered") {
@@ -387,7 +516,12 @@ export class IntegrationService {
       finalEnvelope.lifecycleStatus !== "rendered" ||
       finalEnvelope.handover.handoverId !== draft.handoverId ||
       finalEnvelope.handover.patientId !== draft.patientId ||
-      finalEnvelope.handover.sourceSnapshotHash !== draft.sourceSnapshotHash
+      finalEnvelope.handover.reason !== draft.reason ||
+      finalEnvelope.handover.requestedBy !== draft.requestedBy ||
+      finalEnvelope.handover.sourceSnapshotHash !== draft.sourceSnapshotHash ||
+      finalEnvelope.handover.version !== draft.version + 1 ||
+      !sameJson(finalEnvelope.handover.packet, draft.packet) ||
+      !sameJson(finalEnvelope.handover.rendered, rendered)
     ) {
       throw invalidUpstreamHandover();
     }
@@ -416,6 +550,10 @@ function parseHandoverEnvelope(value: unknown): HandoverEnvelope {
     throw invalidUpstreamHandover();
   }
   return result.data;
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return isDeepStrictEqual(left, right);
 }
 
 function invalidUpstreamHandover(): IntegrationError {

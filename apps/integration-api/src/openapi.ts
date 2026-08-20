@@ -30,6 +30,20 @@ function pipelineProxy(summary: string, successStatus: "200" | "201" = "200") {
   } as const;
 }
 
+function handoverActivityVariant(eventType: string, payloadSchema: string) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["eventType", "occurredAt", "actor", "payload"],
+    properties: {
+      eventType: { const: eventType },
+      occurredAt: { type: "string", format: "date-time" },
+      actor: { $ref: "#/components/schemas/HandoverActivityActor" },
+      payload: { $ref: `#/components/schemas/${payloadSchema}` },
+    },
+  } as const;
+}
+
 export const integrationOpenApi = {
   openapi: "3.1.0",
   info: {
@@ -585,9 +599,346 @@ export const integrationOpenApi = {
             type: "string",
             pattern: "^sha256:[a-f0-9]{64}$",
           },
-          packet: { type: "object", additionalProperties: true },
-          rendered: { type: ["object", "null"], additionalProperties: true },
-          activity: { type: "array", items: { type: "object" } },
+          packet: { $ref: "#/components/schemas/HandoverPacket" },
+          rendered: {
+            oneOf: [
+              { $ref: "#/components/schemas/RenderedHandover" },
+              { type: "null" },
+            ],
+          },
+          activity: {
+            type: "array",
+            items: { $ref: "#/components/schemas/HandoverActivity" },
+          },
+        },
+      },
+      GroundedStatement: {
+        type: "object",
+        additionalProperties: false,
+        required: ["statement", "sourceRefs"],
+        properties: {
+          statement: { type: "string", minLength: 1, maxLength: 1000 },
+          sourceRefs: {
+            type: "array",
+            minItems: 1,
+            maxItems: 20,
+            items: { type: "string", minLength: 1, maxLength: 240 },
+          },
+        },
+      },
+      HandoverTaskItem: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "taskId",
+          "threadId",
+          "summary",
+          "state",
+          "targetTeamId",
+          "assignedMemberId",
+          "clinicalUrgency",
+          "acceptBy",
+          "dueBy",
+          "version",
+          "sourceRefs",
+        ],
+        properties: {
+          taskId: { type: "string", format: "uuid" },
+          threadId: { type: "string", format: "uuid" },
+          summary: { type: "string", minLength: 1, maxLength: 240 },
+          state: {
+            type: "string",
+            enum: [
+              "draft",
+              "offered_to_team",
+              "assigned_to_member",
+              "accepted",
+              "completed",
+              "escalated",
+            ],
+          },
+          targetTeamId: { type: "string", minLength: 1, maxLength: 160 },
+          assignedMemberId: {
+            type: ["string", "null"],
+            minLength: 1,
+            maxLength: 160,
+          },
+          clinicalUrgency: {
+            type: "string",
+            enum: ["high", "medium", "routine"],
+          },
+          acceptBy: { type: "string", format: "date-time" },
+          dueBy: { type: "string", format: "date-time" },
+          version: { type: "integer", minimum: 1 },
+          sourceRefs: {
+            type: "array",
+            minItems: 1,
+            maxItems: 20,
+            items: { type: "string", minLength: 1, maxLength: 240 },
+          },
+        },
+      },
+      HandoverPacket: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "situation",
+          "background",
+          "currentConcerns",
+          "outstandingTasks",
+          "awaitingVerification",
+          "escalations",
+          "unknowns",
+        ],
+        properties: {
+          situation: {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/GroundedStatement" },
+          },
+          background: {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/GroundedStatement" },
+          },
+          currentConcerns: {
+            type: "array",
+            maxItems: 20,
+            items: { $ref: "#/components/schemas/GroundedStatement" },
+          },
+          outstandingTasks: {
+            type: "array",
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/HandoverTaskItem" },
+          },
+          awaitingVerification: {
+            type: "array",
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/HandoverTaskItem" },
+          },
+          escalations: {
+            type: "array",
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/HandoverTaskItem" },
+          },
+          unknowns: {
+            type: "array",
+            maxItems: 20,
+            items: { type: "string", minLength: 1, maxLength: 500 },
+          },
+        },
+      },
+      RenderedStatement: {
+        type: "object",
+        additionalProperties: false,
+        required: ["statement", "sourceRefs"],
+        properties: {
+          statement: { type: "string", minLength: 1, maxLength: 1000 },
+          sourceRefs: {
+            type: "array",
+            maxItems: 20,
+            items: { type: "string", minLength: 1, maxLength: 240 },
+          },
+        },
+      },
+      RenderedSection: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sectionId", "heading", "statements"],
+        properties: {
+          sectionId: { type: "string", minLength: 1, maxLength: 80 },
+          heading: { type: "string", minLength: 1, maxLength: 160 },
+          statements: {
+            type: "array",
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/RenderedStatement" },
+          },
+        },
+      },
+      RenderedHandover: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "sections", "creditsConsumed"],
+        properties: {
+          title: { type: "string", minLength: 1, maxLength: 160 },
+          sections: {
+            type: "array",
+            maxItems: 10,
+            items: { $ref: "#/components/schemas/RenderedSection" },
+          },
+          creditsConsumed: { type: "number", minimum: 0 },
+        },
+      },
+      HandoverActivityActor: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "id"],
+        properties: {
+          type: {
+            type: "string",
+            enum: ["agent", "clinician", "team_member", "router", "system"],
+          },
+          id: { type: "string", minLength: 1, maxLength: 160 },
+        },
+      },
+      HandoverRequestedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: ["handoverId", "reason", "focusProvided", "status", "version"],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          reason: { type: "string", enum: ["assignment", "on_demand"] },
+          focusProvided: { type: "boolean" },
+          status: { const: "requested" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverSourcesRetrievedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "handoverId",
+          "sourceSnapshotHash",
+          "recordItemCount",
+          "threadCount",
+          "taskCount",
+          "status",
+          "version",
+        ],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          sourceSnapshotHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          recordItemCount: { type: "integer", minimum: 0 },
+          threadCount: { type: "integer", minimum: 0 },
+          taskCount: { type: "integer", minimum: 0 },
+          status: { const: "draft" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverDraftSavedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: ["handoverId", "sourceSnapshotHash", "status", "version"],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          sourceSnapshotHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          status: { const: "draft" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverRenderRequestedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: ["handoverId", "status", "version"],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          status: { const: "draft" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverSourceChangedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "handoverId",
+          "expectedSnapshotHash",
+          "currentSnapshotHash",
+          "status",
+          "version",
+        ],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          expectedSnapshotHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          currentSnapshotHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          status: { const: "draft" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverRenderedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "handoverId",
+          "sourceSnapshotHash",
+          "version",
+          "creditsConsumed",
+          "sectionCount",
+        ],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          sourceSnapshotHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          version: { type: "integer", minimum: 1 },
+          creditsConsumed: { type: "number", minimum: 0 },
+          sectionCount: { type: "integer", minimum: 0 },
+        },
+      },
+      HandoverFailedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: ["handoverId", "code", "retryable", "status", "version"],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          code: { type: "string", minLength: 1, maxLength: 160 },
+          retryable: { type: "boolean" },
+          status: { const: "failed" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      HandoverRequestedActivity: handoverActivityVariant(
+        "handover.requested",
+        "HandoverRequestedPayload",
+      ),
+      HandoverSourcesRetrievedActivity: handoverActivityVariant(
+        "handover.sources_retrieved",
+        "HandoverSourcesRetrievedPayload",
+      ),
+      HandoverDraftSavedActivity: handoverActivityVariant(
+        "handover.draft_saved",
+        "HandoverDraftSavedPayload",
+      ),
+      HandoverRenderRequestedActivity: handoverActivityVariant(
+        "handover.render_requested",
+        "HandoverRenderRequestedPayload",
+      ),
+      HandoverSourceChangedActivity: handoverActivityVariant(
+        "handover.source_changed",
+        "HandoverSourceChangedPayload",
+      ),
+      HandoverRenderedActivity: handoverActivityVariant(
+        "handover.rendered",
+        "HandoverRenderedPayload",
+      ),
+      HandoverFailedActivity: handoverActivityVariant(
+        "handover.failed",
+        "HandoverFailedPayload",
+      ),
+      HandoverActivity: {
+        oneOf: [
+          { $ref: "#/components/schemas/HandoverRequestedActivity" },
+          { $ref: "#/components/schemas/HandoverSourcesRetrievedActivity" },
+          { $ref: "#/components/schemas/HandoverDraftSavedActivity" },
+          { $ref: "#/components/schemas/HandoverRenderRequestedActivity" },
+          { $ref: "#/components/schemas/HandoverSourceChangedActivity" },
+          { $ref: "#/components/schemas/HandoverRenderedActivity" },
+          { $ref: "#/components/schemas/HandoverFailedActivity" },
+        ],
+        discriminator: {
+          propertyName: "eventType",
+          mapping: {
+            "handover.requested":
+              "#/components/schemas/HandoverRequestedActivity",
+            "handover.sources_retrieved":
+              "#/components/schemas/HandoverSourcesRetrievedActivity",
+            "handover.draft_saved":
+              "#/components/schemas/HandoverDraftSavedActivity",
+            "handover.render_requested":
+              "#/components/schemas/HandoverRenderRequestedActivity",
+            "handover.source_changed":
+              "#/components/schemas/HandoverSourceChangedActivity",
+            "handover.rendered":
+              "#/components/schemas/HandoverRenderedActivity",
+            "handover.failed": "#/components/schemas/HandoverFailedActivity",
+          },
         },
       },
       EhrPatientRecord: {
