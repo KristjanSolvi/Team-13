@@ -370,6 +370,46 @@ test("concurrent identical publications persist one verification event and one e
   );
 });
 
+test("verified publication replay returns its exact result after downstream task progress", async (t) => {
+  const { store, ledger, draft, input } = publicationHarness(t);
+  let sends = 0;
+  const gateway: AgentGateway = {
+    async send() {
+      sends += 1;
+      ledger.publishDraft(
+        draft.taskId,
+        input.approvalProof,
+        draft.version,
+        input.idempotencyKey,
+      );
+      return result("ctx-karen", "corti-publish-exact", "completed");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const runner = new AgentRunner(gateway, store, "mcp-secret");
+  const published = await runner.publishApproved(input);
+  ledger.acceptTask(
+    draft.taskId,
+    draft.version + 1,
+    "nurse-a",
+    "accept-after-verification",
+  );
+
+  const replay = await runner.publishApproved(input);
+
+  assert.deepEqual(replay, published);
+  assert.equal(store.requireTask(draft.taskId).state, "accepted");
+  assert.equal(sends, 1);
+  assert.equal(
+    store
+      .listEvents(0)
+      .filter((event) => event.eventType === "task.publish_verified").length,
+    1,
+  );
+});
+
 test("lost Corti response recovers an exact processed publication without another agent call", async (t) => {
   const { store, ledger, draft, input } = publicationHarness(t);
   let sends = 0;

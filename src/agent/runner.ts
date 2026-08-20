@@ -236,6 +236,17 @@ export class AgentRunner {
           403,
         );
       }
+      const contextId = this.store.contextForInteraction(input.interactionId);
+      if (
+        contextId !== null &&
+        this.store.patientForContext(contextId) === input.patientId &&
+        this.store.getProcessedCommand(
+          this.verificationScope(input),
+          input.idempotencyKey,
+        ) !== null
+      ) {
+        return { kind: "recover", contextId };
+      }
       if (task.state === "draft" && task.version === input.expectedVersion) {
         return { kind: "publish" };
       }
@@ -243,7 +254,6 @@ export class AgentRunner {
         `publish:${input.taskId}`,
         input.idempotencyKey,
       );
-      const contextId = this.store.contextForInteraction(input.interactionId);
       if (
         task.state === "offered_to_team" &&
         task.version === input.expectedVersion + 1 &&
