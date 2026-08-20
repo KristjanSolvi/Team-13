@@ -51,6 +51,75 @@ export const handoverRequestSchema = z
 
 export type HandoverRequest = z.infer<typeof handoverRequestSchema>;
 
+const meetingCommandKey = z.string().min(8).max(200);
+const positiveVersion = z.number().int().positive();
+
+export const wardMeetingStartSchema = z
+  .object({
+    wardId: z.string().min(1).max(200),
+    encounterIdentifier: z.string().min(1).max(120).optional(),
+    idempotencyKey: meetingCommandKey,
+  })
+  .strict();
+
+export const meetingSegmentOpenSchema = z
+  .object({
+    patientId: z.string().min(1).max(160),
+    expectedMeetingVersion: positiveVersion,
+    idempotencyKey: meetingCommandKey,
+  })
+  .strict();
+
+export const meetingTranscriptAppendSchema = z
+  .object({
+    patientSegmentId: z.string().uuid().nullable(),
+    segments: z
+      .array(
+        z
+          .object({
+            segmentKey: z.string().min(1).max(200),
+            text: z.string().min(1).max(4_000),
+            startSeconds: z.number().nonnegative(),
+            endSeconds: z.number().nonnegative(),
+            speakerId: z.number().int().optional(),
+            isFinal: z.boolean(),
+            audioQuality: z.enum(["clear", "uncertain"]),
+          })
+          .strict()
+          .refine((segment) => segment.endSeconds >= segment.startSeconds, {
+            path: ["endSeconds"],
+            message: "Transcript end cannot precede its start",
+          }),
+      )
+      .min(1)
+      .max(500),
+    idempotencyKey: meetingCommandKey,
+  })
+  .strict();
+
+export const meetingSegmentCloseSchema = z
+  .object({
+    expectedMeetingVersion: positiveVersion,
+    expectedSegmentVersion: positiveVersion,
+    idempotencyKey: meetingCommandKey,
+  })
+  .strict();
+
+export const wardMeetingCompleteSchema = z
+  .object({
+    expectedMeetingVersion: positiveVersion,
+    idempotencyKey: meetingCommandKey,
+  })
+  .strict();
+
+export type WardMeetingStart = z.infer<typeof wardMeetingStartSchema>;
+export type MeetingSegmentOpen = z.infer<typeof meetingSegmentOpenSchema>;
+export type MeetingTranscriptAppend = z.infer<
+  typeof meetingTranscriptAppendSchema
+>;
+export type MeetingSegmentClose = z.infer<typeof meetingSegmentCloseSchema>;
+export type WardMeetingComplete = z.infer<typeof wardMeetingCompleteSchema>;
+
 const commandBase = {
   expectedVersion: z.number().int().positive(),
   idempotencyKey: z.string().min(8).max(200),

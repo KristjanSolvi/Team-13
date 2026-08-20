@@ -247,7 +247,6 @@ export class MeetingService {
     const scope = `meeting:start:${input.actor.id}`;
     const requestHash = commandHash({
       wardId: input.wardId,
-      interactionId: input.interactionId,
       actor: input.actor,
     });
     return this.store.transaction(() => {

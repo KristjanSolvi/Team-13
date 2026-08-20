@@ -6,8 +6,13 @@ import { z } from "zod";
 import type {
   FollowThroughCandidate,
   HandoverRequest,
+  MeetingSegmentClose,
+  MeetingSegmentOpen,
+  MeetingTranscriptAppend,
   PipelineProxyPath,
   TaskCommand,
+  WardMeetingComplete,
+  WardMeetingStart,
 } from "./contracts.js";
 import { IntegrationError } from "./errors.js";
 import type {
@@ -32,6 +37,144 @@ export interface EhrDependencies {
 }
 
 const sourceSnapshotHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const ambientSessionSchema = z
+  .object({
+    interactionId: z.string().min(1).max(200),
+    accessToken: z.string().min(1),
+    expiresIn: z.number().int().positive(),
+    tenantName: z.string().min(1),
+    environment: z.string().min(1),
+    primaryLanguage: z.string().min(1),
+    outputLanguage: z.string().min(1),
+  })
+  .strict();
+const wardMeetingSchema = z
+  .object({
+    meetingId: z.string().uuid(),
+    wardId: z.string().min(1).max(200),
+    interactionId: z.string().min(1).max(200),
+    status: z.enum(["recording", "completed", "failed"]),
+    startedBy: z.string().min(1).max(200),
+    startedAt: z.string().datetime(),
+    completedAt: z.string().datetime().nullable(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+const patientMeetingSegmentSchema = z
+  .object({
+    segmentId: z.string().uuid(),
+    meetingId: z.string().uuid(),
+    patientId: z.string().min(1).max(200),
+    status: z.enum([
+      "recording",
+      "closed",
+      "reconciling",
+      "reconciled",
+      "failed",
+    ]),
+    openedBy: z.string().min(1).max(200),
+    openedAt: z.string().datetime(),
+    closedAt: z.string().datetime().nullable(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+const meetingResultSchema = z
+  .object({ meeting: wardMeetingSchema, replayed: z.boolean() })
+  .strict();
+const patientMeetingResultSchema = meetingResultSchema
+  .extend({ segment: patientMeetingSegmentSchema })
+  .strict();
+const transcriptEvidenceSchema = z
+  .object({
+    evidenceId: z.string().uuid(),
+    meetingId: z.string().uuid(),
+    patientSegmentId: z.string().uuid().nullable(),
+    interactionId: z.string().min(1).max(200),
+    segmentKey: z.string().min(1).max(200),
+    text: z.string().min(1).max(4_000),
+    startSeconds: z.number().nonnegative(),
+    endSeconds: z.number().nonnegative(),
+    speakerId: z.number().int().optional(),
+    isFinal: z.boolean(),
+    audioQuality: z.enum(["clear", "uncertain"]),
+    eligible: z.boolean(),
+    sourceRef: z.string().nullable(),
+    recordedAt: z.string().datetime(),
+  })
+  .strict();
+const meetingTranscriptResultSchema = z
+  .object({
+    evidence: z.array(transcriptEvidenceSchema).max(500),
+    ignoredInterimCount: z.number().int().nonnegative(),
+    replayed: z.boolean(),
+  })
+  .strict();
+const meetingReconciliationSummarySchema = z
+  .object({
+    reconciliationId: z.string().uuid(),
+    meetingId: z.string().uuid(),
+    patientSegmentId: z.string().uuid(),
+    patientId: z.string().min(1).max(200),
+    status: z.enum(["requested", "saved", "failed"]),
+    newDraftTaskIds: z.array(z.string().uuid()).max(50),
+    carryForwardTaskRefs: z.array(z.string().min(1).max(240)).max(50),
+    version: z.number().int().positive(),
+  })
+  .strip();
+const meetingDraftTaskSummarySchema = z
+  .object({
+    taskId: z.string().uuid(),
+    summary: z.string().min(1).max(240),
+    state: z.enum([
+      "draft",
+      "offered_to_team",
+      "assigned_to_member",
+      "accepted",
+      "completed",
+      "verified",
+      "escalated",
+      "dismissed",
+    ]),
+    version: z.number().int().positive(),
+  })
+  .strip();
+const meetingCarryForwardSummarySchema = z
+  .object({
+    warningId: z.string().uuid(),
+    taskRef: z.string().min(1).max(240),
+    reason: z.enum(["unresolved", "not_discussed", "overdue"]),
+  })
+  .strip();
+const meetingReconciliationResultSchema = z
+  .object({
+    replayed: z.boolean(),
+    reconciliation: meetingReconciliationSummarySchema,
+    newDraftTasks: z.array(meetingDraftTaskSummarySchema).max(50),
+    carryForwards: z.array(meetingCarryForwardSummarySchema).max(50),
+  })
+  .strict();
+const meetingReadSchema = z
+  .object({
+    meeting: wardMeetingSchema,
+    segments: z
+      .array(
+        z
+          .object({
+            segment: patientMeetingSegmentSchema,
+            evidenceCount: z.number().int().nonnegative(),
+            eligibleEvidenceCount: z.number().int().nonnegative(),
+            reconciliation: meetingReconciliationSummarySchema.nullable(),
+            newDraftTasks: z.array(meetingDraftTaskSummarySchema).max(50),
+            carryForwards: z
+              .array(meetingCarryForwardSummarySchema)
+              .max(50),
+          })
+          .strict(),
+      )
+      .max(500),
+    unscopedTranscriptCount: z.number().int().nonnegative(),
+  })
+  .strict();
 const handoverIdSchema = z.string().uuid();
 const trimmedString = (maximum: number) =>
   z
@@ -542,6 +685,200 @@ export class IntegrationService {
     return this.pipeline.request(path, body, { correlationId });
   }
 
+  async startWardMeeting(
+    input: WardMeetingStart,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<{ status: 200 | 201; body: unknown }> {
+    const startMeeting = this.agentic.startWardMeeting;
+    if (startMeeting === undefined) throw meetingNotConfigured();
+    const ambientResult = await this.pipeline.request(
+      "/api/corti/ambient/session",
+      {
+        encounterIdentifier:
+          input.encounterIdentifier ??
+          `ward-meeting:${createHash("sha256")
+            .update(input.idempotencyKey)
+            .digest("hex")
+            .slice(0, 32)}`,
+      },
+      meta,
+    );
+    const ambientSession = parseUpstreamMeeting(
+      ambientSessionSchema,
+      ambientResult.body,
+    );
+    const result = parseUpstreamMeeting(
+      meetingResultSchema,
+      await startMeeting.call(
+        this.agentic,
+        {
+          wardId: input.wardId,
+          interactionId: ambientSession.interactionId,
+          idempotencyKey: input.idempotencyKey,
+        },
+        meta,
+      ),
+    );
+    if (
+      result.meeting.wardId !== input.wardId ||
+      result.meeting.startedBy !== meta.actorId ||
+      (!result.replayed &&
+        result.meeting.interactionId !== ambientSession.interactionId)
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    const replaySafeAmbientSession = result.replayed
+      ? { ...ambientSession, interactionId: result.meeting.interactionId }
+      : ambientSession;
+    return {
+      status: result.replayed ? 200 : 201,
+      body: { ...result, ambientSession: replaySafeAmbientSession },
+    };
+  }
+
+  async openMeetingSegment(
+    meetingId: string,
+    input: MeetingSegmentOpen,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<{ status: 200 | 201; body: unknown }> {
+    const open = this.agentic.openMeetingSegment;
+    if (open === undefined) throw meetingNotConfigured();
+    const result = parseUpstreamMeeting(
+      patientMeetingResultSchema,
+      await open.call(this.agentic, meetingId, input, meta),
+    );
+    if (
+      result.meeting.meetingId !== meetingId ||
+      result.segment.meetingId !== meetingId ||
+      result.segment.patientId !== input.patientId ||
+      result.segment.openedBy !== meta.actorId
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    return { status: result.replayed ? 200 : 201, body: result };
+  }
+
+  async appendMeetingTranscript(
+    meetingId: string,
+    input: MeetingTranscriptAppend,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<{ status: 200 | 201; body: unknown }> {
+    const append = this.agentic.appendMeetingTranscript;
+    if (append === undefined) throw meetingNotConfigured();
+    const result = parseUpstreamMeeting(
+      meetingTranscriptResultSchema,
+      await append.call(this.agentic, meetingId, input, meta),
+    );
+    if (
+      result.evidence.some(
+        (evidence) =>
+          evidence.meetingId !== meetingId ||
+          evidence.patientSegmentId !== input.patientSegmentId,
+      )
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    return { status: result.replayed ? 200 : 201, body: result };
+  }
+
+  async closeAndReconcileMeetingSegment(
+    meetingId: string,
+    segmentId: string,
+    input: MeetingSegmentClose,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<{ status: 200 | 201; body: unknown }> {
+    const close = this.agentic.closeMeetingSegment;
+    const reconcile = this.agentic.reconcileMeetingSegment;
+    if (close === undefined || reconcile === undefined) {
+      throw meetingNotConfigured();
+    }
+    const closed = parseUpstreamMeeting(
+      patientMeetingResultSchema,
+      await close.call(this.agentic, meetingId, segmentId, input, meta),
+    );
+    if (
+      closed.meeting.meetingId !== meetingId ||
+      closed.segment.meetingId !== meetingId ||
+      closed.segment.segmentId !== segmentId ||
+      closed.segment.status !== "closed"
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    const reconciliationKey = `meeting-close:${createHash("sha256")
+      .update(meetingId)
+      .update("\0")
+      .update(segmentId)
+      .update("\0")
+      .update(input.idempotencyKey)
+      .digest("hex")
+      .slice(0, 32)}`;
+    const reconciled = parseUpstreamMeeting(
+      meetingReconciliationResultSchema,
+      await reconcile.call(
+        this.agentic,
+        meetingId,
+        segmentId,
+        {
+          expectedSegmentVersion: closed.segment.version,
+          idempotencyKey: reconciliationKey,
+        },
+        meta,
+      ),
+    );
+    if (
+      reconciled.reconciliation.meetingId !== meetingId ||
+      reconciled.reconciliation.patientSegmentId !== segmentId ||
+      reconciled.reconciliation.status !== "saved"
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    return {
+      status: closed.replayed && reconciled.replayed ? 200 : 201,
+      body: {
+        ...closed,
+        reconciliation: reconciled.reconciliation,
+        newDraftTasks: reconciled.newDraftTasks,
+        carryForwards: reconciled.carryForwards,
+      },
+    };
+  }
+
+  async completeWardMeeting(
+    meetingId: string,
+    input: WardMeetingComplete,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<unknown> {
+    const complete = this.agentic.completeWardMeeting;
+    if (complete === undefined) throw meetingNotConfigured();
+    const result = parseUpstreamMeeting(
+      meetingResultSchema,
+      await complete.call(this.agentic, meetingId, input, meta),
+    );
+    if (
+      result.meeting.meetingId !== meetingId ||
+      result.meeting.status !== "completed"
+    ) {
+      throw invalidUpstreamMeeting();
+    }
+    return result;
+  }
+
+  async getWardMeeting(
+    meetingId: string,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<unknown> {
+    const get = this.agentic.getWardMeeting;
+    if (get === undefined) throw meetingNotConfigured();
+    const result = parseUpstreamMeeting(
+      meetingReadSchema,
+      await get.call(this.agentic, meetingId, meta),
+    );
+    if (result.meeting.meetingId !== meetingId) {
+      throw invalidUpstreamMeeting();
+    }
+    return result;
+  }
+
   async requestHandover(
     patientId: string,
     input: HandoverRequest,
@@ -675,6 +1012,33 @@ function invalidUpstreamHandover(): IntegrationError {
     502,
     true,
   );
+}
+
+function meetingNotConfigured(): IntegrationError {
+  return new IntegrationError(
+    "WARD_MEETING_NOT_CONFIGURED",
+    "Ward meeting reconciliation is not configured",
+    503,
+    true,
+  );
+}
+
+function invalidUpstreamMeeting(): IntegrationError {
+  return new IntegrationError(
+    "UPSTREAM_INVALID_RESPONSE",
+    "A ward meeting service returned an invalid response",
+    502,
+    true,
+  );
+}
+
+function parseUpstreamMeeting<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw invalidUpstreamMeeting();
+  return result.data;
 }
 
 function invalidRenderedHandover(): IntegrationError {

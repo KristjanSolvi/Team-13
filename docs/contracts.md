@@ -326,6 +326,41 @@ allow-listed identifiers, counts, hashes, status, version, credit totals, and
 stable failure metadata. They never contain prompts, credentials, source prose,
 full packets, model messages, or hidden reasoning.
 
+## Ambient ward-meeting reconciliation
+
+The authenticated integration surface exposes one meeting lifecycle:
+
+- `POST /api/ward-meetings` creates a Corti Ambient browser session and an
+  attributable recording meeting.
+- `POST /api/ward-meetings/:meetingId/segments` explicitly selects one patient.
+  Patient identity is never inferred from the transcript.
+- `POST /api/ward-meetings/:meetingId/transcript-segments` retains final
+  transcript. Clear final speech is eligible evidence only while explicitly
+  scoped to an open patient segment; unscoped or uncertain speech cannot create
+  patient evidence or tasks.
+- `POST /api/ward-meetings/:meetingId/segments/:segmentId/close` freezes the
+  evidence and automatically reconciles the current discussion with that
+  patient's previous meeting segment, latest finalized handover, and active
+  task ledger.
+- `POST /api/ward-meetings/:meetingId/complete` finishes a meeting only after no
+  patient segment remains open. `GET /api/ward-meetings/:meetingId` returns the
+  safe current projection.
+
+The dedicated meeting agent uses only `/mcp/meeting`. It can read the current
+and previous meeting, latest handover, active tasks and eligible teams, then
+save exactly one grounded reconciliation. It cannot approve, publish, offer,
+assign, accept, complete, verify, or escalate a task. A genuinely new spoken
+commitment becomes an `agent_suggested` draft for clinician review. Existing
+unresolved or undiscussed work becomes a separate carry-forward warning and is
+never duplicated. Every accepted proposal must quote exact eligible transcript
+and cite its registered `encounter:` reference.
+
+The integration close operation derives a stable reconciliation idempotency
+key and calls close before reconciliation. Replays cannot create another draft
+or warning. Meeting reconciliation uses the dedicated long upstream timeout;
+all credentials remain server-side, and all public meeting operations require
+the inbound integration bearer plus `x-actor-id`.
+
 ## Queries and event stream
 
 - `GET /api/patients/:patientId/threads` returns `{ "threads": [Thread] }`.

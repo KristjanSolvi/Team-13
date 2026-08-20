@@ -42,7 +42,13 @@ function start(service: MeetingService) {
 test("starts a meeting and replays its attributable command", (t) => {
   const { service, store } = setup(t);
   const first = start(service);
-  const replay = start(service);
+  const replay = service.startMeeting({
+    wardId: "ward-13",
+    interactionId: "replacement-ambient-interaction",
+    idempotencyKey: "meeting-start-0001",
+    actor,
+    correlationId: "corr-meeting-retry",
+  });
 
   assert.equal(first.replayed, false);
   assert.equal(replay.replayed, true);

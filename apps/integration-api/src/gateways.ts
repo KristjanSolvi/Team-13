@@ -1,8 +1,12 @@
 import { IntegrationError } from "./errors.js";
 import type {
   HandoverRequest,
+  MeetingSegmentClose,
+  MeetingSegmentOpen,
+  MeetingTranscriptAppend,
   PipelineProxyPath,
   TaskCommand,
+  WardMeetingComplete,
 } from "./contracts.js";
 
 export interface RequestMeta {
@@ -71,6 +75,42 @@ export interface AgenticGateway {
     },
     meta: RequestMeta,
   ): Promise<unknown>;
+  startWardMeeting?(
+    input: {
+      wardId: string;
+      interactionId: string;
+      idempotencyKey: string;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  openMeetingSegment?(
+    meetingId: string,
+    input: MeetingSegmentOpen,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  appendMeetingTranscript?(
+    meetingId: string,
+    input: MeetingTranscriptAppend,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  closeMeetingSegment?(
+    meetingId: string,
+    segmentId: string,
+    input: MeetingSegmentClose,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  reconcileMeetingSegment?(
+    meetingId: string,
+    segmentId: string,
+    input: { expectedSegmentVersion: number; idempotencyKey: string },
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  completeWardMeeting?(
+    meetingId: string,
+    input: WardMeetingComplete,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  getWardMeeting?(meetingId: string, meta: RequestMeta): Promise<unknown>;
   eventStream(
     lastEventId: string | undefined,
     meta: RequestMeta,
@@ -412,6 +452,97 @@ export class HttpAgenticGateway implements AgenticGateway {
         body: input,
         bearerToken: this.bearerToken,
         meta,
+      },
+    );
+  }
+
+  startWardMeeting(
+    input: { wardId: string; interactionId: string; idempotencyKey: string },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request("/api/ward-meetings", {
+      method: "POST",
+      body: input,
+      bearerToken: this.bearerToken,
+      meta,
+    });
+  }
+
+  openMeetingSegment(
+    meetingId: string,
+    input: MeetingSegmentOpen,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.meetingRequest(meetingId, "/segments", input, meta);
+  }
+
+  appendMeetingTranscript(
+    meetingId: string,
+    input: MeetingTranscriptAppend,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.meetingRequest(meetingId, "/transcript-segments", input, meta);
+  }
+
+  closeMeetingSegment(
+    meetingId: string,
+    segmentId: string,
+    input: MeetingSegmentClose,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.meetingRequest(
+      meetingId,
+      `/segments/${encodeURIComponent(segmentId)}/close`,
+      input,
+      meta,
+    );
+  }
+
+  reconcileMeetingSegment(
+    meetingId: string,
+    segmentId: string,
+    input: { expectedSegmentVersion: number; idempotencyKey: string },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.meetingRequest(
+      meetingId,
+      `/segments/${encodeURIComponent(segmentId)}/reconcile`,
+      input,
+      meta,
+      this.handoverTimeoutMs,
+    );
+  }
+
+  completeWardMeeting(
+    meetingId: string,
+    input: WardMeetingComplete,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.meetingRequest(meetingId, "/complete", input, meta);
+  }
+
+  getWardMeeting(meetingId: string, meta: RequestMeta): Promise<unknown> {
+    return this.client.request(
+      `/api/ward-meetings/${encodeURIComponent(meetingId)}`,
+      { bearerToken: this.bearerToken, meta },
+    );
+  }
+
+  private meetingRequest(
+    meetingId: string,
+    suffix: string,
+    body: unknown,
+    meta: RequestMeta,
+    timeoutMs?: number,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/ward-meetings/${encodeURIComponent(meetingId)}${suffix}`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
       },
     );
   }

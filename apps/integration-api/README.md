@@ -30,6 +30,19 @@ Medical Coding.
 - `POST /api/patients/:patientId/handovers`: generate or replay one grounded,
   attributable patient handover by coordinating the Agentic draft, dedicated
   Corti renderer, and snapshot-checked finalization.
+- `POST /api/ward-meetings`: start a Corti Ambient ward meeting and return the
+  browser session plus its authoritative meeting record.
+- `POST /api/ward-meetings/:meetingId/segments`: explicitly select the patient
+  now being discussed; the backend never infers patient identity from speech.
+- `POST /api/ward-meetings/:meetingId/transcript-segments`: retain final
+  transcript. A null patient segment stays meeting-scoped and cannot create a
+  patient task.
+- `POST /api/ward-meetings/:meetingId/segments/:segmentId/close`: freeze the
+  patient discussion and automatically run grounded Agentic reconciliation.
+  New commitments remain clinician-reviewable drafts; existing unresolved work
+  becomes a carry-forward warning rather than a duplicate task.
+- `POST /api/ward-meetings/:meetingId/complete` and
+  `GET /api/ward-meetings/:meetingId`: finish and read the meeting lifecycle.
 - `GET /api/events/stream`: proxy the Agentic SSE stream while keeping the
   application bearer token server-side; supports `Last-Event-ID` resume.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
@@ -86,6 +99,27 @@ The caller supplies the dedicated inbound `INTEGRATION_API_BEARER_TOKEN`. The
 browser never receives or supplies the separate private Agentic service bearer.
 A replay returns `200`; a newly generated handover returns `201`.
 
+Start a ward meeting through the same authenticated public boundary:
+
+```bash
+curl --request POST \
+  http://127.0.0.1:8790/api/ward-meetings \
+  --header "authorization: Bearer $INTEGRATION_API_BEARER_TOKEN" \
+  --header 'content-type: application/json' \
+  --header 'x-actor-id: clinician:demo' \
+  --data '{
+    "wardId": "ward-13",
+    "encounterIdentifier": "ward-13-board-round",
+    "idempotencyKey": "ward-meeting-demo-001"
+  }'
+```
+
+Use the returned `ambientSession` only in the browser Ambient client. Send
+final transcript segments to the meeting endpoint with the currently selected
+`patientSegmentId`; use `null` while no patient is selected. Closing a patient
+segment may take the dedicated long upstream timeout because that request waits
+for the meeting agent. It never publishes the resulting draft tasks.
+
 ## Ward Companion boundary
 
 The companion projection matches the existing UI fields (`id`, `title`,
@@ -120,11 +154,11 @@ Agentic/MCP backend's private application token. Set
 private-service values. Never commit `.env`.
 
 Keep ordinary upstream calls on `UPSTREAM_TIMEOUT_MS=8000`. Use
-`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover draft generation and Corti
-rendering. The draft can contain two Corti agent phases, each allowing up to 60
-seconds to send and 180 seconds to poll, so the dedicated value cannot be lower
-than 480000 and may be raised to at most 900000. Finalization remains on the
-ordinary timeout because it is a local snapshot-checked ledger write.
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover generation, Corti rendering,
+and meeting reconciliation. Agent work can allow up to 60 seconds to send and
+180 seconds to poll, so the dedicated value cannot be lower than 480000 and may
+be raised to at most 900000. Local ledger-only operations remain on the
+ordinary timeout.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
 port `5173` are accepted by the example configuration. Add the deployed or
