@@ -165,6 +165,19 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
     }),
   );
 
+  app.get(
+    "/api/patients/:patientId/companion",
+    route(async (request, response) => {
+      const patientId = pathParam(request, "patientId");
+      response.json(
+        await options.service.wardCompanionOverview(
+          patientId,
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
   app.post(
     "/api/tasks/:taskId/:command",
     route(async (request, response) => {

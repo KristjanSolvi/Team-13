@@ -34,10 +34,41 @@ describe("real HTTP service boundaries", () => {
       response.status(202).json({ signalEventId: "event-http-1", status: "retained" });
     });
     agentic.get("/api/patients/:patientId/threads", (_request, response) => {
-      response.json({ threads: [{ threadId: "thread-http-1", state: "awaiting_review" }] });
+      response.json({
+        threads: [
+          {
+            threadId: "thread-http-1",
+            patientId: "synthetic-karen",
+            interactionId: "interaction-karen-1",
+            contextId: "context-karen-1",
+            summary: "Dizziness after a medication change",
+            evidenceRefs: ["encounter:candidate-http.1"],
+            state: "awaiting_review",
+            version: 1,
+            createdAt: "2026-08-20T10:00:00.000Z",
+            updatedAt: "2026-08-20T10:00:00.000Z",
+          },
+        ],
+      });
     });
     agentic.get("/api/patients/:patientId/tasks", (_request, response) => {
-      response.json({ tasks: [{ taskId: "task-http-1", state: "draft", version: 1 }] });
+      response.json({
+        tasks: [
+          {
+            taskId: "task-http-1",
+            threadId: "thread-http-1",
+            patientId: "synthetic-karen",
+            summary: "Check blood pressure within 48 hours",
+            targetTeamId: "district-nursing",
+            dueBy: "2026-08-22T10:00:00.000Z",
+            state: "draft",
+            assignedMemberId: null,
+            version: 1,
+            createdAt: "2026-08-20T10:00:00.000Z",
+            updatedAt: "2026-08-20T10:00:00.000Z",
+          },
+        ],
+      });
     });
     agentic.post("/api/tasks/:taskId/approve", (request, response) => {
       captured.approve = capture(request);
@@ -126,6 +157,9 @@ describe("real HTTP service boundaries", () => {
     const overview = await request(app)
       .get("/api/patients/synthetic-karen/overview")
       .expect(200);
+    const companion = await request(app)
+      .get("/api/patients/synthetic-karen/companion")
+      .expect(200);
     const approved = await request(app)
       .post("/api/tasks/task-http-1/approve")
       .set("x-actor-id", "clinician-1")
@@ -135,6 +169,15 @@ describe("real HTTP service boundaries", () => {
 
     expect(candidate.body.handoff.signalEventId).toBe("event-http-1");
     expect(overview.body.threads[0].state).toBe("awaiting_review");
+    expect(companion.body.threads[0]).toMatchObject({
+      id: "task-http-1",
+      status: "pending",
+      backend: {
+        taskId: "task-http-1",
+        taskVersion: 1,
+        availableCommands: ["approve", "correct", "dismiss"],
+      },
+    });
     expect(approved.body.state).toBe("offered_to_team");
     expect(captured.signal).toMatchObject({
       authorization: "Bearer server-only-app-token",

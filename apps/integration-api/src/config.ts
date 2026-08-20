@@ -6,7 +6,9 @@ const environmentSchema = z.object({
   AGENTIC_BASE_URL: z.url().default("http://127.0.0.1:3000"),
   PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
   AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
-  UI_ORIGINS: z.string().default("http://127.0.0.1:5173"),
+  UI_ORIGINS: z
+    .string()
+    .default("http://127.0.0.1:5173,http://localhost:5173"),
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(250).max(120_000).default(8_000),
 });
 

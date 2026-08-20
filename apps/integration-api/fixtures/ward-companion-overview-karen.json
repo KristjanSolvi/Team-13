@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1",
+  "patientId": "synthetic-karen",
+  "observedAt": "2026-08-20T12:00:00.000Z",
+  "threads": [
+    {
+      "id": "task-karen-bp",
+      "patientId": "synthetic-karen",
+      "title": "Check blood pressure within 48 hours",
+      "status": "pending",
+      "heard": "Dizziness following a medication change",
+      "matters": "Retained from the clinical interaction with linked evidence.",
+      "suggestion": "Review and approve this suggested action.",
+      "assignee": null,
+      "candidates": [],
+      "due": "2026-08-22T10:00:00.000Z",
+      "activity": [
+        {
+          "id": "thread-karen-bp:captured",
+          "at": "2026-08-20T10:00:00.000Z",
+          "actor": "Follow-through agent",
+          "text": "Captured from the clinical interaction.",
+          "kind": "system"
+        },
+        {
+          "id": "task-karen-bp:state:1",
+          "at": "2026-08-20T10:00:00.000Z",
+          "actor": "Follow-through service",
+          "text": "Suggested action is awaiting clinical review.",
+          "kind": "system"
+        }
+      ],
+      "backend": {
+        "threadId": "thread-karen-bp",
+        "taskId": "task-karen-bp",
+        "threadVersion": 1,
+        "taskVersion": 1,
+        "threadState": "awaiting_review",
+        "taskState": "draft",
+        "targetTeamId": "district-nursing",
+        "evidenceRefs": ["encounter:candidate-karen.1"],
+        "availableCommands": ["approve", "correct", "dismiss"]
+      }
+    }
+  ]
+}

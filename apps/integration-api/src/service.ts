@@ -12,6 +12,7 @@ import type {
   RequestMeta,
   UpstreamJsonResult,
 } from "./gateways.js";
+import { projectWardCompanionOverview } from "./ward-companion.js";
 
 interface ServiceStatus {
   reachable: boolean;
@@ -100,6 +101,12 @@ export class IntegrationService {
       tasks,
       observedAt: this.now().toISOString(),
     };
+  }
+
+  async wardCompanionOverview(patientId: string, correlationId: string) {
+    return projectWardCompanionOverview(
+      await this.patientOverview(patientId, correlationId),
+    );
   }
 
   executeTaskCommand(

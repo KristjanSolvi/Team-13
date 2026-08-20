@@ -76,6 +76,9 @@ describe("integration API", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/patients/{patientId}/overview",
     );
+    expect(response.body.paths).toHaveProperty(
+      "/api/patients/{patientId}/companion",
+    );
     expect(JSON.stringify(response.body)).not.toContain(
       "AGENTIC_APP_BEARER_TOKEN",
     );
@@ -233,6 +236,59 @@ describe("integration API", () => {
       tasks: [{ taskId: "task-1", state: "draft" }],
       observedAt: "2026-08-20T12:00:00.000Z",
     });
+  });
+
+  it("returns the Ward Companion read model without exposing credentials", async () => {
+    const { agentic, app } = harness();
+    vi.mocked(agentic.listThreads).mockResolvedValue([
+      {
+        threadId: "thread-1",
+        patientId: "synthetic-karen",
+        interactionId: "interaction-1",
+        summary: "Dizziness after a medication change",
+        evidenceRefs: ["encounter:candidate-1.1"],
+        state: "awaiting_review",
+        version: 1,
+        createdAt: "2026-08-20T10:00:00.000Z",
+        updatedAt: "2026-08-20T10:00:00.000Z",
+      },
+    ]);
+    vi.mocked(agentic.listTasks).mockResolvedValue([
+      {
+        taskId: "task-1",
+        threadId: "thread-1",
+        patientId: "synthetic-karen",
+        summary: "Check blood pressure within 48 hours",
+        targetTeamId: "district-nursing",
+        dueBy: "2026-08-22T10:00:00.000Z",
+        state: "draft",
+        assignedMemberId: null,
+        version: 1,
+        createdAt: "2026-08-20T10:00:00.000Z",
+        updatedAt: "2026-08-20T10:00:00.000Z",
+      },
+    ]);
+
+    const response = await request(app)
+      .get("/api/patients/synthetic-karen/companion")
+      .expect(200);
+
+    expect(response.body.schemaVersion).toBe("1");
+    expect(response.body.threads[0]).toMatchObject({
+      id: "task-1",
+      patientId: "synthetic-karen",
+      status: "pending",
+      assignee: null,
+      backend: {
+        threadId: "thread-1",
+        taskId: "task-1",
+        taskVersion: 1,
+        availableCommands: ["approve", "correct", "dismiss"],
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain(
+      "server-only-app-token",
+    );
   });
 
   it("validates and forwards clinician task commands", async () => {
