@@ -16,6 +16,8 @@ Lovable Ward UI (8080)
           evidence registry + approval proof + task/thread ledger
       -> Patient profile service (8791)
           versioned manual details + immutable referral snapshots
+      -> Synthetic mock EHR (8793)
+          versioned document drafts + explicit immutable filing
 ```
 
 The pipeline may propose one source-grounded candidate. It does not assign a
@@ -33,6 +35,7 @@ cp .env.example .env
 cp apps/corti-pipeline/.env.example apps/corti-pipeline/.env
 cp apps/integration-api/.env.example apps/integration-api/.env
 cp apps/patient-profile/.env.example apps/patient-profile/.env
+cp apps/mock-ehr/.env.example apps/mock-ehr/.env
 cp apps/ward-companion/.env.example apps/ward-companion/.env
 ```
 
@@ -42,6 +45,8 @@ cp apps/ward-companion/.env.example apps/ward-companion/.env
   root `.env` `APP_BEARER_TOKEN`.
 - Use a separate private bearer for `apps/patient-profile/.env`; it must never
   be exposed in a `VITE_*` variable.
+- Use another private bearer for `apps/mock-ehr/.env`; copy both private values
+  into the Integration API environment under their matching variable names.
 - Use long, independent random values for the application bearer, MCP bearer,
   and approval HMAC secret.
 - Keep `DEMO_MODE=true` only for the synthetic hackathon demo.
@@ -62,11 +67,15 @@ npm run dev
 cd apps/patient-profile
 npm run dev
 
-# 4. Browser-facing integration API
+# 4. Synthetic mock EHR document store
+cd apps/mock-ehr
+npm run dev
+
+# 5. Browser-facing integration API
 cd apps/integration-api
 npm run dev
 
-# 5. Lovable Ward Threads UI
+# 6. Lovable Ward Threads UI
 cd apps/ward-companion
 npm run dev
 ```
@@ -105,6 +114,12 @@ npm test
 npm run typecheck
 npm run build
 
+# Synthetic mock EHR
+cd apps/mock-ehr
+npm test
+npm run typecheck
+npm run build
+
 # Ward UI
 cd apps/ward-companion
 npm run typecheck
@@ -114,11 +129,11 @@ npm run build
 
 ## Railway deployment
 
-The repository contains Railway configuration for all five services. Deploy
+The repository contains Railway configuration for all six services. Deploy
 the Lovable Ward UI and browser-facing integration API publicly, keep the Corti
-pipeline and patient-profile service on Railway's private network, and expose
+pipeline, patient-profile, and mock-EHR services on Railway's private network, and expose
 only the Agentic `/mcp` service required by Corti. Attach separate persistent
-volumes to the Agentic and patient-profile services for their SQLite databases.
+volumes to the Agentic, patient-profile, and mock-EHR services for their SQLite databases.
 
 Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
 service roots, variables, bring-up order, and health checks. Do not add

@@ -89,13 +89,27 @@ backend/Corti console before deciding whether the remaining credit justifies a
 manual retry. A successful result contains only the Corti context/task state
 and reported credits; inspect the local task ledger through the integration API.
 
-## 4. Pipeline, integration API, and UI handoff
+## 4. Pipeline, profile, mock EHR, integration API, and UI handoff
 
 The browser must talk to the integration API, never directly to the Agentic
-backend with `APP_BEARER_TOKEN`. Configure and start the two server-side apps:
+backend with `APP_BEARER_TOKEN`. Configure and start the four server-side apps:
 
 ```bash
 cd /Users/solvisantos/.config/superpowers/worktrees/hackathon-kit/agentic-mcp/apps/corti-pipeline
+cp .env.example .env
+npm install
+npm run dev
+```
+
+```bash
+cd /Users/solvisantos/.config/superpowers/worktrees/hackathon-kit/agentic-mcp/apps/patient-profile
+cp .env.example .env
+npm install
+npm run dev
+```
+
+```bash
+cd /Users/solvisantos/.config/superpowers/worktrees/hackathon-kit/agentic-mcp/apps/mock-ehr
 cp .env.example .env
 npm install
 npm run dev
@@ -109,8 +123,11 @@ npm run dev
 ```
 
 In `apps/integration-api/.env`, keep `AGENTIC_BASE_URL=http://127.0.0.1:3000`,
-`PIPELINE_BASE_URL=http://127.0.0.1:8787`, and set
-`AGENTIC_APP_BEARER_TOKEN` to the backend's `APP_BEARER_TOKEN`. Add the actual
+`PIPELINE_BASE_URL=http://127.0.0.1:8787`,
+`PATIENT_PROFILE_BASE_URL=http://127.0.0.1:8791`, and
+`MOCK_EHR_BASE_URL=http://127.0.0.1:8793`. Set `AGENTIC_APP_BEARER_TOKEN` to
+the backend's `APP_BEARER_TOKEN`, and set the profile/mock-EHR bearer values to
+their matching private service tokens. Add the actual
 Lovable preview origin to `UI_ORIGINS`; do not use a wildcard.
 
 The UI checkout is
@@ -119,6 +136,11 @@ should read `GET http://127.0.0.1:8790/api/patients/synthetic-karen/companion`,
 send task commands to `POST /api/tasks/:taskId/:command`, and refresh from
 `GET /api/events/stream`. It must render the empty state as **“No open tracked
 follow-through items”**, never “clear for discharge” or “ready for discharge.”
+
+For the Nervecentre surface, read `GET /api/ehr/patients/:patientId`, apply
+patient edits through `PATCH /api/ehr/patients/:patientId/profile`, and use the
+`/api/ehr/documents/*` draft/revise/file routes. Do not call the profile or
+mock-EHR services directly from the browser.
 
 ## Reset and recovery
 

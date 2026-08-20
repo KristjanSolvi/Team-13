@@ -1,19 +1,21 @@
 # Follow-Through integration API
 
 Stateless backend-for-frontend and cross-service handoff layer. It gives the UI
-one safe HTTP surface while keeping the Agentic application bearer token on the
+one safe HTTP surface while keeping all private service bearer tokens on the
 server.
 
-It owns no patient, thread, task, approval, or transcript state. The Agentic/MCP
-backend remains authoritative for the ledger, and the Corti pipeline remains
-authoritative for Ambient, Dictation, Text Generation, and Medical Coding.
+It owns no patient, document, thread, task, approval, or transcript state. The
+patient-profile service owns the mutable audited profile, the synthetic
+mock-EHR service owns document versions, the Agentic/MCP backend owns the
+ledger, and the Corti pipeline owns Ambient, Dictation, Text Generation, and
+Medical Coding.
 
 ## Current endpoints
 
 - `GET /healthz`: process liveness without contacting upstream services.
 - `GET /openapi.json`: machine-readable OpenAPI 3.1 contract for consumers.
-- `GET /readyz`: aggregate Agentic and pipeline reachability and report whether
-  live Corti calls are configured.
+- `GET /readyz`: aggregate Agentic, pipeline, patient-profile, and mock-EHR
+  reachability and report whether live Corti calls are configured.
 - `POST /api/candidates/investigate`: validate a normalized pipeline candidate
   and retain it as one idempotent Agentic signal. Each validated evidence item
   is forwarded with its generated reference, exact quote, timestamps, and
@@ -30,6 +32,16 @@ authoritative for Ambient, Dictation, Text Generation, and Medical Coding.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
   commands with actor attribution. Supported commands are `approve`, `correct`,
   `dismiss`, `reopen`, `accept`, `decline`, `complete`, and `verify`.
+- `GET /api/ehr/patients/:patientId`: compose the current versioned profile and
+  mock-EHR documents into one Nervecentre-facing record.
+- `PATCH /api/ehr/patients/:patientId/profile`: apply an attributed profile
+  update using the same optimistic version contract as Ward Companion.
+- `POST /api/ehr/patients/:patientId/documents`: create an attributed document
+  draft.
+- `PATCH /api/ehr/documents/:documentId`: revise an unfiled draft.
+- `POST /api/ehr/documents/:documentId/file`: explicitly file the reviewed
+  version.
+- `GET /api/ehr/documents/:documentId/history`: read immutable version history.
 
 Every response includes `x-correlation-id`. Browser requests are allowed only
 from configured origins. The service binds to loopback by default.
@@ -51,8 +63,10 @@ The projection is intentionally conservative:
 - dismissed records are omitted instead of being presented as verified;
 - team availability is not invented, so `candidates` remains empty until an
   authoritative roster endpoint exists;
-- patient demographics, beds, bays, schedules, staff rosters, and case notes
-  remain EHR/UI inputs rather than synthetic backend state.
+- patient demographics, beds, bays, schedules, and referral details are read
+  from the versioned profile; clinical document drafts and filed versions are
+  read from the synthetic mock-EHR service;
+- staff rosters and unmapped clinical panels remain labelled UI fixtures.
 
 ## Local run
 
@@ -64,7 +78,9 @@ npm run dev
 ```
 
 Use the same `AGENTIC_APP_BEARER_TOKEN` configured by the Agentic/MCP backend.
-Never expose that token to the browser or commit `.env`.
+Set `PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
+private-service values. Never expose any of these tokens to the browser or
+commit `.env`.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
 port `5173` are accepted by the example configuration. Add the deployed or
@@ -78,6 +94,6 @@ intentionally unsupported.
   still retrieve the exact approved task/version, validate that boundary, call
   the pipeline, and retain the resulting draft artifacts. Approval alone must
   never be presented as publication or downstream action.
-- Mutations for manually created tasks, free-form activity, and case notes.
-  Their Agentic/EHR ownership and audit contracts must be defined before the UI
+- Mutations for manually created tasks and free-form operational activity.
+  Their Agentic ownership and audit contracts must be defined before the UI
   sends them to a backend.

@@ -79,6 +79,18 @@ describe("integration API", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/patients/{patientId}/companion",
     );
+    expect(response.body.paths).toHaveProperty(
+      "/api/ehr/patients/{patientId}",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/ehr/patients/{patientId}/profile",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/ehr/patients/{patientId}/documents",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/ehr/documents/{documentId}/file",
+    );
     expect(JSON.stringify(response.body)).not.toContain(
       "AGENTIC_APP_BEARER_TOKEN",
     );

@@ -10,6 +10,10 @@ import { ZodError } from "zod";
 
 import {
   candidateSchema,
+  ehrCreateDocumentSchema,
+  ehrFileDocumentSchema,
+  ehrProfileUpdateSchema,
+  ehrReviseDocumentSchema,
   isTaskCommand,
   pipelineProxyPaths,
   taskCommandSchemas,
@@ -19,6 +23,8 @@ import { integrationOpenApi } from "./openapi.js";
 import type { IntegrationService } from "./service.js";
 
 const safeCorrelationId = /^[A-Za-z0-9._-]{1,100}$/;
+const safeActorId = /^[A-Za-z0-9:._-]{1,120}$/;
+const safeEhrIdentifier = /^[A-Za-z0-9:._-]{1,160}$/;
 
 export interface CreateIntegrationAppOptions {
   service: IntegrationService;
@@ -49,7 +55,7 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
         "access-control-allow-headers",
         "content-type,x-actor-id,x-correlation-id,last-event-id",
       );
-      response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+      response.setHeader("access-control-allow-methods", "GET,POST,PATCH,OPTIONS");
     }
     if (request.method === "OPTIONS") {
       response.sendStatus(204);
@@ -178,6 +184,82 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
     }),
   );
 
+  app.get(
+    "/api/ehr/patients/:patientId",
+    route(async (request, response) => {
+      response.json(
+        await options.service.ehrPatientRecord(
+          ehrIdentifier(request, "patientId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.patch(
+    "/api/ehr/patients/:patientId/profile",
+    route(async (request, response) => {
+      response.json(
+        await options.service.updateEhrProfile(
+          ehrIdentifier(request, "patientId"),
+          ehrProfileUpdateSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/ehr/patients/:patientId/documents",
+    route(async (request, response) => {
+      response.status(201).json(
+        await options.service.createEhrDocument(
+          ehrIdentifier(request, "patientId"),
+          ehrCreateDocumentSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.patch(
+    "/api/ehr/documents/:documentId",
+    route(async (request, response) => {
+      response.json(
+        await options.service.reviseEhrDocument(
+          ehrIdentifier(request, "documentId"),
+          ehrReviseDocumentSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/ehr/documents/:documentId/file",
+    route(async (request, response) => {
+      response.json(
+        await options.service.fileEhrDocument(
+          ehrIdentifier(request, "documentId"),
+          ehrFileDocumentSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/ehr/documents/:documentId/history",
+    route(async (request, response) => {
+      response.json(
+        await options.service.ehrDocumentHistory(
+          ehrIdentifier(request, "documentId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
   app.post(
     "/api/tasks/:taskId/:command",
     route(async (request, response) => {
@@ -190,16 +272,7 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
           404,
         );
       }
-      const actorId = request.header("x-actor-id");
-      if (
-        actorId === undefined ||
-        !/^[A-Za-z0-9:._-]{1,120}$/.test(actorId)
-      ) {
-        throw new IntegrationError(
-          "ACTOR_REQUIRED",
-          "x-actor-id is required",
-        );
-      }
+      const actor = actorId(request);
       const body = taskCommandSchemas[command].parse(request.body) as Record<
         string,
         unknown
@@ -209,7 +282,7 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
           taskId,
           command,
           body,
-          { actorId, correlationId: correlationId(response) },
+          { actorId: actor, correlationId: correlationId(response) },
         ),
       );
     }),
@@ -258,6 +331,32 @@ function pathParam(request: Request, name: string): string {
     );
   }
   return value;
+}
+
+function ehrIdentifier(request: Request, name: string): string {
+  const value = pathParam(request, name);
+  if (!safeEhrIdentifier.test(value)) {
+    throw new IntegrationError(
+      "VALIDATION_ERROR",
+      `Invalid EHR identifier: ${name}`,
+    );
+  }
+  return value;
+}
+
+function actorId(request: Request): string {
+  const value = request.header("x-actor-id");
+  if (value === undefined || !safeActorId.test(value)) {
+    throw new IntegrationError("ACTOR_REQUIRED", "x-actor-id is required");
+  }
+  return value;
+}
+
+function requestMeta(request: Request, response: Response) {
+  return {
+    actorId: actorId(request),
+    correlationId: correlationId(response),
+  };
 }
 
 function route(

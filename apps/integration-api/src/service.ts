@@ -8,7 +8,9 @@ import type {
 import { IntegrationError } from "./errors.js";
 import type {
   AgenticGateway,
+  MockEhrGateway,
   PipelineGateway,
+  ProfileGateway,
   RequestMeta,
   UpstreamJsonResult,
 } from "./gateways.js";
@@ -20,18 +22,20 @@ interface ServiceStatus {
   error?: string;
 }
 
+export interface EhrDependencies {
+  profile: ProfileGateway;
+  mockEhr: MockEhrGateway;
+}
+
 export class IntegrationService {
   constructor(
     private readonly agentic: AgenticGateway,
     private readonly pipeline: PipelineGateway,
     private readonly now: () => Date = () => new Date(),
+    private readonly ehr?: EhrDependencies,
   ) {}
 
-  async readiness(): Promise<{
-    status: "ready" | "degraded";
-    liveCortiReady: boolean;
-    services: { agentic: ServiceStatus; pipeline: ServiceStatus };
-  }> {
+  async readiness() {
     const [agentic, pipeline] = await Promise.all([
       safeStatus(() => this.agentic.health()),
       safeStatus(() => this.pipeline.health()),
@@ -42,10 +46,24 @@ export class IntegrationService {
       typeof pipeline.detail === "object" &&
       pipeline.detail !== null &&
       (pipeline.detail as { cortiConfigured?: unknown }).cortiConfigured === true;
-    return {
-      status: ready ? "ready" : "degraded",
+    const base = {
+      status: ready ? ("ready" as const) : ("degraded" as const),
       liveCortiReady,
       services: { agentic, pipeline },
+    };
+    if (this.ehr === undefined) return base;
+
+    const [profile, mockEhr] = await Promise.all([
+      safeStatus(() => this.ehr?.profile.health() as Promise<unknown>),
+      safeStatus(() => this.ehr?.mockEhr.health() as Promise<unknown>),
+    ]);
+    return {
+      ...base,
+      status:
+        ready && profile.reachable && mockEhr.reachable
+          ? ("ready" as const)
+          : ("degraded" as const),
+      services: { agentic, pipeline, profile, mockEhr },
     };
   }
 
@@ -120,6 +138,69 @@ export class IntegrationService {
     );
   }
 
+  async ehrPatientRecord(patientId: string, correlationId: string) {
+    const ehr = this.requireEhr();
+    const meta = { correlationId };
+    const [profile, documents] = await Promise.all([
+      ehr.profile.getProfile(patientId, meta),
+      ehr.mockEhr.listDocuments(patientId, meta),
+    ]);
+    return {
+      schemaVersion: "1" as const,
+      patientId,
+      profile,
+      documents,
+      observedAt: this.now().toISOString(),
+    };
+  }
+
+  async updateEhrProfile(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ) {
+    return {
+      patientId,
+      profile: await this.requireEhr().profile.updateProfile(
+        patientId,
+        body,
+        meta,
+      ),
+    };
+  }
+
+  createEhrDocument(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.requireEhr().mockEhr.createDocument(patientId, body, meta);
+  }
+
+  reviseEhrDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.requireEhr().mockEhr.reviseDocument(documentId, body, meta);
+  }
+
+  fileEhrDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.requireEhr().mockEhr.fileDocument(documentId, body, meta);
+  }
+
+  async ehrDocumentHistory(documentId: string, correlationId: string) {
+    return {
+      versions: await this.requireEhr().mockEhr.documentHistory(documentId, {
+        correlationId,
+      }),
+    };
+  }
+
   executeTaskCommand(
     taskId: string,
     command: TaskCommand,
@@ -147,6 +228,18 @@ export class IntegrationService {
     correlationId: string,
   ): Promise<UpstreamJsonResult> {
     return this.pipeline.request(path, body, { correlationId });
+  }
+
+  private requireEhr(): EhrDependencies {
+    if (this.ehr === undefined) {
+      throw new IntegrationError(
+        "EHR_NOT_CONFIGURED",
+        "The synthetic EHR services are not configured",
+        503,
+        true,
+      );
+    }
+    return this.ehr;
   }
 }
 
