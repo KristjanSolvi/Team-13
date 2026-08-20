@@ -8,6 +8,7 @@ describe("readRuntimeConfig", () => {
 
     expect(config.corti).toBeNull();
     expect(config.port).toBe(8787);
+    expect(config.host).toBe("127.0.0.1");
     expect(config.missingCortiVariables).toEqual([
       "CORTI_TENANT_NAME",
       "CORTI_CLIENT_ID",
@@ -40,5 +41,12 @@ describe("readRuntimeConfig", () => {
       "http://localhost:5173",
       "http://localhost:3000",
     ]);
+  });
+
+  it("accepts generic platform host and port variables", () => {
+    const config = readRuntimeConfig({ HOST: "0.0.0.0", PORT: "8080" });
+
+    expect(config.host).toBe("0.0.0.0");
+    expect(config.port).toBe(8080);
   });
 });

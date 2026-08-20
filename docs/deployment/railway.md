@@ -1,0 +1,104 @@
+# Railway deployment
+
+Ward Threads deploys as four services from the same GitHub repository. Keeping
+the current service boundaries avoids moving secrets into the browser and lets
+the Agentic ledger retain its SQLite ownership model for the hackathon.
+
+## Service map
+
+| Railway service   | Root directory          | Config file                          | Public domain        | Port   |
+| ----------------- | ----------------------- | ------------------------------------ | -------------------- | ------ |
+| `agentic`         | `/`                     | `/railway.toml`                      | Yes, for Corti MCP   | `3000` |
+| `corti-pipeline`  | `/apps/corti-pipeline`  | `/apps/corti-pipeline/railway.toml`  | No                   | `8787` |
+| `integration-api` | `/apps/integration-api` | `/apps/integration-api/railway.toml` | Yes, for the browser | `8790` |
+| `ward-ui`         | `/apps/ward-companion`  | `/apps/ward-companion/railway.toml`  | Yes                  | `8080` |
+
+Create all four services from the `KristjanSolvi/Team-13` repository and use
+the root directories above. The checked-in `railway.toml` files define each
+service's immutable build, start, health-check, and restart settings.
+
+## Networking
+
+Set these fixed ports and bind hosts in the corresponding service variables:
+
+```text
+agentic:          PORT=3000  HOST=0.0.0.0
+corti-pipeline:   PORT=8787  HOST=0.0.0.0
+integration-api: PORT=8790  HOST=0.0.0.0
+ward-ui:          PORT=8080  HOST=0.0.0.0
+```
+
+Only `agentic`, `integration-api`, and `ward-ui` need generated Railway
+domains. Keep the pipeline private. Configure the integration API with:
+
+```text
+AGENTIC_BASE_URL=http://agentic.railway.internal:3000
+PIPELINE_BASE_URL=http://corti-pipeline.railway.internal:8787
+```
+
+After generating the public domains, set:
+
+```text
+agentic:
+  UI_ORIGIN=https://<ward-ui-domain>
+  MCP_PUBLIC_URL=https://<agentic-domain>/mcp
+
+integration-api:
+  UI_ORIGINS=https://<ward-ui-domain>
+
+ward-ui:
+  VITE_INTEGRATION_API_URL=https://<integration-api-domain>
+```
+
+`VITE_INTEGRATION_API_URL` is embedded during the UI build, so redeploy the UI
+after changing it. Never put Corti credentials or bearer tokens in a `VITE_*`
+variable.
+
+## Secrets and service variables
+
+Copy values from the matching `.env.example` into Railway, but never commit
+the real values. The important cross-service relationships are:
+
+- `AGENTIC_APP_BEARER_TOKEN` on `integration-api` must equal
+  `APP_BEARER_TOKEN` on `agentic`.
+- `CORTI_TENANT_NAME`, `CORTI_CLIENT_ID`, `CORTI_CLIENT_SECRET`, and
+  `CORTI_ENVIRONMENT` are required on both `agentic` and `corti-pipeline`.
+- `APP_BEARER_TOKEN`, `MCP_BEARER_TOKEN`, and `APPROVAL_HMAC_SECRET` must be
+  separate random values. The HMAC secret must contain at least 32 characters.
+- Keep `DEMO_MODE=true` and use only the disclosed synthetic demo patients.
+
+Attach a Railway volume to `agentic` at `/app/data` and set:
+
+```text
+DATABASE_PATH=/app/data/follow-through.sqlite
+```
+
+Do not scale `agentic` beyond one replica while SQLite is the ledger.
+
+## Bring-up order
+
+1. Deploy `agentic` with `CORTI_AGENT_ID` blank and attach its volume.
+2. Generate its public domain and set `MCP_PUBLIC_URL` to that domain plus
+   `/mcp`.
+3. Provision the Corti agent once using `npm run agent:provision`, save the
+   returned ID as `CORTI_AGENT_ID`, and redeploy `agentic`.
+4. Deploy `corti-pipeline` and confirm `/health` is healthy.
+5. Deploy `integration-api`; `/readyz` should report both upstreams ready.
+6. Generate the integration domain, set the ward UI URL and matching CORS
+   origins, then deploy `ward-ui` last.
+
+## Verification
+
+Check these endpoints without sending patient data:
+
+```text
+https://<agentic-domain>/healthz
+https://<integration-api-domain>/healthz
+https://<integration-api-domain>/readyz
+https://<ward-ui-domain>/
+```
+
+The pipeline stays private; its `/health` endpoint is checked by Railway and
+through the integration API readiness response. Run the demo only with
+synthetic data. Preloaded artifacts remain the fallback if any external Corti
+call is unavailable during judging.

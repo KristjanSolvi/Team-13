@@ -12,9 +12,9 @@ const app = createPipelineApp({
   missingCortiVariables: config.missingCortiVariables,
 });
 
-app.listen(config.port, "127.0.0.1", () => {
+app.listen(config.port, config.host, () => {
   const cortiStatus = gateway === null ? "not configured" : "configured";
   console.log(
-    `Follow-Through Corti pipeline listening on http://127.0.0.1:${config.port} (${cortiStatus})`,
+    `Follow-Through Corti pipeline listening on http://${config.host}:${config.port} (${cortiStatus})`,
   );
 });

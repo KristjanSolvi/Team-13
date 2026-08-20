@@ -24,6 +24,7 @@ test("applies defaults to a minimal required environment", () => {
   const config = parseConfig(requiredEnvironment());
 
   assert.equal(config.port, 3000);
+  assert.equal(config.host, "127.0.0.1");
   assert.equal(config.uiOrigin, "http://127.0.0.1:5173");
   assert.equal(config.databasePath, "./data/follow-through.sqlite");
   assert.equal(config.mcpName, "follow-through-ledger");
@@ -60,6 +61,15 @@ test("parses the US environment with demo mode disabled", () => {
 
   assert.equal(config.corti.environment, "us");
   assert.equal(config.demoMode, false);
+});
+
+test("accepts a cloud host and platform port", () => {
+  const config = parseConfig(
+    requiredEnvironment({ HOST: "0.0.0.0", PORT: "8080" }),
+  );
+
+  assert.equal(config.host, "0.0.0.0");
+  assert.equal(config.port, 8080);
 });
 
 const invalidConfigurations: ReadonlyArray<{

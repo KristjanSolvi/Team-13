@@ -39,6 +39,8 @@ createApp({
   mcpBearerToken: config.mcpBearerToken,
   uiOrigin: config.uiOrigin,
   ...(runner ? { runner } : {}),
-}).listen(config.port, "127.0.0.1", () => {
-  console.error(`Follow-Through listening on http://127.0.0.1:${config.port}`);
+}).listen(config.port, config.host, () => {
+  console.error(
+    `Follow-Through listening on http://${config.host}:${config.port}`,
+  );
 });

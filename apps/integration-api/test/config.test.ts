@@ -37,4 +37,15 @@ describe("integration API config", () => {
       "http://localhost:5173",
     ]);
   });
+
+  it("accepts generic platform host and port variables", () => {
+    const config = parseConfig({
+      AGENTIC_APP_BEARER_TOKEN: "app-secret",
+      HOST: "0.0.0.0",
+      PORT: "8080",
+    });
+
+    expect(config.host).toBe("0.0.0.0");
+    expect(config.port).toBe(8080);
+  });
 });

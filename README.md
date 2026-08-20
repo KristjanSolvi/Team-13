@@ -97,11 +97,15 @@ npm run lint
 npm run build
 ```
 
-## Deployment recommendation
+## Railway deployment
 
-Deploy the Ward UI to Vercel for a stable judge/team preview after the UI's
-server-side proxy has stable public URLs for the integration API. Do not add
-Supabase yet: the Agentic service already owns SQLite-backed task, thread,
-approval, and audit state. Introducing a second persistence owner would create
-conflicting lifecycle truth during the hackathon.
+The repository contains Railway configuration for all four services. Deploy
+the Lovable Ward UI and browser-facing integration API publicly, keep the Corti
+pipeline on Railway's private network, and expose only the Agentic `/mcp`
+service required by Corti. Attach a persistent volume to the Agentic service
+for its SQLite ledger.
 
+Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
+service roots, variables, bring-up order, and health checks. Do not add
+Supabase during the hackathon: the Agentic service already owns task, thread,
+approval, and audit state.

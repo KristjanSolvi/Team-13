@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const environmentSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
+  HOST: z.string().min(1).default("127.0.0.1"),
   UI_ORIGIN: z.string().url().default("http://127.0.0.1:5173"),
   DATABASE_PATH: z.string().min(1).default("./data/follow-through.sqlite"),
   APP_BEARER_TOKEN: z.string().min(8),
@@ -24,6 +25,7 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
 
   return {
     port: parsed.PORT,
+    host: parsed.HOST,
     uiOrigin: parsed.UI_ORIGIN,
     databasePath: parsed.DATABASE_PATH,
     appBearerToken: parsed.APP_BEARER_TOKEN,

@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 const environmentSchema = z.object({
-  INTEGRATION_API_PORT: z.coerce.number().int().min(1).max(65_535).default(8790),
-  INTEGRATION_API_HOST: z.string().default("127.0.0.1"),
+  PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  HOST: z.string().min(1).optional(),
+  INTEGRATION_API_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  INTEGRATION_API_HOST: z.string().min(1).optional(),
   AGENTIC_BASE_URL: z.url().default("http://127.0.0.1:3000"),
   PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
   AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
@@ -25,8 +27,8 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
       return url.origin;
     });
   return {
-    port: value.INTEGRATION_API_PORT,
-    host: value.INTEGRATION_API_HOST,
+    port: value.INTEGRATION_API_PORT ?? value.PORT ?? 8790,
+    host: value.INTEGRATION_API_HOST ?? value.HOST ?? "127.0.0.1",
     agenticBaseUrl: value.AGENTIC_BASE_URL,
     pipelineBaseUrl: value.PIPELINE_BASE_URL,
     agenticBearerToken: value.AGENTIC_APP_BEARER_TOKEN,

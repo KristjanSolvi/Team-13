@@ -7,6 +7,10 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  nitro: {
+    // Lovable keeps its Cloudflare preset; Railway sets NITRO_PRESET=node-server.
+    preset: process.env["NITRO_PRESET"] ?? "cloudflare-module",
+  },
   vite: {
     server: {
       proxy: {

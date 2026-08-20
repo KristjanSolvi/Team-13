@@ -3,7 +3,10 @@ import { z } from "zod";
 import { codingSystems, type CodingSystem } from "./contracts.js";
 
 const runtimeSchema = z.object({
-  PIPELINE_PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
+  PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  HOST: z.string().min(1).optional(),
+  PIPELINE_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  PIPELINE_HOST: z.string().min(1).optional(),
   PIPELINE_ALLOWED_ORIGINS: z
     .string()
     .default("http://localhost:5173")
@@ -31,6 +34,7 @@ export interface CortiCredentials {
 
 export interface RuntimeConfig {
   port: number;
+  host: string;
   allowedOrigins: string[];
   corti: CortiCredentials | null;
   missingCortiVariables: string[];
@@ -60,7 +64,8 @@ export function readRuntimeConfig(
     .map(([name]) => name);
 
   const base = {
-    port: parsed.PIPELINE_PORT,
+    port: parsed.PIPELINE_PORT ?? parsed.PORT ?? 8787,
+    host: parsed.PIPELINE_HOST ?? parsed.HOST ?? "127.0.0.1",
     allowedOrigins: parsed.PIPELINE_ALLOWED_ORIGINS,
     missingCortiVariables,
   };

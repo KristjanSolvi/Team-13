@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:railway": "NITRO_PRESET=node-server vite build",
     "build:dev": "vite build --mode development",
+    "start": "node .output/server/index.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -51,6 +53,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "destr": "^2.0.5",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
@@ -86,5 +89,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
