@@ -97,7 +97,7 @@ branches.
 - Create: `src/domain/handover.ts`
 - Create: `test/handover-domain.test.ts`
 
-- [ ] **Step 1: Write failing domain tests**
+- [x] **Step 1: Write failing domain tests**
 
 Create `test/handover-domain.test.ts` with focused tests for deterministic
 sorting, active task filtering, and hash stability:
@@ -187,7 +187,7 @@ test("source snapshot and hash are stable across input ordering", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
 Run:
 
@@ -197,7 +197,7 @@ npx tsx --test test/handover-domain.test.ts
 
 Expected: failure because `src/domain/handover.ts` does not exist.
 
-- [ ] **Step 3: Add the canonical schemas and snapshot helpers**
+- [x] **Step 3: Add the canonical schemas and snapshot helpers**
 
 Create `src/domain/handover.ts`. Export these exact public contracts and use Zod
 schemas as the JSON boundary:
@@ -336,7 +336,7 @@ export function handoverRequestHash(value: {
 Use the same code-point comparator for all snapshot arrays; do not use
 locale-dependent sorting.
 
-- [ ] **Step 4: Run the focused test and root build**
+- [x] **Step 4: Run the focused test and root build**
 
 ```bash
 npx tsx --test test/handover-domain.test.ts
@@ -345,7 +345,7 @@ npm run build
 
 Expected: both commands pass.
 
-- [ ] **Step 5: Commit the domain contract**
+- [x] **Step 5: Commit the domain contract**
 
 ```bash
 git add src/domain/handover.ts test/handover-domain.test.ts
@@ -360,7 +360,7 @@ git commit -m "feat: define grounded handover contract"
 - Modify: `src/infra/store.ts`
 - Modify: `test/store.test.ts`
 
-- [ ] **Step 1: Add failing persistence tests**
+- [x] **Step 1: Add failing persistence tests**
 
 Append tests that create a `requested` record, retrieve it by ID and by
 `requestedBy + idempotencyKey`, update it to `draft`, close the database, reopen
@@ -393,7 +393,7 @@ const requestedHandover: HandoverRecord = {
 };
 ```
 
-- [ ] **Step 2: Confirm the store tests fail**
+- [x] **Step 2: Confirm the store tests fail**
 
 ```bash
 npm run build
@@ -403,7 +403,7 @@ node --test build/test/store.test.js
 Expected: compile failure because `putHandover`, `getHandover`, and
 `getHandoverByRequest` are missing.
 
-- [ ] **Step 3: Add the SQLite table**
+- [x] **Step 3: Add the SQLite table**
 
 Add this statement to `openDatabase` after `processed_commands`:
 
@@ -435,7 +435,7 @@ CREATE INDEX IF NOT EXISTS idx_handovers_patient_created
   ON handovers(patient_id, created_at, handover_id);
 ```
 
-- [ ] **Step 4: Add typed store mapping and methods**
+- [x] **Step 4: Add typed store mapping and methods**
 
 Import the handover schemas/types into `src/infra/store.ts`. Add a strict
 `mapHandover` that parses nullable JSON with `handoverPacketSchema`,
@@ -443,18 +443,24 @@ Import the handover schemas/types into `src/infra/store.ts`. Add a strict
 
 ```ts
 putHandover(value: HandoverRecord): void
+updateHandover(value: HandoverRecord, expectedVersion: number): HandoverRecord
 getHandover(handoverId: string): HandoverRecord | null
 requireHandover(handoverId: string): HandoverRecord
 getHandoverByRequest(requestedBy: string, idempotencyKey: string): HandoverRecord | null
 listPatientHandovers(patientId: string): HandoverRecord[]
 ```
 
-`putHandover` must use an `INSERT` statement with
-`ON CONFLICT(handover_id) DO UPDATE`, preserving the original `created_at`. The
-unique request key must remain enforced by SQLite, not by a check-then-insert
-race.
+`putHandover` is creation-only. The unique request key remains enforced by
+SQLite, not by a check-then-insert race. `updateHandover` requires
+`value.version === expectedVersion + 1`, rejects changes to request identity,
+and performs a parameterized lifecycle-only update with
+`WHERE handover_id = ? AND version = ?`. It may update context, status, packet,
+render, snapshot, version, and update/generation timestamps; it preserves
+patient, interaction, requester, reason, focus, correlation, idempotency key,
+request hash, and creation time. A stale write returns `VERSION_CONFLICT` and
+cannot alter the winner.
 
-- [ ] **Step 5: Run focused and full store checks**
+- [x] **Step 5: Run focused and full store checks**
 
 ```bash
 npm run build
@@ -465,7 +471,7 @@ npm test
 Expected: all commands pass and no `.sqlite`, `-wal`, or `-shm` files appear in
 the worktree.
 
-- [ ] **Step 6: Commit persistence**
+- [x] **Step 6: Commit persistence**
 
 ```bash
 git add src/infra/database.ts src/infra/store.ts test/store.test.ts
