@@ -11,9 +11,11 @@ import { ZodError } from "zod";
 import {
   candidateSchema,
   isTaskCommand,
+  pipelineProxyPaths,
   taskCommandSchemas,
 } from "./contracts.js";
 import { IntegrationError } from "./errors.js";
+import { integrationOpenApi } from "./openapi.js";
 import type { IntegrationService } from "./service.js";
 
 const safeCorrelationId = /^[A-Za-z0-9._-]{1,100}$/;
@@ -60,6 +62,10 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
     response.json({ status: "ok" });
   });
 
+  app.get("/openapi.json", (_request, response) => {
+    response.json(integrationOpenApi);
+  });
+
   app.get(
     "/readyz",
     route(async (_request, response) => {
@@ -83,12 +89,88 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
     }),
   );
 
+  for (const pipelinePath of pipelineProxyPaths) {
+    app.post(
+      pipelinePath,
+      route(async (request, response) => {
+        const result = await options.service.pipelineRequest(
+          pipelinePath,
+          request.body,
+          correlationId(response),
+        );
+        response.status(result.status).json(result.body);
+      }),
+    );
+  }
+
+  app.get("/api/events/stream", async (request, response, next) => {
+    const lastEventId = request.header("last-event-id");
+    if (lastEventId !== undefined && !/^\d+$/.test(lastEventId)) {
+      next(
+        new IntegrationError(
+          "INVALID_EVENT_SEQUENCE",
+          "Last-Event-ID must be a non-negative integer sequence",
+        ),
+      );
+      return;
+    }
+
+    const controller = new AbortController();
+    request.once("aborted", () => controller.abort());
+    response.once("close", () => controller.abort());
+    try {
+      const stream = await options.service.eventStream(
+        lastEventId,
+        correlationId(response),
+        controller.signal,
+      );
+      response.status(200);
+      response.setHeader("content-type", "text/event-stream");
+      response.setHeader("cache-control", "no-cache");
+      response.setHeader("connection", "keep-alive");
+      response.flushHeaders();
+
+      const reader = stream.getReader();
+      try {
+        while (!response.destroyed) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          response.write(Buffer.from(chunk.value));
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      if (!response.writableEnded && !response.destroyed) {
+        response.end();
+      }
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy();
+        return;
+      }
+      next(error);
+    }
+  });
+
   app.get(
     "/api/patients/:patientId/overview",
     route(async (request, response) => {
       const patientId = pathParam(request, "patientId");
       response.json(
         await options.service.patientOverview(
+          patientId,
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/patients/:patientId/companion",
+    route(async (request, response) => {
+      const patientId = pathParam(request, "patientId");
+      response.json(
+        await options.service.wardCompanionOverview(
           patientId,
           correlationId(response),
         ),
@@ -109,7 +191,10 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
         );
       }
       const actorId = request.header("x-actor-id");
-      if (actorId === undefined || actorId.trim().length === 0) {
+      if (
+        actorId === undefined ||
+        !/^[A-Za-z0-9:._-]{1,120}$/.test(actorId)
+      ) {
         throw new IntegrationError(
           "ACTOR_REQUIRED",
           "x-actor-id is required",

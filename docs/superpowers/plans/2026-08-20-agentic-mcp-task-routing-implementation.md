@@ -549,6 +549,8 @@ test("router uses capability, shift, capacity, workload, and stable tie-break", 
 });
 ```
 
+Focused regressions must also prove that `DemoClock` copies its constructor input, rejects fractional, unsafe-integer, or out-of-range advances without poisoning its current time, and routes mixed-case tie-break keys and non-ASCII member IDs by locale-independent UTF-16 code-unit order.
+
 - [ ] **Step 2: Run the focused test and confirm RED**
 
 Run: `source ./activate && npm run build`
@@ -572,7 +574,14 @@ export class SystemClock implements Clock {
 }
 
 export class DemoClock implements Clock {
-  constructor(private current: Date, private readonly enabled: boolean) {}
+  private current: Date;
+
+  constructor(
+    current: Date,
+    private readonly enabled: boolean,
+  ) {
+    this.current = new Date(current);
+  }
 
   now(): Date {
     return this.enabled ? new Date(this.current) : new Date();
@@ -580,12 +589,28 @@ export class DemoClock implements Clock {
 
   advance(milliseconds: number): Date {
     if (!this.enabled) {
-      throw new DomainError("DEMO_CLOCK_DISABLED", "Demo clock is disabled", false, 403);
+      throw new DomainError(
+        "DEMO_CLOCK_DISABLED",
+        "Demo clock is disabled",
+        false,
+        403,
+      );
     }
-    if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
-      throw new DomainError("INVALID_CLOCK_ADVANCE", "milliseconds must be positive");
+    if (!Number.isSafeInteger(milliseconds) || milliseconds <= 0) {
+      throw new DomainError(
+        "INVALID_CLOCK_ADVANCE",
+        "milliseconds must be positive",
+      );
     }
-    this.current = new Date(this.current.getTime() + milliseconds);
+    const nextTime = this.current.getTime() + milliseconds;
+    const candidate = new Date(nextTime);
+    if (!Number.isFinite(candidate.getTime())) {
+      throw new DomainError(
+        "INVALID_CLOCK_ADVANCE",
+        "milliseconds must be positive",
+      );
+    }
+    this.current = candidate;
     return this.now();
   }
 }
@@ -632,7 +657,15 @@ export function calculatePriority(task: Task, now: Date): PriorityBreakdown {
 import type { Member, Task } from "./types.js";
 
 function hasCapabilities(member: Member, required: string[]): boolean {
-  return required.every((capability) => member.capabilities.includes(capability));
+  return required.every((capability) =>
+    member.capabilities.includes(capability),
+  );
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 export function chooseMember(task: Task, members: Member[]): Member | null {
@@ -645,8 +678,8 @@ export function chooseMember(task: Task, members: Member[]): Member | null {
       .toSorted(
         (left, right) =>
           left.openTaskCount - right.openTaskCount ||
-          left.tieBreakKey.localeCompare(right.tieBreakKey) ||
-          left.memberId.localeCompare(right.memberId)
+          compareCodeUnits(left.tieBreakKey, right.tieBreakKey) ||
+          compareCodeUnits(left.memberId, right.memberId),
       )[0] ?? null
   );
 }
@@ -656,7 +689,7 @@ export function chooseMember(task: Task, members: Member[]): Member | null {
 
 Run: `source ./activate && npm test`
 
-Expected: priority and routing tests pass together with earlier tests.
+Expected: priority, routing, constructor-alias, invalid-advance integrity, and locale-independent ordering regressions pass together with earlier tests.
 
 ```bash
 git add src/infra/clock.ts src/domain/priority.ts src/domain/routing.ts test/priority-routing.test.ts

@@ -1,5 +1,5 @@
 import { IntegrationError } from "./errors.js";
-import type { TaskCommand } from "./contracts.js";
+import type { PipelineProxyPath, TaskCommand } from "./contracts.js";
 
 export interface RequestMeta {
   correlationId: string;
@@ -25,6 +25,11 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  eventStream(
+    lastEventId: string | undefined,
+    meta: RequestMeta,
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>>;
 }
 
 export interface PipelineHealth {
@@ -33,8 +38,18 @@ export interface PipelineHealth {
   missingCortiVariables: string[];
 }
 
+export interface UpstreamJsonResult {
+  status: number;
+  body: unknown;
+}
+
 export interface PipelineGateway {
   health(): Promise<PipelineHealth>;
+  request(
+    path: PipelineProxyPath,
+    body: unknown,
+    meta: RequestMeta,
+  ): Promise<UpstreamJsonResult>;
 }
 
 interface FetchJsonOptions {
@@ -53,6 +68,13 @@ export class JsonHttpClient {
   ) {}
 
   async request(path: string, options: FetchJsonOptions = {}): Promise<unknown> {
+    return (await this.requestWithStatus(path, options)).body;
+  }
+
+  async requestWithStatus(
+    path: string,
+    options: FetchJsonOptions = {},
+  ): Promise<UpstreamJsonResult> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     const headers = new Headers({ accept: "application/json" });
@@ -99,7 +121,7 @@ export class JsonHttpClient {
           upstreamError.retryable ?? response.status >= 500,
         );
       }
-      return payload;
+      return { status: response.status, body: payload };
     } catch (error) {
       if (error instanceof IntegrationError) {
         throw error;
@@ -160,10 +182,10 @@ export class HttpAgenticGateway implements AgenticGateway {
   private readonly client: JsonHttpClient;
 
   constructor(
-    baseUrl: string,
-    timeoutMs: number,
+    private readonly baseUrl: string,
+    private readonly timeoutMs: number,
     private readonly bearerToken: string,
-    fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = fetch,
   ) {
     this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
   }
@@ -213,6 +235,72 @@ export class HttpAgenticGateway implements AgenticGateway {
       },
     );
   }
+
+  async eventStream(
+    lastEventId: string | undefined,
+    meta: RequestMeta,
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>> {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, this.timeoutMs);
+    const headers = new Headers({
+      accept: "text/event-stream",
+      authorization: `Bearer ${this.bearerToken}`,
+      "x-correlation-id": meta.correlationId,
+    });
+    if (lastEventId !== undefined) {
+      headers.set("last-event-id", lastEventId);
+    }
+
+    try {
+      const response = await this.fetchImpl(new URL("/api/events/stream", this.baseUrl), {
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const payload = await response.text();
+        let parsed: unknown = null;
+        try {
+          parsed = payload.length === 0 ? null : (JSON.parse(payload) as unknown);
+        } catch {
+          throw invalidUpstreamShape();
+        }
+        const upstreamError = errorPayload(parsed);
+        throw new IntegrationError(
+          upstreamError.code,
+          upstreamError.message,
+          response.status,
+          upstreamError.retryable ?? response.status >= 500,
+        );
+      }
+      if (response.body === null) {
+        throw invalidUpstreamShape();
+      }
+      return response.body;
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error instanceof IntegrationError) {
+        throw error;
+      }
+      if (controller.signal.aborted && !signal.aborted) {
+        throw new IntegrationError(
+          "UPSTREAM_TIMEOUT",
+          "The upstream event stream timed out while connecting",
+          504,
+          true,
+        );
+      }
+      throw new IntegrationError(
+        "UPSTREAM_UNAVAILABLE",
+        "The upstream event stream is unavailable",
+        502,
+        true,
+      );
+    }
+  }
 }
 
 export class HttpPipelineGateway implements PipelineGateway {
@@ -247,6 +335,19 @@ export class HttpPipelineGateway implements PipelineGateway {
       cortiConfigured: value.cortiConfigured,
       missingCortiVariables: value.missingCortiVariables as string[],
     };
+  }
+
+  request(
+    path: PipelineProxyPath,
+    body: unknown,
+    meta: RequestMeta,
+  ): Promise<UpstreamJsonResult> {
+    return this.client.requestWithStatus(path, {
+      method: "POST",
+      body,
+      meta,
+      authenticate: false,
+    });
   }
 }
 

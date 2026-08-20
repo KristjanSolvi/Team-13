@@ -21,6 +21,18 @@ function harness() {
       taskId: "task-1",
       state: "offered_to_team",
     })),
+    eventStream: vi.fn(async () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'id: 42\nevent: thread.state_changed\ndata: {"sequence":42}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      }),
+    ),
   };
   const pipeline: PipelineGateway = {
     health: vi.fn(async () => ({
@@ -28,6 +40,7 @@ function harness() {
       cortiConfigured: true,
       missingCortiVariables: [],
     })),
+    request: vi.fn(async () => ({ status: 200, body: { candidates: [] } })),
   };
   const service = new IntegrationService(agentic, pipeline, () =>
     new Date("2026-08-20T12:00:00.000Z"),
@@ -48,6 +61,27 @@ describe("integration API", () => {
     expect(response.body).toEqual({ status: "ok" });
     expect(agentic.health).not.toHaveBeenCalled();
     expect(pipeline.health).not.toHaveBeenCalled();
+  });
+
+  it("publishes a machine-readable contract without server credentials", async () => {
+    const { app } = harness();
+
+    const response = await request(app).get("/openapi.json").expect(200);
+
+    expect(response.body.openapi).toBe("3.1.0");
+    expect(response.body.paths).toHaveProperty("/api/events/stream");
+    expect(response.body.paths).toHaveProperty(
+      "/api/corti/candidates/generate",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/patients/{patientId}/overview",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/patients/{patientId}/companion",
+    );
+    expect(JSON.stringify(response.body)).not.toContain(
+      "AGENTIC_APP_BEARER_TOKEN",
+    );
   });
 
   it("aggregates backend readiness and Corti configuration", async () => {
@@ -122,13 +156,43 @@ describe("integration API", () => {
         patientId: "synthetic-karen",
         interactionId: "interaction-karen-1",
         signalText: "Dizziness after a medication change needs follow-through",
-        evidenceRefs: ["encounter:candidate-karen-1.1"],
-        idempotencyKey: "candidate-candidate-karen-1",
+        evidenceRefs: ["encounter:candidate-9a23a2890125a1859ee91fbf.1"],
+        idempotencyKey: "candidate-9a23a2890125a1859ee91fbf",
       },
       {
         actorId: "pipeline:candidate-handoff",
         correlationId: "corr-karen-1",
       },
+    );
+  });
+
+  it("proxies only the explicit Corti pipeline surface", async () => {
+    const { pipeline, app } = harness();
+
+    const response = await request(app)
+      .post("/api/corti/candidates/generate")
+      .set("x-correlation-id", "corr-pipeline-1")
+      .send({
+        patientId: "synthetic-karen",
+        interactionId: "interaction-karen-1",
+        segments: [],
+      })
+      .expect(200);
+    await request(app)
+      .post("/api/corti/not-a-real-route")
+      .send({})
+      .expect(404);
+
+    expect(response.body).toEqual({ candidates: [] });
+    expect(pipeline.request).toHaveBeenCalledOnce();
+    expect(pipeline.request).toHaveBeenCalledWith(
+      "/api/corti/candidates/generate",
+      {
+        patientId: "synthetic-karen",
+        interactionId: "interaction-karen-1",
+        segments: [],
+      },
+      { correlationId: "corr-pipeline-1" },
     );
   });
 
@@ -174,6 +238,59 @@ describe("integration API", () => {
     });
   });
 
+  it("returns the Ward Companion read model without exposing credentials", async () => {
+    const { agentic, app } = harness();
+    vi.mocked(agentic.listThreads).mockResolvedValue([
+      {
+        threadId: "thread-1",
+        patientId: "synthetic-karen",
+        interactionId: "interaction-1",
+        summary: "Dizziness after a medication change",
+        evidenceRefs: ["encounter:candidate-1.1"],
+        state: "awaiting_review",
+        version: 1,
+        createdAt: "2026-08-20T10:00:00.000Z",
+        updatedAt: "2026-08-20T10:00:00.000Z",
+      },
+    ]);
+    vi.mocked(agentic.listTasks).mockResolvedValue([
+      {
+        taskId: "task-1",
+        threadId: "thread-1",
+        patientId: "synthetic-karen",
+        summary: "Check blood pressure within 48 hours",
+        targetTeamId: "district-nursing",
+        dueBy: "2026-08-22T10:00:00.000Z",
+        state: "draft",
+        assignedMemberId: null,
+        version: 1,
+        createdAt: "2026-08-20T10:00:00.000Z",
+        updatedAt: "2026-08-20T10:00:00.000Z",
+      },
+    ]);
+
+    const response = await request(app)
+      .get("/api/patients/synthetic-karen/companion")
+      .expect(200);
+
+    expect(response.body.schemaVersion).toBe("1");
+    expect(response.body.threads[0]).toMatchObject({
+      id: "task-1",
+      patientId: "synthetic-karen",
+      status: "pending",
+      assignee: null,
+      backend: {
+        threadId: "thread-1",
+        taskId: "task-1",
+        taskVersion: 1,
+        availableCommands: ["approve", "correct", "dismiss"],
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain(
+      "server-only-app-token",
+    );
+  });
+
   it("validates and forwards clinician task commands", async () => {
     const { agentic, app } = harness();
 
@@ -215,6 +332,37 @@ describe("integration API", () => {
 
     expect(response.body.error.code).toBe("ACTOR_REQUIRED");
     expect(agentic.taskCommand).not.toHaveBeenCalled();
+  });
+
+  it("proxies the agentic event stream and resumes from Last-Event-ID", async () => {
+    const { agentic, app } = harness();
+
+    const response = await request(app)
+      .get("/api/events/stream")
+      .set("last-event-id", "41")
+      .set("x-correlation-id", "corr-stream-1")
+      .expect(200);
+
+    expect(response.headers["content-type"]).toContain("text/event-stream");
+    expect(response.text).toContain("event: thread.state_changed");
+    expect(response.text).toContain('data: {"sequence":42}');
+    expect(agentic.eventStream).toHaveBeenCalledWith(
+      "41",
+      { correlationId: "corr-stream-1" },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("rejects an invalid Last-Event-ID before opening an upstream stream", async () => {
+    const { agentic, app } = harness();
+
+    const response = await request(app)
+      .get("/api/events/stream")
+      .set("last-event-id", "not-a-sequence")
+      .expect(400);
+
+    expect(response.body.error.code).toBe("INVALID_EVENT_SEQUENCE");
+    expect(agentic.eventStream).not.toHaveBeenCalled();
   });
 
   it("allows CORS only for configured UI origins", async () => {

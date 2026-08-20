@@ -6,6 +6,8 @@ const evidenceSchema = z.object({
   startSeconds: z.number().nonnegative(),
   endSeconds: z.number().nonnegative(),
   speakerId: z.number().int().optional(),
+}).refine((value) => value.endSeconds >= value.startSeconds, {
+  message: "Evidence endSeconds must not precede startSeconds",
 });
 
 export const candidateSchema = z.object({
@@ -26,6 +28,18 @@ export const candidateSchema = z.object({
 });
 
 export type FollowThroughCandidate = z.infer<typeof candidateSchema>;
+
+export const pipelineProxyPaths = [
+  "/api/corti/ambient/session",
+  "/api/corti/ambient/token",
+  "/api/corti/dictation/token",
+  "/api/corti/candidates/generate",
+  "/api/corti/dictation/revision-preview",
+  "/api/corti/documents/generate",
+  "/api/corti/coding/predict",
+] as const;
+
+export type PipelineProxyPath = (typeof pipelineProxyPaths)[number];
 
 const commandBase = {
   expectedVersion: z.number().int().positive(),
