@@ -98,7 +98,7 @@ function Index() {
   const addNote = (
     patientId: string,
     text: string,
-    doc: DocId = "ward-round",
+    doc: DocId = "medical",
     source: CaseNote["source"] = "agent",
     author = "Ward Threads agent",
   ) =>
@@ -314,7 +314,7 @@ function Index() {
                 onAddThread={handleAddThread}
                 onSelectPatient={setEhrPatientId}
                 onScribe={(text) =>
-                  addNote(ehrPatientId, text, "ward-round", "scribe", "Ambient scribe")
+                  addNote(ehrPatientId, text, "medical", "scribe", "Ambient scribe")
                 }
                 cameFromBoard={cameFromBoard}
                 onBackToBoard={() => {
