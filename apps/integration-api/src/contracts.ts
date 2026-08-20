@@ -41,6 +41,16 @@ export const pipelineProxyPaths = [
 
 export type PipelineProxyPath = (typeof pipelineProxyPaths)[number];
 
+export const handoverRequestSchema = z
+  .object({
+    idempotencyKey: z.string().min(8).max(200),
+    reason: z.enum(["assignment", "on_demand"]),
+    focus: z.string().trim().min(1).max(500).nullable().default(null),
+  })
+  .strict();
+
+export type HandoverRequest = z.infer<typeof handoverRequestSchema>;
+
 const commandBase = {
   expectedVersion: z.number().int().positive(),
   idempotencyKey: z.string().min(8).max(200),

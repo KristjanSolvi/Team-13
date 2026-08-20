@@ -14,6 +14,7 @@ import {
   ehrFileDocumentSchema,
   ehrProfileUpdateSchema,
   ehrReviseDocumentSchema,
+  handoverRequestSchema,
   isTaskCommand,
   pipelineProxyPaths,
   taskCommandSchemas,
@@ -181,6 +182,19 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
           correlationId(response),
         ),
       );
+    }),
+  );
+
+  app.post(
+    "/api/patients/:patientId/handovers",
+    route(async (request, response) => {
+      const meta = requestMeta(request, response);
+      const result = await options.service.requestHandover(
+        pathParam(request, "patientId"),
+        handoverRequestSchema.parse(request.body),
+        meta,
+      );
+      response.status(result.status).json(result.body);
     }),
   );
 

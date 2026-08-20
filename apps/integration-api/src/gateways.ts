@@ -1,5 +1,9 @@
 import { IntegrationError } from "./errors.js";
-import type { PipelineProxyPath, TaskCommand } from "./contracts.js";
+import type {
+  HandoverRequest,
+  PipelineProxyPath,
+  TaskCommand,
+} from "./contracts.js";
 
 export interface RequestMeta {
   correlationId: string;
@@ -34,6 +38,20 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  createHandoverDraft?(
+    patientId: string,
+    input: HandoverRequest,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  finalizeHandover?(
+    handoverId: string,
+    input: {
+      expectedVersion: number;
+      sourceSnapshotHash: string;
+      rendered: unknown;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown>;
   eventStream(
     lastEventId: string | undefined,
     meta: RequestMeta,
@@ -59,6 +77,7 @@ export interface PipelineGateway {
     body: unknown,
     meta: RequestMeta,
   ): Promise<UpstreamJsonResult>;
+  renderHandover?(input: unknown, meta: RequestMeta): Promise<unknown>;
 }
 
 export interface ProfileGateway {
@@ -276,6 +295,42 @@ export class HttpAgenticGateway implements AgenticGateway {
     );
   }
 
+  createHandoverDraft(
+    patientId: string,
+    input: HandoverRequest,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/handover-drafts`,
+      {
+        method: "POST",
+        body: input,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  finalizeHandover(
+    handoverId: string,
+    input: {
+      expectedVersion: number;
+      sourceSnapshotHash: string;
+      rendered: unknown;
+    },
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/handovers/${encodeURIComponent(handoverId)}/finalize`,
+      {
+        method: "POST",
+        body: input,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
   async eventStream(
     lastEventId: string | undefined,
     meta: RequestMeta,
@@ -385,6 +440,15 @@ export class HttpPipelineGateway implements PipelineGateway {
     return this.client.requestWithStatus(path, {
       method: "POST",
       body,
+      meta,
+      authenticate: false,
+    });
+  }
+
+  renderHandover(input: unknown, meta: RequestMeta): Promise<unknown> {
+    return this.client.request("/api/corti/handovers/render", {
+      method: "POST",
+      body: input,
       meta,
       authenticate: false,
     });

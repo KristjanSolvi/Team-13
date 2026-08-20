@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 
+import { z } from "zod";
+
 import type {
   FollowThroughCandidate,
+  HandoverRequest,
   PipelineProxyPath,
   TaskCommand,
 } from "./contracts.js";
@@ -26,6 +29,107 @@ export interface EhrDependencies {
   profile: ProfileGateway;
   mockEhr: MockEhrGateway;
 }
+
+const sourceSnapshotHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const groundedStatementSchema = z
+  .object({
+    statement: z.string().trim().min(1).max(1_000),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  })
+  .strict();
+const handoverTaskItemSchema = z
+  .object({
+    taskId: z.string().uuid(),
+    threadId: z.string().uuid(),
+    summary: z.string().min(1).max(240),
+    state: z.enum([
+      "draft",
+      "offered_to_team",
+      "assigned_to_member",
+      "accepted",
+      "completed",
+      "escalated",
+    ]),
+    targetTeamId: z.string().min(1).max(160),
+    assignedMemberId: z.string().min(1).max(160).nullable(),
+    clinicalUrgency: z.enum(["high", "medium", "routine"]),
+    acceptBy: z.string().datetime(),
+    dueBy: z.string().datetime(),
+    version: z.number().int().positive(),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  })
+  .strict();
+const handoverPacketSchema = z
+  .object({
+    situation: z.array(groundedStatementSchema).max(20),
+    background: z.array(groundedStatementSchema).max(20),
+    currentConcerns: z.array(groundedStatementSchema).max(20),
+    outstandingTasks: z.array(handoverTaskItemSchema).max(50),
+    awaitingVerification: z.array(handoverTaskItemSchema).max(50),
+    escalations: z.array(handoverTaskItemSchema).max(50),
+    unknowns: z.array(z.string().trim().min(1).max(500)).max(20),
+  })
+  .strict();
+const renderedStatementSchema = z
+  .object({
+    statement: z.string().trim().min(1).max(1_000),
+    sourceRefs: z.array(z.string().min(1).max(240)).max(20),
+  })
+  .strict();
+const renderedHandoverSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    sections: z
+      .array(
+        z
+          .object({
+            sectionId: z.string().trim().min(1).max(80),
+            heading: z.string().trim().min(1).max(160),
+            statements: z.array(renderedStatementSchema).max(50),
+          })
+          .strict(),
+      )
+      .max(10),
+    creditsConsumed: z.number().nonnegative(),
+  })
+  .strict();
+const publicHandoverSchema = z
+  .object({
+    handoverId: z.string().uuid(),
+    patientId: z.string().min(1).max(160),
+    status: z.literal("draft"),
+    renderingStatus: z.enum(["pending", "rendered"]),
+    reason: z.enum(["assignment", "on_demand"]),
+    requestedBy: z.string().min(1).max(120),
+    generatedAt: z.string().datetime().nullable(),
+    version: z.number().int().positive(),
+    sourceSnapshotHash: sourceSnapshotHashSchema,
+    packet: handoverPacketSchema,
+    rendered: renderedHandoverSchema.nullable(),
+    activity: z.array(z.record(z.string(), z.unknown())),
+  })
+  .strict();
+const handoverEnvelopeSchema = z
+  .object({
+    replayed: z.boolean(),
+    lifecycleStatus: z.enum(["draft", "rendered"]),
+    handover: publicHandoverSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const isRendered = value.lifecycleStatus === "rendered";
+    if (
+      (value.handover.renderingStatus === "rendered") !== isRendered ||
+      (value.handover.rendered !== null) !== isRendered
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Handover lifecycle and public projection do not match",
+      });
+    }
+  });
+
+type HandoverEnvelope = z.infer<typeof handoverEnvelopeSchema>;
 
 export class IntegrationService {
   constructor(
@@ -230,6 +334,69 @@ export class IntegrationService {
     return this.pipeline.request(path, body, { correlationId });
   }
 
+  async requestHandover(
+    patientId: string,
+    input: HandoverRequest,
+    meta: Required<Pick<RequestMeta, "actorId" | "correlationId">>,
+  ): Promise<{ status: 200 | 201; body: unknown }> {
+    const createDraft = this.agentic.createHandoverDraft;
+    const finalize = this.agentic.finalizeHandover;
+    const render = this.pipeline.renderHandover;
+    if (createDraft === undefined || finalize === undefined || render === undefined) {
+      throw new IntegrationError(
+        "HANDOVER_NOT_CONFIGURED",
+        "Patient handovers are not configured",
+        503,
+        true,
+      );
+    }
+    const draftEnvelope = parseHandoverEnvelope(
+      await createDraft.call(this.agentic, patientId, input, meta),
+    );
+    if (draftEnvelope.handover.patientId !== patientId) {
+      throw invalidUpstreamHandover();
+    }
+    if (draftEnvelope.lifecycleStatus === "rendered") {
+      return { status: 200, body: draftEnvelope.handover };
+    }
+
+    const draft = draftEnvelope.handover;
+    const rendered = await render.call(
+      this.pipeline,
+      {
+        handoverId: draft.handoverId,
+        patientId: draft.patientId,
+        sourceSnapshotHash: draft.sourceSnapshotHash,
+        packet: draft.packet,
+      },
+      meta,
+    );
+    const finalEnvelope = parseHandoverEnvelope(
+      await finalize.call(
+        this.agentic,
+        draft.handoverId,
+        {
+          expectedVersion: draft.version,
+          sourceSnapshotHash: draft.sourceSnapshotHash,
+          rendered,
+        },
+        meta,
+      ),
+    );
+    if (
+      finalEnvelope.lifecycleStatus !== "rendered" ||
+      finalEnvelope.handover.handoverId !== draft.handoverId ||
+      finalEnvelope.handover.patientId !== draft.patientId ||
+      finalEnvelope.handover.sourceSnapshotHash !== draft.sourceSnapshotHash
+    ) {
+      throw invalidUpstreamHandover();
+    }
+    return {
+      status: draftEnvelope.replayed || finalEnvelope.replayed ? 200 : 201,
+      body: finalEnvelope.handover,
+    };
+  }
+
   private requireEhr(): EhrDependencies {
     if (this.ehr === undefined) {
       throw new IntegrationError(
@@ -241,6 +408,23 @@ export class IntegrationService {
     }
     return this.ehr;
   }
+}
+
+function parseHandoverEnvelope(value: unknown): HandoverEnvelope {
+  const result = handoverEnvelopeSchema.safeParse(value);
+  if (!result.success) {
+    throw invalidUpstreamHandover();
+  }
+  return result.data;
+}
+
+function invalidUpstreamHandover(): IntegrationError {
+  return new IntegrationError(
+    "UPSTREAM_INVALID_RESPONSE",
+    "An upstream service returned an invalid response",
+    502,
+    true,
+  );
 }
 
 async function safeStatus(operation: () => Promise<unknown>): Promise<ServiceStatus> {

@@ -162,6 +162,50 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/patients/{patientId}/handovers": {
+      post: {
+        summary: "Generate or replay a grounded patient handover",
+        description:
+          "Creates a patient-scoped Agentic draft, renders it through the dedicated Corti pipeline operation, and finalizes it only while its source snapshot remains current.",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/HandoverRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Existing handover replayed or saved draft resumed",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Handover" },
+              },
+            },
+          },
+          "201": {
+            description: "New grounded handover generated",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Handover" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "403": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+          "504": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/patients/{patientId}/companion": {
       get: {
         summary: "Read a Ward Companion-compatible patient projection",
@@ -496,6 +540,56 @@ export const integrationOpenApi = {
       },
     },
     schemas: {
+      HandoverRequest: {
+        type: "object",
+        additionalProperties: false,
+        required: ["idempotencyKey", "reason"],
+        properties: {
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          reason: { type: "string", enum: ["assignment", "on_demand"] },
+          focus: {
+            type: ["string", "null"],
+            minLength: 1,
+            maxLength: 500,
+            default: null,
+          },
+        },
+      },
+      Handover: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "handoverId",
+          "patientId",
+          "status",
+          "renderingStatus",
+          "reason",
+          "requestedBy",
+          "generatedAt",
+          "version",
+          "sourceSnapshotHash",
+          "packet",
+          "rendered",
+          "activity",
+        ],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          patientId: { type: "string" },
+          status: { const: "draft" },
+          renderingStatus: { type: "string", enum: ["pending", "rendered"] },
+          reason: { type: "string", enum: ["assignment", "on_demand"] },
+          requestedBy: { type: "string" },
+          generatedAt: { type: ["string", "null"], format: "date-time" },
+          version: { type: "integer", minimum: 1 },
+          sourceSnapshotHash: {
+            type: "string",
+            pattern: "^sha256:[a-f0-9]{64}$",
+          },
+          packet: { type: "object", additionalProperties: true },
+          rendered: { type: ["object", "null"], additionalProperties: true },
+          activity: { type: "array", items: { type: "object" } },
+        },
+      },
       EhrPatientRecord: {
         type: "object",
         additionalProperties: false,

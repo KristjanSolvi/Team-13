@@ -27,6 +27,9 @@ Medical Coding.
 - `GET /api/patients/:patientId/companion`: map those authoritative records
   into the current Ward Companion `Thread` read model without coupling the
   backend to the UI component tree.
+- `POST /api/patients/:patientId/handovers`: generate or replay one grounded,
+  attributable patient handover by coordinating the Agentic draft, dedicated
+  Corti renderer, and snapshot-checked finalization.
 - `GET /api/events/stream`: proxy the Agentic SSE stream while keeping the
   application bearer token server-side; supports `Last-Event-ID` resume.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
@@ -49,6 +52,24 @@ from configured origins. The service binds to loopback by default.
 Synthetic consumer examples live in [`fixtures/`](fixtures/). UI work can build
 against those examples and replace only its adapter when the live services are
 available.
+
+Request an on-demand handover through the public integration boundary:
+
+```bash
+curl --request POST \
+  http://127.0.0.1:8790/api/patients/synthetic-karen/handovers \
+  --header 'content-type: application/json' \
+  --header 'x-actor-id: clinician:demo' \
+  --header 'x-correlation-id: handover-demo-1' \
+  --data '{
+    "idempotencyKey": "handover-demo-001",
+    "reason": "on_demand",
+    "focus": null
+  }'
+```
+
+The browser never receives or supplies the private Agentic service bearer. A
+replay returns `200`; a newly generated handover returns `201`.
 
 ## Ward Companion boundary
 

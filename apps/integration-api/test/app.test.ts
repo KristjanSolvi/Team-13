@@ -6,10 +6,53 @@ import type {
   AgenticGateway,
   PipelineGateway,
 } from "../src/gateways.js";
+import { IntegrationError } from "../src/errors.js";
 import { IntegrationService } from "../src/service.js";
 
+const sourceSnapshotHash = `sha256:${"a".repeat(64)}`;
+const handoverPacket = {
+  situation: [],
+  background: [],
+  currentConcerns: [],
+  outstandingTasks: [],
+  awaitingVerification: [],
+  escalations: [],
+  unknowns: ["No current concerns were found in the available sources."],
+};
+
+function handoverResponse(renderingStatus: "pending" | "rendered") {
+  return {
+    handoverId: "11111111-1111-4111-8111-111111111111",
+    patientId: "synthetic-karen",
+    status: "draft" as const,
+    renderingStatus,
+    reason: "on_demand" as const,
+    requestedBy: "clinician:karen",
+    generatedAt:
+      renderingStatus === "rendered" ? "2026-08-20T12:00:00.000Z" : null,
+    version: renderingStatus === "rendered" ? 3 : 2,
+    sourceSnapshotHash,
+    packet: handoverPacket,
+    rendered:
+      renderingStatus === "rendered"
+        ? { title: "Current handover", sections: [], creditsConsumed: 1 }
+        : null,
+    activity: [],
+  };
+}
+
+type HandoverAgenticGateway = AgenticGateway & {
+  createHandoverDraft: NonNullable<AgenticGateway["createHandoverDraft"]>;
+  finalizeHandover: NonNullable<AgenticGateway["finalizeHandover"]>;
+};
+
+type HandoverPipelineGateway = PipelineGateway & {
+  renderHandover: NonNullable<PipelineGateway["renderHandover"]>;
+};
+
 function harness() {
-  const agentic: AgenticGateway = {
+  const calls: string[] = [];
+  const agentic: HandoverAgenticGateway = {
     health: vi.fn(async () => ({ ok: true })),
     submitSignal: vi.fn(async () => ({
       signalEventId: "event-1",
@@ -21,6 +64,22 @@ function harness() {
       taskId: "task-1",
       state: "offered_to_team",
     })),
+    createHandoverDraft: vi.fn(async () => {
+      calls.push("draft");
+      return {
+        replayed: false,
+        lifecycleStatus: "draft",
+        handover: handoverResponse("pending"),
+      };
+    }),
+    finalizeHandover: vi.fn(async () => {
+      calls.push("finalize");
+      return {
+        replayed: false,
+        lifecycleStatus: "rendered",
+        handover: handoverResponse("rendered"),
+      };
+    }),
     eventStream: vi.fn(async () =>
       new ReadableStream<Uint8Array>({
         start(controller) {
@@ -34,13 +93,17 @@ function harness() {
       }),
     ),
   };
-  const pipeline: PipelineGateway = {
+  const pipeline: HandoverPipelineGateway = {
     health: vi.fn(async () => ({
       status: "ok",
       cortiConfigured: true,
       missingCortiVariables: [],
     })),
     request: vi.fn(async () => ({ status: 200, body: { candidates: [] } })),
+    renderHandover: vi.fn(async () => {
+      calls.push("render");
+      return { title: "Current handover", sections: [], creditsConsumed: 1 };
+    }),
   };
   const service = new IntegrationService(agentic, pipeline, () =>
     new Date("2026-08-20T12:00:00.000Z"),
@@ -49,7 +112,7 @@ function harness() {
     service,
     allowedOrigins: ["http://127.0.0.1:5173"],
   });
-  return { agentic, pipeline, app };
+  return { agentic, pipeline, app, calls };
 }
 
 describe("integration API", () => {
@@ -91,6 +154,15 @@ describe("integration API", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/ehr/documents/{documentId}/file",
     );
+    expect(response.body.paths).toHaveProperty(
+      "/api/patients/{patientId}/handovers",
+    );
+    expect(
+      Object.keys(
+        response.body.paths["/api/patients/{patientId}/handovers"].post
+          .responses,
+      ).sort(),
+    ).toEqual(["200", "201", "400", "403", "409", "502", "503", "504"]);
     expect(JSON.stringify(response.body)).not.toContain(
       "AGENTIC_APP_BEARER_TOKEN",
     );
@@ -231,6 +303,222 @@ describe("integration API", () => {
       },
       { correlationId: "corr-pipeline-1" },
     );
+    await request(app)
+      .post("/api/corti/handovers/render")
+      .send({ packet: handoverPacket })
+      .expect(404);
+    expect(pipeline.request).toHaveBeenCalledOnce();
+  });
+
+  it("orchestrates a new handover as draft, render, finalize and returns 201", async () => {
+    const { agentic, pipeline, app, calls } = harness();
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .set("x-correlation-id", "corr-handover-1")
+      .send({
+        idempotencyKey: "handover-karen-001",
+        reason: "on_demand",
+        focus: "  Overnight changes  ",
+      })
+      .expect(201);
+
+    expect(calls).toEqual(["draft", "render", "finalize"]);
+    expect(agentic.createHandoverDraft).toHaveBeenCalledWith(
+      "synthetic-karen",
+      {
+        idempotencyKey: "handover-karen-001",
+        reason: "on_demand",
+        focus: "Overnight changes",
+      },
+      {
+        actorId: "clinician:karen",
+        correlationId: "corr-handover-1",
+      },
+    );
+    expect(pipeline.renderHandover).toHaveBeenCalledWith(
+      {
+        handoverId: "11111111-1111-4111-8111-111111111111",
+        patientId: "synthetic-karen",
+        sourceSnapshotHash,
+        packet: handoverPacket,
+      },
+      {
+        actorId: "clinician:karen",
+        correlationId: "corr-handover-1",
+      },
+    );
+    expect(agentic.finalizeHandover).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      {
+        expectedVersion: 2,
+        sourceSnapshotHash,
+        rendered: {
+          title: "Current handover",
+          sections: [],
+          creditsConsumed: 1,
+        },
+      },
+      {
+        actorId: "clinician:karen",
+        correlationId: "corr-handover-1",
+      },
+    );
+    expect(response.body).toEqual(handoverResponse("rendered"));
+    expect(response.body).not.toHaveProperty("lifecycleStatus");
+    expect(response.body).not.toHaveProperty("replayed");
+  });
+
+  it("returns a rendered replay without another renderer or finalization call", async () => {
+    const { agentic, pipeline, app, calls } = harness();
+    vi.mocked(agentic.createHandoverDraft).mockImplementation(async () => {
+      calls.push("draft");
+      return {
+        replayed: true,
+        lifecycleStatus: "rendered",
+        handover: handoverResponse("rendered"),
+      };
+    });
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(200);
+
+    expect(response.body).toEqual(handoverResponse("rendered"));
+    expect(calls).toEqual(["draft"]);
+    expect(pipeline.renderHandover).not.toHaveBeenCalled();
+    expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+  });
+
+  it("resumes rendering a draft replay without starting another agent run", async () => {
+    const { agentic, app, calls } = harness();
+    vi.mocked(agentic.createHandoverDraft).mockImplementation(async () => {
+      calls.push("draft");
+      return {
+        replayed: true,
+        lifecycleStatus: "draft",
+        handover: handoverResponse("pending"),
+      };
+    });
+
+    await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(200);
+
+    expect(calls).toEqual(["draft", "render", "finalize"]);
+    expect(agentic.createHandoverDraft).toHaveBeenCalledOnce();
+  });
+
+  it("stops before render and finalize when draft generation fails", async () => {
+    const { agentic, pipeline, app } = harness();
+    vi.mocked(agentic.createHandoverDraft).mockRejectedValue(
+      new Error("private upstream details"),
+    );
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(500);
+
+    expect(response.body.error).toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "Request failed",
+    });
+    expect(JSON.stringify(response.body)).not.toContain("private upstream details");
+    expect(pipeline.renderHandover).not.toHaveBeenCalled();
+    expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+  });
+
+  it("stops before finalize and safely propagates a retryable render failure", async () => {
+    const { agentic, pipeline, app } = harness();
+    vi.mocked(pipeline.renderHandover).mockRejectedValue(
+      new IntegrationError(
+        "CORTI_RENDER_UNAVAILABLE",
+        "Please retry rendering",
+        503,
+        true,
+      ),
+    );
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(503);
+
+    expect(response.body.error).toMatchObject({
+      code: "CORTI_RENDER_UNAVAILABLE",
+      message: "Please retry rendering",
+      retryable: true,
+    });
+    expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+  });
+
+  it("returns a retryable source conflict without stale rendered content", async () => {
+    const { agentic, app } = harness();
+    vi.mocked(agentic.finalizeHandover).mockRejectedValue(
+      new IntegrationError(
+        "HANDOVER_SOURCE_CHANGED",
+        "Handover sources changed; retry the request",
+        409,
+        true,
+      ),
+    );
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(409);
+
+    expect(response.body.error).toMatchObject({
+      code: "HANDOVER_SOURCE_CHANGED",
+      retryable: true,
+    });
+    expect(response.body).not.toHaveProperty("rendered");
+  });
+
+  it.each([
+    ["missing actor", undefined, { idempotencyKey: "handover-001", reason: "on_demand" }],
+    ["malformed actor", "bad actor", { idempotencyKey: "handover-001", reason: "on_demand" }],
+    ["invalid reason", "clinician:karen", { idempotencyKey: "handover-001", reason: "routine" }],
+    ["blank focus", "clinician:karen", { idempotencyKey: "handover-001", reason: "on_demand", focus: "   " }],
+    ["short key", "clinician:karen", { idempotencyKey: "short", reason: "on_demand" }],
+    ["unknown field", "clinician:karen", { idempotencyKey: "handover-001", reason: "on_demand", surprise: true }],
+  ])("rejects %s before any upstream call", async (_label, actor, body) => {
+    const { agentic, pipeline, app } = harness();
+    let pending = request(app).post("/api/patients/synthetic-karen/handovers");
+    if (actor !== undefined) pending = pending.set("x-actor-id", actor);
+
+    await pending.send(body).expect(400);
+
+    expect(agentic.createHandoverDraft).not.toHaveBeenCalled();
+    expect(pipeline.renderHandover).not.toHaveBeenCalled();
+    expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed agentic envelopes before rendering", async () => {
+    const { agentic, pipeline, app } = harness();
+    vi.mocked(agentic.createHandoverDraft).mockResolvedValue({
+      replayed: false,
+      lifecycleStatus: "draft",
+      handover: { ...handoverResponse("pending"), packet: "unsafe" },
+    });
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(502);
+
+    expect(response.body.error.code).toBe("UPSTREAM_INVALID_RESPONSE");
+    expect(pipeline.renderHandover).not.toHaveBeenCalled();
   });
 
   it("rejects evidence scoped to a different interaction", async () => {
