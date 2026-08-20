@@ -250,11 +250,7 @@ function Index() {
       />
 
       {open && (
-        <section
-          className={`fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-panel/95 shadow-xl ring-1 ring-foreground/5 backdrop-blur-xl transition-[max-width] duration-300 ${
-            view === "activity" ? "max-w-[31rem]" : "max-w-[52rem]"
-          }`}
-        >
+        <section className="fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-xl border border-border bg-panel/95 shadow-xl ring-1 ring-foreground/5 backdrop-blur-xl transition-[max-width] duration-300">
           <header className="border-b border-border bg-background/60 px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
