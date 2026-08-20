@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#b8f818" />
+    <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg'/&gt;" />
+    <meta
+      name="description"
+      content="Developer evaluation page for the source-grounded Follow-Through Karen pipeline."
+    />
+    <title>Follow-Through · Karen pipeline evaluation</title>
+  </head>
+  <body class="evaluation-page">
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <img
+            class="corti-logo"
+            src="https://cdn.prod.website-files.com/679910de24e675a93f045f3b/68417ed4368d812aef21ec5a_corti-logo-black.svg"
+            alt="Corti"
+          />
+          <span class="divider" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Follow-Through</p>
+            <h1>Karen pipeline evaluation</h1>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div class="connection-readout" aria-live="polite">
+            <span id="pipeline-indicator" class="status-dot" data-tone="neutral"></span>
+            <span id="pipeline-status">Checking pipeline…</span>
+          </div>
+          <span class="dev-badge">Synthetic data only</span>
+          <a class="button ghost compact" href="/">Open microphone lab</a>
+        </div>
+      </header>
+
+      <main class="evaluation-grid">
+        <section class="evaluation-card" aria-labelledby="source-heading">
+          <div class="card-header">
+            <div>
+              <p class="step-label">01 · Disclosed recovery input</p>
+              <h2 id="source-heading">Karen transcript</h2>
+              <p class="subheading">Use this after proving live Ambient in the mic lab.</p>
+            </div>
+            <span class="status-pill" data-tone="active">Preloaded demo fallback</span>
+          </div>
+
+          <div id="evaluation-transcript" class="transcript-list evaluation-scroll"></div>
+
+          <div class="button-row">
+            <button id="run-candidate" class="button primary">
+              Run live Text Generation
+            </button>
+            <button id="use-candidate-fallback" class="button secondary">
+              Load disclosed candidate fallback
+            </button>
+          </div>
+          <p id="candidate-error" class="error-message" role="alert" hidden></p>
+        </section>
+
+        <section class="evaluation-card" aria-labelledby="candidate-heading">
+          <div class="card-header">
+            <div>
+              <p class="step-label">02 · Conservative detection</p>
+              <h2 id="candidate-heading">Evidence-backed candidate</h2>
+              <p class="subheading">No action, owner, team, deadline, or diagnosis yet.</p>
+            </div>
+            <span id="candidate-status" class="status-pill" data-tone="neutral">Not run</span>
+          </div>
+
+          <div id="candidate-output" class="evaluation-scroll">
+            <p class="empty-state">
+              Run live Text Generation or load the explicitly labelled fallback.
+            </p>
+          </div>
+
+          <label class="approval-box">
+            <input id="approval-confirmed" type="checkbox" />
+            <span>
+              <strong>Confirm synthetic clinician approval</strong>
+              <small>
+                I reviewed the fixed demo action: District Nursing Team blood-pressure
+                check within 48 hours. This does not mutate the ledger.
+              </small>
+            </span>
+          </label>
+
+          <button id="run-approved-outputs" class="button primary" disabled>
+            Generate approved document + coding
+          </button>
+          <p id="approved-output-error" class="error-message" role="alert" hidden></p>
+        </section>
+
+        <section class="evaluation-card" aria-labelledby="outputs-heading">
+          <div class="card-header">
+            <div>
+              <p class="step-label">03 · Post-approval support</p>
+              <h2 id="outputs-heading">Draft and code review</h2>
+              <p class="subheading">Two parallel Corti calls; neither commits clinical work.</p>
+            </div>
+            <span id="outputs-status" class="status-pill" data-tone="neutral">Waiting</span>
+          </div>
+
+          <div class="output-stack evaluation-scroll">
+            <article class="result-panel">
+              <div class="output-heading">
+                <h3>Receiving-team handoff</h3>
+                <span id="document-credits">Credits —</span>
+              </div>
+              <div id="document-output" class="result-content">
+                <p class="empty-state">Requires explicit synthetic approval above.</p>
+              </div>
+            </article>
+
+            <article class="result-panel">
+              <div class="output-heading">
+                <h3>Medical Coding suggestions</h3>
+                <span id="coding-credits">Credits —</span>
+              </div>
+              <div id="coding-output" class="result-content">
+                <p class="empty-state">Codes and review candidates remain separate.</p>
+              </div>
+            </article>
+
+            <article class="result-panel">
+              <div class="output-heading">
+                <h3>Evaluation checks</h3>
+                <span>Fail closed</span>
+              </div>
+              <div id="evaluation-checks" class="check-list" aria-live="polite"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="safety-bar">
+        <span>Live Text Generation is labelled live.</span>
+        <span>Fallback data is labelled fallback.</span>
+        <strong>No task, referral, or ownership is created here.</strong>
+      </footer>
+    </div>
+
+    <script type="module" src="/evaluation.ts"></script>
+  </body>
+</html>

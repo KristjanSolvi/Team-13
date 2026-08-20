@@ -28,8 +28,8 @@ in source, logs, screenshots, and public builds.
    `awaiting review` item with exact evidence and a proposal from an approved
    template: district-nursing blood-pressure check within 48 hours.
 4. **Approve or correct.** The fast path is one-tap approval. To demonstrate
-   Corti Dictation, choose `edit by dictation`, say a substantive owner or
-   deadline correction, inspect the structured preview, then confirm.
+   Corti Dictation, choose `edit by dictation`, say a substantive receiving-team,
+   deadline, or urgency correction, inspect the structured preview, then confirm.
 5. **Route and accept.** The mock District Nursing Team receives the task.
    Several eligible people may be notified; one accepts and becomes the single
    accountable owner. The ring becomes part-filled blue and says `tracking`.

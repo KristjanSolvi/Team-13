@@ -1,0 +1,49 @@
+{
+  "name": "@follow-through/corti-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
+    }
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "dev:harness": "vite --config vite.harness.config.ts",
+    "start": "node dist/server.js",
+    "build": "npm run build:pipeline && npm run build:harness",
+    "build:pipeline": "tsc -p tsconfig.build.json",
+    "build:harness": "vite build --config vite.harness.config.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.harness.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@corti/dictation-web": "0.9.0",
+    "@corti/sdk": "5.0.0",
+    "dotenv": "17.4.2",
+    "express": "5.2.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "26.2.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

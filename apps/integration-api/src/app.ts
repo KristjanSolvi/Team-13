@@ -1,0 +1,269 @@
+import { randomUUID } from "node:crypto";
+
+import express, {
+  type ErrorRequestHandler,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
+import { ZodError } from "zod";
+
+import {
+  candidateSchema,
+  isTaskCommand,
+  pipelineProxyPaths,
+  taskCommandSchemas,
+} from "./contracts.js";
+import { IntegrationError } from "./errors.js";
+import { integrationOpenApi } from "./openapi.js";
+import type { IntegrationService } from "./service.js";
+
+const safeCorrelationId = /^[A-Za-z0-9._-]{1,100}$/;
+
+export interface CreateIntegrationAppOptions {
+  service: IntegrationService;
+  allowedOrigins?: string[];
+}
+
+export function createIntegrationApp(options: CreateIntegrationAppOptions) {
+  const app = express();
+  const origins = new Set(options.allowedOrigins ?? []);
+
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "512kb" }));
+  app.use((request, response, next) => {
+    const supplied = request.header("x-correlation-id");
+    const correlationId =
+      supplied !== undefined && safeCorrelationId.test(supplied)
+        ? supplied
+        : randomUUID();
+    response.locals.correlationId = correlationId;
+    response.setHeader("x-correlation-id", correlationId);
+    response.setHeader("cache-control", "no-store");
+
+    const origin = request.header("origin");
+    if (origin !== undefined && origins.has(origin)) {
+      response.setHeader("access-control-allow-origin", origin);
+      response.setHeader("vary", "Origin");
+      response.setHeader(
+        "access-control-allow-headers",
+        "content-type,x-actor-id,x-correlation-id,last-event-id",
+      );
+      response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+    }
+    if (request.method === "OPTIONS") {
+      response.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
+  app.get("/healthz", (_request, response) => {
+    response.json({ status: "ok" });
+  });
+
+  app.get("/openapi.json", (_request, response) => {
+    response.json(integrationOpenApi);
+  });
+
+  app.get(
+    "/readyz",
+    route(async (_request, response) => {
+      const status = await options.service.readiness();
+      response.status(status.status === "ready" ? 200 : 503).json(status);
+    }),
+  );
+
+  app.post(
+    "/api/candidates/investigate",
+    route(async (request, response) => {
+      const candidate = candidateSchema.parse(request.body);
+      response
+        .status(202)
+        .json(
+          await options.service.investigateCandidate(
+            candidate,
+            correlationId(response),
+          ),
+        );
+    }),
+  );
+
+  for (const pipelinePath of pipelineProxyPaths) {
+    app.post(
+      pipelinePath,
+      route(async (request, response) => {
+        const result = await options.service.pipelineRequest(
+          pipelinePath,
+          request.body,
+          correlationId(response),
+        );
+        response.status(result.status).json(result.body);
+      }),
+    );
+  }
+
+  app.get("/api/events/stream", async (request, response, next) => {
+    const lastEventId = request.header("last-event-id");
+    if (lastEventId !== undefined && !/^\d+$/.test(lastEventId)) {
+      next(
+        new IntegrationError(
+          "INVALID_EVENT_SEQUENCE",
+          "Last-Event-ID must be a non-negative integer sequence",
+        ),
+      );
+      return;
+    }
+
+    const controller = new AbortController();
+    request.once("aborted", () => controller.abort());
+    response.once("close", () => controller.abort());
+    try {
+      const stream = await options.service.eventStream(
+        lastEventId,
+        correlationId(response),
+        controller.signal,
+      );
+      response.status(200);
+      response.setHeader("content-type", "text/event-stream");
+      response.setHeader("cache-control", "no-cache");
+      response.setHeader("connection", "keep-alive");
+      response.flushHeaders();
+
+      const reader = stream.getReader();
+      try {
+        while (!response.destroyed) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          response.write(Buffer.from(chunk.value));
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      if (!response.writableEnded && !response.destroyed) {
+        response.end();
+      }
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy();
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.get(
+    "/api/patients/:patientId/overview",
+    route(async (request, response) => {
+      const patientId = pathParam(request, "patientId");
+      response.json(
+        await options.service.patientOverview(
+          patientId,
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/patients/:patientId/companion",
+    route(async (request, response) => {
+      const patientId = pathParam(request, "patientId");
+      response.json(
+        await options.service.wardCompanionOverview(
+          patientId,
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/tasks/:taskId/:command",
+    route(async (request, response) => {
+      const taskId = pathParam(request, "taskId");
+      const command = pathParam(request, "command");
+      if (!isTaskCommand(command)) {
+        throw new IntegrationError(
+          "COMMAND_NOT_SUPPORTED",
+          "Task command is not supported",
+          404,
+        );
+      }
+      const actorId = request.header("x-actor-id");
+      if (
+        actorId === undefined ||
+        !/^[A-Za-z0-9:._-]{1,120}$/.test(actorId)
+      ) {
+        throw new IntegrationError(
+          "ACTOR_REQUIRED",
+          "x-actor-id is required",
+        );
+      }
+      const body = taskCommandSchemas[command].parse(request.body) as Record<
+        string,
+        unknown
+      >;
+      response.json(
+        await options.service.executeTaskCommand(
+          taskId,
+          command,
+          body,
+          { actorId, correlationId: correlationId(response) },
+        ),
+      );
+    }),
+  );
+
+  const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+    const value =
+      error instanceof IntegrationError
+        ? error
+        : error instanceof ZodError
+          ? new IntegrationError(
+              "VALIDATION_ERROR",
+              error.issues.map((issue) => issue.message).join("; "),
+            )
+          : new IntegrationError(
+              "INTERNAL_ERROR",
+              "Request failed",
+              500,
+              true,
+            );
+    response.status(value.status).json({
+      error: {
+        code: value.code,
+        message: value.message,
+        retryable: value.retryable,
+        correlationId: correlationId(response),
+      },
+    });
+  };
+  app.use(errorHandler);
+
+  return app;
+}
+
+function correlationId(response: Response): string {
+  const value = response.locals.correlationId;
+  return typeof value === "string" ? value : randomUUID();
+}
+
+function pathParam(request: Request, name: string): string {
+  const value = request.params[name];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new IntegrationError(
+      "VALIDATION_ERROR",
+      `Missing path parameter: ${name}`,
+    );
+  }
+  return value;
+}
+
+function route(
+  handler: (request: Request, response: Response) => Promise<void>,
+) {
+  return (request: Request, response: Response, next: NextFunction) => {
+    handler(request, response).catch(next);
+  };
+}

@@ -1,0 +1,49 @@
+{
+  "patientId": "synthetic-karen",
+  "threads": [
+    {
+      "threadId": "thread-karen-bp",
+      "patientId": "synthetic-karen",
+      "interactionId": "interaction-karen-1",
+      "contextId": "ctx-karen",
+      "summary": "Dizziness following a medication change",
+      "evidenceRefs": ["encounter:candidate-karen.1"],
+      "state": "awaiting_review",
+      "version": 1,
+      "createdAt": "2026-08-20T10:00:00.000Z",
+      "updatedAt": "2026-08-20T10:00:00.000Z"
+    }
+  ],
+  "tasks": [
+    {
+      "taskId": "task-karen-bp",
+      "threadId": "thread-karen-bp",
+      "patientId": "synthetic-karen",
+      "origin": "agent_suggested",
+      "summary": "Check blood pressure within 48 hours",
+      "taskType": "blood-pressure-check",
+      "evidenceRefs": ["encounter:candidate-karen.1"],
+      "targetTeamId": "district-nursing",
+      "requiredCapabilities": ["blood-pressure"],
+      "clinicalUrgency": "medium",
+      "operationalPriorityScore": 60,
+      "priorityBreakdown": {
+        "base": 60,
+        "deadlinePressure": 0,
+        "overdue": 0,
+        "failedOffers": 0,
+        "total": 60,
+        "activeTargetAt": "2026-08-20T10:30:00.000Z"
+      },
+      "acceptBy": "2026-08-20T10:30:00.000Z",
+      "dueBy": "2026-08-22T10:00:00.000Z",
+      "state": "draft",
+      "assignedMemberId": null,
+      "failedOffers": 0,
+      "version": 1,
+      "createdAt": "2026-08-20T10:00:00.000Z",
+      "updatedAt": "2026-08-20T10:00:00.000Z"
+    }
+  ],
+  "observedAt": "2026-08-20T12:00:00.000Z"
+}

@@ -68,14 +68,17 @@ type TranscriptSegment = {
   endSeconds: number;
   speakerId?: number;
   isFinal: boolean;
+  audioQuality?: "clear" | "uncertain";
 };
 
 type EvidenceReference = {
   interactionId: string;
+  segmentKey: string;
   sourceQuote: string;
   startSeconds: number;
   endSeconds: number;
   speakerId?: number;
+  audioQuality: "clear" | "uncertain";
 };
 ```
 
@@ -90,6 +93,11 @@ Before showing an evidence quote:
 3. If there is no exact match, omit the quote or mark evidence unavailable.
 4. Never replace a failed match with a plausible paraphrase.
 
+Enable Corti audio-quality events. Mark final segments that overlap a detected
+speech-quality issue `uncertain`; retain them as visible transcript but do not
+use them as evidence for an Agentic signal. Browser noise suppression and key
+terms improve recognition but never replace this fail-closed rule.
+
 ## Candidate handoff
 
 Text Generation can help structure a conservative candidate after the live
@@ -98,7 +106,9 @@ thread, diagnosis, referral, or instruction.
 
 ```ts
 type FollowThroughCandidate = {
+  schemaVersion: "1";
   candidateId: string;
+  correlationId: string;
   interactionId: string;
   patientId: string;
   category:
@@ -110,13 +120,6 @@ type FollowThroughCandidate = {
     | "social-barrier";
   summary: string;
   evidence: EvidenceReference[];
-  proposedAction?: {
-    description: string;
-    suggestedRecipientTeam?: string;
-    suggestedOwnerRole?: string;
-    suggestedDueAt?: string;
-    templateId: string;
-  };
   status: "candidate";
 };
 ```
@@ -125,11 +128,27 @@ Rules:
 
 - Require at least one validated evidence reference.
 - Keep `summary` factual and close to the patient's words.
-- Use only clinically reviewed proposal templates. Model-generated owner or
-  deadline values are suggestions and must be visibly editable.
+- Candidate generation does not select an action, team, owner, deadline, or
+  urgency. Developer 2's context-checking agent owns the non-actionable task
+  proposal.
 - Developer 2 checks whether the concern is already covered, contradicted,
   assigned, or open before anything appears as a proposed thread.
 - Rejecting a candidate has no ledger side effect.
+
+The browser/UI sends the complete normalized candidate to the integration API:
+
+```text
+POST /api/candidates/investigate
+x-correlation-id: <candidate correlationId>
+body: FollowThroughCandidate
+```
+
+The integration service owns mapping this candidate to Developer 2's internal
+`POST /api/signals` command and owns the Agentic bearer token. The pipeline must
+not call Agentic directly. Keep the complete evidence object in the candidate;
+the integration service may derive opaque internal evidence references, but the
+pipeline must not invent a competing identifier or flatten away the quote,
+segment key, timestamps, speaker, or audio-quality state.
 
 ## Dictation normalization
 
@@ -140,14 +159,15 @@ use `authConfig` with a refresh function as required by the official skill.
 ```ts
 type TaskRevisionDraft = {
   taskId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
   inputMethod: "typed" | "dictated";
   transcript?: string;
   patch: {
-    description?: string;
-    recipientTeamId?: string;
-    ownerUserId?: string | null;
-    dueAt?: string;
-    priority?: "routine" | "urgent";
+    summary?: string;
+    targetTeamId?: string;
+    clinicalUrgency?: "high" | "medium" | "routine";
+    dueInMs?: number;
   };
   reason?: string;
 };
@@ -156,6 +176,16 @@ type TaskRevisionDraft = {
 The pipeline parses a final dictation into this constrained patch, returns both
 the transcript and preview, and waits. The UI must request explicit clinician
 confirmation before sending the patch to Developer 2's ledger command.
+
+After confirmation, send the flattened patch through the integration API at
+`POST /api/tasks/:taskId/correct`, with the clinician identity in `x-actor-id`
+and the same end-to-end correlation ID in `x-correlation-id`. The pipeline must
+not call the Agentic task route directly.
+
+The task is offered to `targetTeamId` first. Dictation must not name an
+individual owner before publication; one eligible team member becomes the
+accountable owner by accepting, or through Developer 2's deterministic timeout
+policy.
 
 ## Text Generation
 
@@ -191,17 +221,21 @@ Developer 3 should consume a stable envelope rather than raw SDK messages:
 
 ```ts
 type PipelineEvent<T> = {
+  schemaVersion: "1";
+  eventId: string;
   type:
     | "ambient.started"
     | "transcript.interim"
     | "transcript.final"
     | "ambient.ended"
+    | "audio.quality_changed"
     | "candidate.proposed"
     | "candidate.rejected"
     | "dictation.interim"
     | "dictation.final"
     | "document.generated"
     | "coding.completed"
+    | "usage.updated"
     | "pipeline.error";
   occurredAt: string;
   correlationId: string;

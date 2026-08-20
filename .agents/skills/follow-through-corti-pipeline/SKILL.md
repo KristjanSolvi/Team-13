@@ -40,6 +40,15 @@ MCPs, committed thread state, downstream task simulation, or product UI.
   must confirm it before Developer 2's ledger changes committed state.
 - Validate every displayed transcript quote against the canonical transcript.
   Drop or mark evidence unavailable when validation fails.
+- Enable Corti audio-quality events. Retain speech from flagged intervals for
+  review, but do not send it for investigation until a clinician supplies clear
+  evidence. Browser processing and keyterms are aids, not confidence.
+- Match Developer 2's team-first correction command: `summary`, `targetTeamId`,
+  `clinicalUrgency`, and `dueInMs`. Do not assign an individual owner from
+  pre-publication Dictation.
+- Send candidates and confirmed task commands through the integration API. It
+  owns the translation to Agentic routes and the Agentic bearer; the pipeline
+  must not call Developer 2's service directly.
 - Use only clinician-approved text for coding. Keep returned codes, candidates,
   evidence, and alternatives distinct.
 - Do not invent diagnosis, owner, deadline, referral, or clinical plan. Proposed
@@ -55,7 +64,8 @@ MCPs, committed thread state, downstream task simulation, or product UI.
 2. Prove Ambient end to end: create interaction, stream, receive final segments,
    end cleanly, and retain canonical evidence.
 3. Prove Dictation as a visibly separate, intentional interaction.
-4. Lock normalized event and payload contracts with Developers 2 and 3.
+4. Lock normalized event and payload contracts with Developers 2 and 3, then
+   verify them against `apps/integration-api`.
 5. Add conservative Text Generation and quote validation.
 6. Add Medical Coding only after approved clinical text exists.
 7. Add deterministic demo fixtures and clearly disclosed preloaded fallbacks.
@@ -68,6 +78,7 @@ MCPs, committed thread state, downstream task simulation, or product UI.
 - The live path has bounded latency and can survive one disclosed fallback.
 - Stop/cleanup does not truncate the final transcript.
 - Duplicate or reordered transcript events do not duplicate evidence.
+- Speech-quality issue windows block affected evidence from candidate handoff.
 - Dictated revisions require preview and confirmation.
 - Invalid quote offsets and evidence spans fail closed.
 - Pipeline failures leave the ledger unchanged and produce a useful error event.
