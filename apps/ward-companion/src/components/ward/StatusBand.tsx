@@ -51,7 +51,7 @@ function Tile({
 
   return (
     <div
-      className={`rounded-xl border border-border border-t-2 bg-background/60 px-4 py-3 backdrop-blur-sm ${accents[tone]}`}
+      className={`rounded-xl border border-border border-t-4 bg-background/60 px-4 py-3 backdrop-blur-sm ${accents[tone]}`}
       aria-label={`${value} ${label}`}
     >
       <p className="text-[30px] font-medium leading-none tracking-tight tabular-nums text-foreground">

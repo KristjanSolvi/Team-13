@@ -62,6 +62,7 @@ function Index() {
   const [scopeId, setScopeId] = useState<string | null>(null);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
+  const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
@@ -85,6 +86,21 @@ function Index() {
       // Retain current local work when authoritative services are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const launcherClicked =
+        target instanceof Element && target.closest("[data-ward-launcher]") !== null;
+      if (!launcherClicked && !panelRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   useEffect(() => {
     const persisted = loadWardState(window.localStorage);
@@ -345,7 +361,10 @@ function Index() {
       />
 
       {open && (
-        <section className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300">
+        <section
+          ref={panelRef}
+          className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300"
+        >
           <header className="border-b border-white/25 bg-white/12 px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <ViewTabs
@@ -479,7 +498,7 @@ function Index() {
         </section>
       )}
 
-      {!open && <FloatingLauncher onOpen={() => setOpen(true)} />}
+      <FloatingLauncher open={open} onToggle={() => setOpen((current) => !current)} />
     </div>
   );
 }
