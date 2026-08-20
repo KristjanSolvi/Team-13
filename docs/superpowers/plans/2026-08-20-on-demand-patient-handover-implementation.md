@@ -662,7 +662,7 @@ git commit -m "feat: validate grounded handover lifecycle"
 - Modify: `test/mcp.test.ts`
 - Create: `test/handover-mcp.test.ts`
 
-- [ ] **Step 1: Write failing MCP contract tests**
+- [x] **Step 1: Write failing MCP contract tests**
 
 Create an in-memory MCP client harness for `createHandoverMcp` and assert the
 tool names exactly:
@@ -689,7 +689,7 @@ Add tests that:
 Update the existing publication MCP test to expect zero verification events
 from raw `get_task` reads.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```bash
 npm run build
@@ -699,7 +699,7 @@ node --test build/test/handover-mcp.test.js build/test/mcp.test.js
 Expected: compile failure because the handover MCP factory is missing and the
 old `get_task` side effect still violates the new assertion.
 
-- [ ] **Step 3: Make MCP transport path explicit**
+- [x] **Step 3: Make MCP transport path explicit**
 
 Change the signature without breaking the default:
 
@@ -716,13 +716,13 @@ Use `routePath` in the POST, GET, and DELETE registrations. Keep independent
 session maps inside each `mountMcp` call so task-agent and handover-agent session
 IDs cannot cross endpoints.
 
-- [ ] **Step 4: Remove the read side effect from the task MCP**
+- [x] **Step 4: Remove the read side effect from the task MCP**
 
 In `get_task`, keep patient-scope validation and `ledger.getTask(taskId)`, then
 return it directly. Remove `task.publish_verified` event emission. Do not alter
 the publication tool.
 
-- [ ] **Step 5: Implement `createHandoverMcp`**
+- [x] **Step 5: Implement `createHandoverMcp`**
 
 Register exactly the five tested tools. Reuse the existing structured success
 and safe error response pattern. The draft tool schema is:
@@ -745,7 +745,7 @@ handovers.saveDraft({ handoverId, patientId, contextId, packet });
 Mark `save_handover_draft` as non-destructive and idempotent, but not read-only.
 Do not import `LedgerService` state-changing methods into this file.
 
-- [ ] **Step 6: Mount the constrained endpoint**
+- [x] **Step 6: Mount the constrained endpoint**
 
 Add `handovers: HandoverService` to `AppDependencies`, then mount:
 
@@ -761,7 +761,7 @@ mountMcp(
 Keep the existing `/mcp` mount unchanged. Add HTTP tests proving both endpoints
 require the bearer and list different tool sets.
 
-- [ ] **Step 7: Run MCP and full root checks**
+- [x] **Step 7: Run MCP and full root checks**
 
 ```bash
 npm run build
@@ -772,7 +772,7 @@ npm run check
 Expected: all tests pass; the task MCP still exposes six tools and the handover
 MCP exposes exactly five.
 
-- [ ] **Step 8: Commit the constrained MCP server**
+- [x] **Step 8: Commit the constrained MCP server**
 
 ```bash
 git add src/mcp/handover-tools.ts src/mcp/tools.ts src/mcp/transport.ts src/http/app.ts test/mcp.test.ts test/handover-mcp.test.ts
