@@ -26,3 +26,22 @@ export function requireTransition(from: TaskState, to: TaskState): void {
     );
   }
 }
+
+const externallyVerifiable = new Set<TaskState>([
+  "offered_to_team",
+  "assigned_to_member",
+  "accepted",
+  "completed",
+  "escalated",
+]);
+
+export function requireExternalVerificationTransition(from: TaskState): void {
+  if (!externallyVerifiable.has(from)) {
+    throw new DomainError(
+      "INVALID_TRANSITION",
+      `${from} cannot be independently verified from downstream readback`,
+      false,
+      409,
+    );
+  }
+}

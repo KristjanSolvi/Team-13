@@ -554,6 +554,50 @@ test("eligible owner completes and downstream verification closes the thread", (
   );
 });
 
+test("independent external readback verifies published work without fabricating acceptance", (t) => {
+  const { store, ledger } = harness(t);
+  const offered = publishKaren(ledger, "external-readback");
+  const verified = ledger.verifyTaskFromExternalReadback(
+    offered.taskId,
+    offered.version,
+    "record:external-bp-result",
+    "delivery-karen-bp-1",
+    "downstream:district-nursing",
+  );
+
+  assert.equal(verified.state, "verified");
+  assert.equal(verified.assignedMemberId, null);
+  assert.equal(store.requireThread(verified.threadId).state, "verified");
+  const event = store
+    .listEvents(0)
+    .find(
+      (candidate) =>
+        candidate.eventType === "task.completion_verified" &&
+        candidate.payload.deliveryId === "delivery-karen-bp-1",
+    );
+  assert.ok(event);
+  assert.equal(event.payload.deliveryId, "delivery-karen-bp-1");
+  assert.equal(event.payload.outcomeRef, "record:external-bp-result");
+
+  const draft = ledger.createDraft({
+    ...draftInput(),
+    taskType: "second-bp-check",
+    idempotencyKey: "external-draft-denied",
+  });
+  assertDomainError(
+    () =>
+      ledger.verifyTaskFromExternalReadback(
+        draft.taskId,
+        draft.version,
+        "record:external-bp-result",
+        "delivery-draft-denied",
+        "downstream:district-nursing",
+      ),
+    "INVALID_TRANSITION",
+    409,
+  );
+});
+
 test("a clinician can dismiss only a draft and the thread closes atomically", (t) => {
   const { store, ledger } = harness(t);
   const draft = ledger.createKarenDraft("ctx-karen", "dismiss-draft");

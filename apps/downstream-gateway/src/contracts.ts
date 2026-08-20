@@ -68,6 +68,12 @@ export const simulateProviderStatusSchema = z
     }
   });
 
+export const acknowledgeReadbackSchema = z
+  .object({
+    outcomeReference: z.string().trim().min(1).max(240),
+  })
+  .strict();
+
 export type DeliveryKind = z.infer<typeof deliveryKindSchema>;
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 export type DeliveryStatus = z.infer<typeof deliveryStatusSchema>;
@@ -90,6 +96,7 @@ export interface Delivery {
   status: DeliveryStatus;
   externalReference: string | null;
   outcomeReference: string | null;
+  sourceAcknowledgedAt: string | null;
   statusReason: string | null;
   createdAt: string;
   updatedAt: string;
