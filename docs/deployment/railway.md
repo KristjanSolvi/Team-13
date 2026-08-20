@@ -1,6 +1,6 @@
 # Railway deployment
 
-Ward Threads deploys as four services from the same GitHub repository. Keeping
+Ward Threads deploys as five services from the same GitHub repository. Keeping
 the current service boundaries avoids moving secrets into the browser and lets
 the Agentic ledger retain its SQLite ownership model for the hackathon.
 
@@ -11,9 +11,10 @@ the Agentic ledger retain its SQLite ownership model for the hackathon.
 | `agentic`         | `/`                     | `/railway.toml`                      | Yes, for Corti MCP   | `3000` |
 | `corti-pipeline`  | `/apps/corti-pipeline`  | `/apps/corti-pipeline/railway.toml`  | No                   | `8787` |
 | `integration-api` | `/apps/integration-api` | `/apps/integration-api/railway.toml` | Yes, for the browser | `8790` |
+| `patient-profile` | `/apps/patient-profile` | `/apps/patient-profile/railway.toml` | No                   | `8791` |
 | `ward-ui`         | `/apps/ward-companion`  | `/apps/ward-companion/railway.toml`  | Yes                  | `8080` |
 
-Create all four services from the `KristjanSolvi/Team-13` repository and use
+Create all five services from the `KristjanSolvi/Team-13` repository and use
 the root directories above. The checked-in `railway.toml` files define each
 service's immutable build, start, health-check, and restart settings.
 
@@ -25,11 +26,17 @@ Set these fixed ports and bind hosts in the corresponding service variables:
 agentic:          PORT=3000  HOST=0.0.0.0
 corti-pipeline:   PORT=8787  HOST=0.0.0.0
 integration-api: PORT=8790  HOST=0.0.0.0
+patient-profile: PATIENT_PROFILE_PORT=8791 PATIENT_PROFILE_HOST=0.0.0.0
 ward-ui:          PORT=8080  HOST=0.0.0.0
 ```
 
+The patient-profile service is intentionally not browser-wired yet. During the
+UI wiring phase, expose it only through authenticated Integration API routes;
+do not give it a public domain or send its bearer token to the browser.
+
 Only `agentic`, `integration-api`, and `ward-ui` need generated Railway
-domains. Keep the pipeline private. Configure the integration API with:
+domains. Keep the pipeline and patient-profile service private. Configure the
+integration API with:
 
 ```text
 AGENTIC_BASE_URL=http://agentic.railway.internal:3000
@@ -65,6 +72,8 @@ the real values. The important cross-service relationships are:
   `CORTI_ENVIRONMENT` are required on both `agentic` and `corti-pipeline`.
 - `APP_BEARER_TOKEN`, `MCP_BEARER_TOKEN`, and `APPROVAL_HMAC_SECRET` must be
   separate random values. The HMAC secret must contain at least 32 characters.
+- `PATIENT_PROFILE_BEARER_TOKEN` is a separate private service credential and
+  must never be sent to the browser.
 - Keep `DEMO_MODE=true` and use only the disclosed synthetic demo patients.
 
 Attach a Railway volume to `agentic` at `/app/data` and set:
@@ -75,6 +84,14 @@ DATABASE_PATH=/app/data/follow-through.sqlite
 
 Do not scale `agentic` beyond one replica while SQLite is the ledger.
 
+Attach a separate Railway volume to `patient-profile` at `/app/data` and set:
+
+```text
+PATIENT_PROFILE_DATABASE_PATH=/app/data/patient-profiles.sqlite
+```
+
+Do not scale `patient-profile` beyond one replica while it uses SQLite.
+
 ## Bring-up order
 
 1. Deploy `agentic` with `CORTI_AGENT_ID` blank and attach its volume.
@@ -83,8 +100,9 @@ Do not scale `agentic` beyond one replica while SQLite is the ledger.
 3. Provision the Corti agent once using `npm run agent:provision`, save the
    returned ID as `CORTI_AGENT_ID`, and redeploy `agentic`.
 4. Deploy `corti-pipeline` and confirm `/health` is healthy.
-5. Deploy `integration-api`; `/readyz` should report both upstreams ready.
-6. Generate the integration domain, set the ward UI URL and matching CORS
+5. Deploy `patient-profile` with its private token and attached volume.
+6. Deploy `integration-api`; `/readyz` should report its wired upstreams ready.
+7. Generate the integration domain, set the ward UI URL and matching CORS
    origins, then deploy `ward-ui` last.
 
 ## Verification

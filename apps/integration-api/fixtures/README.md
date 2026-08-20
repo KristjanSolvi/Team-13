@@ -3,8 +3,8 @@
 These fixtures are display-safe, synthetic examples for UI adapters, contract
 tests, and demo fallback states. They are not authoritative runtime data.
 
-The Ward Companion projection was aligned with
-`YaldesDev/ward-companion@fee200b` (`src/data/ward.ts`).
+The Ward Companion projection remains compatible with
+`YaldesDev/ward-companion@2be8bac` (`src/data/ward.ts`).
 
 - `candidate-karen.json`: normalized Corti pipeline candidate accepted by
   `POST /api/candidates/investigate`.
