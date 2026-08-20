@@ -88,6 +88,39 @@ export function openDatabase(databasePath: string): DatabaseSync {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS demo_sessions (
+      session_id TEXT PRIMARY KEY,
+      join_code TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      scenario TEXT NOT NULL,
+      group_size INTEGER NOT NULL,
+      target_team_id TEXT NOT NULL REFERENCES teams(team_id),
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS demo_participants (
+      participant_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES demo_sessions(session_id),
+      group_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      member_id TEXT NOT NULL UNIQUE REFERENCES members(member_id),
+      join_key TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      joined_at TEXT NOT NULL,
+      UNIQUE (session_id, join_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS demo_assignments (
+      assignment_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES demo_sessions(session_id),
+      group_id TEXT NOT NULL,
+      participant_id TEXT NOT NULL REFERENCES demo_participants(participant_id),
+      task_id TEXT NOT NULL UNIQUE REFERENCES tasks(task_id),
+      assigned_by TEXT NOT NULL,
+      assigned_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS approvals (
       approval_id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL REFERENCES tasks(task_id),
@@ -159,6 +192,10 @@ export function openDatabase(databasePath: string): DatabaseSync {
       ON tasks(target_team_id, state);
     CREATE INDEX IF NOT EXISTS idx_tasks_deadlines
       ON tasks(accept_by, due_by);
+    CREATE INDEX IF NOT EXISTS idx_demo_participants_session_group
+      ON demo_participants(session_id, group_id, joined_at);
+    CREATE INDEX IF NOT EXISTS idx_demo_assignments_participant
+      ON demo_assignments(session_id, participant_id, assigned_at);
     CREATE INDEX IF NOT EXISTS idx_events_sequence
       ON audit_events(sequence);
   `);

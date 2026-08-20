@@ -34,6 +34,25 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  createDemoSession(
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  getDemoSession(sessionId: string, meta: RequestMeta): Promise<unknown>;
+  joinDemoSession(
+    joinCode: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  assignDemoTask(
+    sessionId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  demoParticipantView(
+    participantToken: string,
+    meta: RequestMeta,
+  ): Promise<unknown>;
   eventStream(
     lastEventId: string | undefined,
     meta: RequestMeta,
@@ -274,6 +293,66 @@ export class HttpAgenticGateway implements AgenticGateway {
         meta,
       },
     );
+  }
+
+  createDemoSession(
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request("/api/demo/sessions", {
+      method: "POST",
+      body,
+      bearerToken: this.bearerToken,
+      meta,
+    });
+  }
+
+  getDemoSession(sessionId: string, meta: RequestMeta): Promise<unknown> {
+    return this.client.request(
+      `/api/demo/sessions/${encodeURIComponent(sessionId)}`,
+      { bearerToken: this.bearerToken, meta },
+    );
+  }
+
+  joinDemoSession(
+    joinCode: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(`/api/demo/join/${encodeURIComponent(joinCode)}`, {
+      method: "POST",
+      body,
+      bearerToken: this.bearerToken,
+      meta,
+    });
+  }
+
+  assignDemoTask(
+    sessionId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/demo/sessions/${encodeURIComponent(sessionId)}/assign`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  demoParticipantView(
+    participantToken: string,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request("/api/demo/participants/lookup", {
+      method: "POST",
+      body: { participantToken },
+      bearerToken: this.bearerToken,
+      meta,
+    });
   }
 
   async eventStream(

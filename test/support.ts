@@ -9,6 +9,7 @@ import { HandoverService } from "../src/services/handover-service.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 import { RecordService } from "../src/services/record-service.js";
 import { SchedulerService } from "../src/services/scheduler-service.js";
+import { DemoAudienceService } from "../src/services/demo-audience-service.js";
 
 export const APP_TOKEN = "app-secret";
 export const MCP_TOKEN = "mcp-secret";
@@ -32,6 +33,7 @@ export function createAppHarness() {
   const records = new RecordService(store);
   const handovers = new HandoverService(store, clock);
   const scheduler = new SchedulerService(store, clock);
+  const demoAudience = new DemoAudienceService(store, clock);
   const app = createApp({
     store,
     clock,
@@ -39,11 +41,21 @@ export function createAppHarness() {
     handovers,
     records,
     scheduler,
+    demoAudience,
     uiOrigin: UI_ORIGIN,
     appBearerToken: APP_TOKEN,
     mcpBearerToken: MCP_TOKEN,
   });
-  return { app, store, clock, ledger, handovers, records, scheduler };
+  return {
+    app,
+    store,
+    clock,
+    ledger,
+    handovers,
+    records,
+    scheduler,
+    demoAudience,
+  };
 }
 
 export async function listen(app: ReturnType<typeof createApp>) {

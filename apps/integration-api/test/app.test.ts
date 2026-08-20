@@ -21,6 +21,26 @@ function harness() {
       taskId: "task-1",
       state: "offered_to_team",
     })),
+    createDemoSession: vi.fn(async () => ({
+      sessionId: "session-1",
+      joinCode: "JOINCODE",
+    })),
+    getDemoSession: vi.fn(async () => ({
+      sessionId: "session-1",
+      groups: [],
+    })),
+    joinDemoSession: vi.fn(async () => ({
+      participant: { participantId: "participant-1", groupId: "group-1" },
+      participantToken: "participant-token-value-with-enough-length",
+    })),
+    assignDemoTask: vi.fn(async () => ({
+      assignment: { assignmentId: "assignment-1" },
+      task: { taskId: "11111111-1111-4111-8111-111111111111" },
+    })),
+    demoParticipantView: vi.fn(async () => ({
+      participant: { participantId: "participant-1" },
+      assignments: [],
+    })),
     eventStream: vi.fn(async () =>
       new ReadableStream<Uint8Array>({
         start(controller) {
@@ -90,6 +110,15 @@ describe("integration API", () => {
     );
     expect(response.body.paths).toHaveProperty(
       "/api/ehr/documents/{documentId}/file",
+    );
+    expect(response.body.paths).toHaveProperty("/api/demo/sessions");
+    expect(response.body.paths).toHaveProperty(
+      "/api/demo/sessions/{sessionId}/assign",
+    );
+    expect(response.body.paths).toHaveProperty("/api/demo/join/{joinCode}");
+    expect(response.body.paths).toHaveProperty("/api/demo/participants/me");
+    expect(response.body.components.securitySchemes).toHaveProperty(
+      "DemoParticipantToken",
     );
     expect(JSON.stringify(response.body)).not.toContain(
       "AGENTIC_APP_BEARER_TOKEN",
@@ -273,6 +302,80 @@ describe("integration API", () => {
       tasks: [{ taskId: "task-1", state: "draft" }],
       observedAt: "2026-08-20T12:00:00.000Z",
     });
+  });
+
+  it("exposes the QR audience flow without forwarding server credentials to the browser", async () => {
+    const { agentic, app } = harness();
+
+    const created = await request(app)
+      .post("/api/demo/sessions")
+      .set("x-actor-id", "clinician:demo-host")
+      .set("x-correlation-id", "corr-demo-create")
+      .send({
+        title: "Audience discharge coordination",
+        scenario: "discharge_coordination",
+        groupSize: 2,
+        targetTeamId: "district-nursing",
+        idempotencyKey: "demo-session-create-001",
+      })
+      .expect(201);
+    expect(created.body).toEqual({
+      sessionId: "session-1",
+      joinCode: "JOINCODE",
+    });
+    expect(agentic.createDemoSession).toHaveBeenCalledWith(
+      {
+        title: "Audience discharge coordination",
+        scenario: "discharge_coordination",
+        groupSize: 2,
+        targetTeamId: "district-nursing",
+        idempotencyKey: "demo-session-create-001",
+      },
+      {
+        actorId: "clinician:demo-host",
+        correlationId: "corr-demo-create",
+      },
+    );
+
+    await request(app)
+      .post("/api/demo/join/JOINCODE")
+      .set("x-correlation-id", "corr-demo-join")
+      .send({ displayName: "Alex", joinKey: "browser-key-alex" })
+      .expect(201);
+    expect(agentic.joinDemoSession).toHaveBeenCalledWith(
+      "JOINCODE",
+      { displayName: "Alex", joinKey: "browser-key-alex" },
+      { correlationId: "corr-demo-join" },
+    );
+
+    await request(app)
+      .post("/api/demo/sessions/session-1/assign")
+      .set("x-actor-id", "clinician:demo-host")
+      .send({
+        groupId: "group-1",
+        taskId: "11111111-1111-4111-8111-111111111111",
+        expectedVersion: 2,
+        idempotencyKey: "demo-task-assign-001",
+      })
+      .expect(200);
+
+    await request(app)
+      .get("/api/demo/participants/me")
+      .set(
+        "authorization",
+        "Bearer participant-token-value-with-enough-length",
+      )
+      .expect(200);
+    expect(agentic.demoParticipantView).toHaveBeenCalledWith(
+      "participant-token-value-with-enough-length",
+      expect.objectContaining({ correlationId: expect.any(String) }),
+    );
+
+    const denied = await request(app)
+      .get("/api/demo/participants/me")
+      .expect(401);
+    expect(denied.body.error.code).toBe("DEMO_PARTICIPANT_AUTH_REQUIRED");
+    expect(JSON.stringify(created.body)).not.toContain("server-only-token");
   });
 
   it("returns the Ward Companion read model without exposing credentials", async () => {

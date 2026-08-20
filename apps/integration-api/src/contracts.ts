@@ -97,6 +97,36 @@ export function isTaskCommand(value: string): value is TaskCommand {
   return Object.hasOwn(taskCommandSchemas, value);
 }
 
+export const demoSessionCreateSchema = z
+  .object({
+    title: z.string().trim().min(3).max(120),
+    scenario: z.enum([
+      "meeting",
+      "discharge_coordination",
+      "ward_consultation",
+    ]),
+    groupSize: z.union([z.literal(1), z.literal(2)]),
+    targetTeamId: z.string().min(1).max(160),
+    idempotencyKey: z.string().min(8).max(200),
+  })
+  .strict();
+
+export const demoJoinSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(80),
+    joinKey: z.string().min(8).max(200),
+  })
+  .strict();
+
+export const demoAssignmentSchema = z
+  .object({
+    groupId: z.string().regex(/^group-[1-9]\d*$/),
+    taskId: z.string().uuid(),
+    expectedVersion: z.number().int().positive(),
+    idempotencyKey: z.string().min(8).max(200),
+  })
+  .strict();
+
 const nullableText = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable();
 

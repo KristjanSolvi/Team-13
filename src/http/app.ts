@@ -10,6 +10,7 @@ import type { HandoverService } from "../services/handover-service.js";
 import type { LedgerService } from "../services/ledger-service.js";
 import type { RecordService } from "../services/record-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
+import type { DemoAudienceService } from "../services/demo-audience-service.js";
 import { mountRoutes } from "./routes.js";
 
 export interface AppDependencies {
@@ -19,6 +20,7 @@ export interface AppDependencies {
   handovers: HandoverService;
   records: RecordService;
   scheduler: SchedulerService;
+  demoAudience: DemoAudienceService;
   uiOrigin: string;
   appBearerToken: string;
   mcpBearerToken: string;

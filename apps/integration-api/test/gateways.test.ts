@@ -86,6 +86,39 @@ describe("HTTP gateways", () => {
     expect(new Headers(options?.headers).has("authorization")).toBe(false);
   });
 
+  it("exchanges a participant credential through the authenticated Agentic boundary", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({ participant: { participantId: "participant-1" } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const gateway = new HttpAgenticGateway(
+      "http://agentic.test",
+      1_000,
+      "server-only-token",
+      fetchImpl,
+    );
+
+    await gateway.demoParticipantView(
+      "participant-token-value-with-enough-length",
+      { correlationId: "corr-demo-participant" },
+    );
+
+    const [url, options] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "http://agentic.test/api/demo/participants/lookup",
+    );
+    expect(options?.method).toBe("POST");
+    const headers = new Headers(options?.headers);
+    expect(headers.get("authorization")).toBe("Bearer server-only-token");
+    expect(headers.get("x-correlation-id")).toBe("corr-demo-participant");
+    expect(JSON.parse(String(options?.body))).toEqual({
+      participantToken: "participant-token-value-with-enough-length",
+    });
+    expect(String(options?.body)).not.toContain("server-only-token");
+  });
+
   it("rejects malformed authoritative list responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ threads: "not-an-array" }), { status: 200 }),

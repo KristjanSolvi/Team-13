@@ -9,6 +9,7 @@ import {
 import { ZodError, z } from "zod";
 
 import { DomainError } from "../domain/errors.js";
+import { demoScenarios } from "../demo/types.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor, requireAppAuth } from "./auth.js";
@@ -530,6 +531,91 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
               verifierId,
             ),
         ),
+      );
+    }),
+  );
+
+  router.post(
+    "/demo/sessions",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({
+          title: z.string().trim().min(3).max(120),
+          scenario: z.enum(demoScenarios),
+          groupSize: z.union([z.literal(1), z.literal(2)]),
+          targetTeamId: z.string().min(1).max(160),
+          idempotencyKey: z.string().min(8).max(200),
+        })
+        .strict()
+        .parse(request.body);
+      response.status(201).json(
+        dependencies.demoAudience.createSession({
+          ...body,
+          actorId: requireActor(request),
+        }),
+      );
+    }),
+  );
+
+  router.get(
+    "/demo/sessions/:sessionId",
+    asyncRoute((request, response) => {
+      response.json(
+        dependencies.demoAudience.getSession(pathParam(request, "sessionId")),
+      );
+    }),
+  );
+
+  router.post(
+    "/demo/join/:joinCode",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({
+          displayName: z.string().trim().min(1).max(80),
+          joinKey: z.string().min(8).max(200),
+        })
+        .strict()
+        .parse(request.body);
+      response.status(201).json(
+        dependencies.demoAudience.joinSession({
+          ...body,
+          joinCode: pathParam(request, "joinCode"),
+        }),
+      );
+    }),
+  );
+
+  router.post(
+    "/demo/sessions/:sessionId/assign",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({
+          groupId: z.string().regex(/^group-[1-9]\d*$/),
+          taskId: z.string().uuid(),
+          expectedVersion: z.number().int().positive(),
+          idempotencyKey: z.string().min(8).max(200),
+        })
+        .strict()
+        .parse(request.body);
+      response.json(
+        dependencies.demoAudience.assignTask({
+          ...body,
+          sessionId: pathParam(request, "sessionId"),
+          actorId: requireActor(request),
+        }),
+      );
+    }),
+  );
+
+  router.post(
+    "/demo/participants/lookup",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({ participantToken: z.string().min(32).max(200) })
+        .strict()
+        .parse(request.body);
+      response.json(
+        dependencies.demoAudience.participantView(body.participantToken),
       );
     }),
   );

@@ -6,9 +6,9 @@ Companion, and Agentic/MCP backend. All examples use synthetic data.
 ## Authentication and attribution
 
 - `GET /healthz` is public.
-- Every `/api/*` request requires `Authorization: Bearer
-  $APP_BEARER_TOKEN`.
-- Every `/api/*` mutation also requires `x-actor-id`.
+- On the authoritative Agentic backend, every `/api/*` request requires
+  `Authorization: Bearer $APP_BEARER_TOKEN`.
+- Every attributed Agentic mutation also requires `x-actor-id`.
 - Every mutation carries an operation-specific `idempotencyKey`. Retrying the
   same operation must reuse the key.
 - MCP requests to `POST`, `GET`, or `DELETE /mcp` require `Authorization:
@@ -157,6 +157,44 @@ The response is intentionally not a published task:
 
 The Corti agent publishes that exact approved draft with the MCP
 `publish_team_task` tool, then verifies authoritative state with `get_task`.
+
+## Audience demo sessions
+
+The authoritative backend persists audience sessions, participants, groups,
+and assignments. The browser reaches these operations through the integration
+API, so `$APP_BEARER_TOKEN` remains server-side.
+
+`POST /api/demo/sessions` creates a session for one existing target team. It
+accepts a title, `targetTeamId`, `groupSize` of `1` or `2`, and one of these
+scenarios:
+
+- `meeting`
+- `discharge_coordination`
+- `ward_consultation`
+
+The response includes a random `joinCode` and a relative `joinPath` such as
+`/demo/join/JOINCODE`. The UI may encode its public origin plus that path in a
+QR code; credentials must never be embedded in the URL.
+
+`POST /api/demo/join/:joinCode` accepts a display name and browser-generated
+`joinKey`. Participants are placed in scan order into solo or duo groups named
+`group-1`, `group-2`, and so on. A retry with the same `joinKey` does not create
+a duplicate participant; it rotates and returns a new high-entropy participant
+token. The UI should keep that token in session storage, send it only as a
+Bearer credential to `GET /api/demo/participants/me`, and never log it.
+
+`POST /api/demo/sessions/:sessionId/assign` accepts a group, task, exact task
+version, and idempotency key. It can assign only an unchanged
+`offered_to_team` task whose target team matches the session. The backend
+selects one eligible participant in the chosen group using deterministic load
+balancing, records the assignment, and moves the authoritative task to
+`assigned_to_member`. It does not bypass clinician approval or publication.
+
+The host reads `GET /api/demo/sessions/:sessionId` to refresh group and
+assignment state. The participant endpoint returns only the authenticated
+participant's assignments. On the Agentic backend itself, participant lookup
+is a server-to-server `POST /api/demo/participants/lookup`; browsers must not
+call that protected endpoint directly.
 
 ## Queries and event stream
 
