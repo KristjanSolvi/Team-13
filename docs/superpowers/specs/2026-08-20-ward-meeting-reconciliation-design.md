@@ -201,14 +201,19 @@ Final Ambient segments retain the current `TranscriptSegment` fields plus
 `meetingId`, nullable `patientSegmentId`, and an eligibility decision. Evidence
 with a null patient segment is unscoped and unavailable to patient tools.
 
-The canonical evidence reference is:
+To reuse the existing ledger evidence namespace, the canonical evidence
+reference is:
 
 ```text
-meeting:<meetingId>:segment:<patientSegmentId>:evidence:<segmentKey>
+encounter:meeting-<meetingId>.<patientSegmentId>.<segmentKey>
 ```
 
 It resolves to one patient, one interaction, exact text, timestamps, optional
 speaker, audio-quality status, and registration time.
+
+When a patient segment closes, eligible evidence is registered as ordinary
+patient encounter evidence in the same transaction that freezes the segment.
+Unscoped and uncertain segments are never registered in the patient record.
 
 ### Reconciliation
 
