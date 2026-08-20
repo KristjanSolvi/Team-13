@@ -258,12 +258,19 @@ test("pure provisioning definitions configure exactly one distinct MCP per agent
     },
   ]);
   assert.deepEqual(
-    buildProvisioningSummary(config, "task-agent", "handover-agent"),
+    buildProvisioningSummary(
+      config,
+      "task-agent",
+      "handover-agent",
+      "meeting-agent",
+    ),
     {
       taskAgentId: "task-agent",
       handoverAgentId: "handover-agent",
+      meetingAgentId: "meeting-agent",
       taskMcpUrl: "https://example.test/mcp",
       handoverMcpUrl: "https://handover.example/mcp",
+      meetingMcpUrl: "https://example.test/mcp/meeting",
     },
   );
 });

@@ -26,7 +26,8 @@
   evidence through the existing `encounter:` namespace without changing task
   lifecycle.
 - Create `src/mcp/meeting-tools.ts`: five scoped reads and one reconciliation
-  write.
+  write, plus the existing eligible-team directory read needed for safe draft
+  routing.
 - Create `src/agent/meeting-prompt.ts`: exact grounding and duplicate rules.
 - Create `src/agent/meeting-runner.ts`: fresh context, constrained agent call,
   terminal verification, and durable replay marker.
@@ -339,7 +340,7 @@ git commit -m "feat: reconcile grounded meeting commitments"
 
 - [ ] **Step 1: Write failing MCP tests**
 
-Connect a real MCP client through `InMemoryTransport` and assert the exact six
+Connect a real MCP client through `InMemoryTransport` and assert the exact seven
 tools, patient/segment scope, read purity, exact source returns, valid empty save,
 valid draft/warning save, duplicate/cross-patient/stale rejection, and safe error
 payloads.
@@ -352,6 +353,7 @@ assert.deepEqual(
     "get_meeting_segment",
     "get_previous_patient_meeting",
     "get_task",
+    "list_eligible_teams",
     "list_patient_tasks",
     "save_meeting_reconciliation",
   ],
@@ -366,7 +368,7 @@ npm run build
 
 Expected: missing `src/mcp/meeting-tools.js`. Implement
 `createMeetingReconciliationMcp(records, meetings)` with strict Zod inputs and
-the six tools only. Add no publish or task-command tool.
+the seven tools only. Add no publish or task-command tool.
 
 - [ ] **Step 3: Write failing runner and config tests**
 

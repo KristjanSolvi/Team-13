@@ -290,10 +290,13 @@ its authority is smaller than the task-publication agent.
    - reuses the existing side-effect-free patient task read and exact versions;
 5. `get_task`
    - reuses the existing scoped authoritative task read.
+6. `list_eligible_teams`
+   - reuses the current team/capability directory so provisional routing never
+     invents a destination.
 
 ### Write tool
 
-6. `save_meeting_reconciliation`
+7. `save_meeting_reconciliation`
    - accepts proposed draft commitments and carry-forward references;
    - validates all source quotes and patient scope;
    - routes each proposal only to a team returned by the eligible-team tool;

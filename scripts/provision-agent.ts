@@ -25,10 +25,18 @@ const handoverAgent = config.cortiHandoverAgentId
       definitions.handover,
     )
   : await client.agents.create(definitions.handover);
+const meetingAgent = config.cortiMeetingAgentId
+  ? await client.agents.update(config.cortiMeetingAgentId, definitions.meeting)
+  : await client.agents.create(definitions.meeting);
 
 console.log(
   JSON.stringify(
-    buildProvisioningSummary(config, taskAgent.id, handoverAgent.id),
+    buildProvisioningSummary(
+      config,
+      taskAgent.id,
+      handoverAgent.id,
+      meetingAgent.id,
+    ),
     null,
     2,
   ),

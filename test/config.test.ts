@@ -33,9 +33,15 @@ test("applies defaults to a minimal required environment", () => {
     "https://follow-through.example/mcp/handover",
   );
   assert.equal(config.handoverMcpName, "follow-through-handover");
+  assert.equal(
+    config.meetingMcpPublicUrl,
+    "https://follow-through.example/mcp/meeting",
+  );
+  assert.equal(config.meetingMcpName, "follow-through-meeting");
   assert.equal(config.demoMode, true);
   assert.equal(config.cortiAgentId, undefined);
   assert.equal(config.cortiHandoverAgentId, undefined);
+  assert.equal(config.cortiMeetingAgentId, undefined);
   assert.equal(Object.hasOwn(config, "cortiAgentId"), true);
   assert.deepEqual(config.corti, {
     tenantName: "tenant-name",

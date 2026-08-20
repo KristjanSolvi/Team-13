@@ -124,6 +124,22 @@ export interface MeetingReconciliationResult {
   replayed: boolean;
 }
 
+export interface MeetingSegmentContext {
+  meetingId: string;
+  segment: PatientMeetingSegment;
+  evidence: MeetingTranscriptEvidence[];
+  sourceSnapshotHash: string;
+  reconciliationVersion: number;
+}
+
+export interface PreviousPatientMeetingContext {
+  previous: {
+    segment: PatientMeetingSegment;
+    evidence: MeetingTranscriptEvidence[];
+    reconciliation: MeetingReconciliation | null;
+  } | null;
+}
+
 function commandHash(value: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
@@ -917,6 +933,82 @@ export class MeetingService {
     });
   }
 
+  getMeetingSegment(
+    contextId: string,
+    reconciliationId: string,
+    patientId: string,
+  ): MeetingSegmentContext {
+    const reconciliation = this.requireReconciliationScope(
+      contextId,
+      reconciliationId,
+      patientId,
+    );
+    const segment = this.store.requirePatientMeetingSegment(
+      reconciliation.patientSegmentId,
+    );
+    return {
+      meetingId: reconciliation.meetingId,
+      segment,
+      evidence: this.store
+        .listPatientMeetingEvidence(segment.segmentId)
+        .filter((item) => item.eligible),
+      sourceSnapshotHash: reconciliation.sourceSnapshotHash,
+      reconciliationVersion: reconciliation.version,
+    };
+  }
+
+  getPreviousPatientMeetingContext(
+    contextId: string,
+    reconciliationId: string,
+    patientId: string,
+  ): PreviousPatientMeetingContext {
+    const reconciliation = this.requireReconciliationScope(
+      contextId,
+      reconciliationId,
+      patientId,
+    );
+    const previous = this.store.getPreviousPatientMeeting(
+      patientId,
+      reconciliation.meetingId,
+    );
+    return {
+      previous: previous
+        ? {
+            segment: previous,
+            evidence: this.store
+              .listPatientMeetingEvidence(previous.segmentId)
+              .filter((item) => item.eligible),
+            reconciliation: this.store.getMeetingReconciliationForSegment(
+              previous.segmentId,
+            ),
+          }
+        : null,
+    };
+  }
+
+  getLatestPatientHandover(
+    contextId: string,
+    reconciliationId: string,
+    patientId: string,
+  ) {
+    this.requireReconciliationScope(contextId, reconciliationId, patientId);
+    const handover = this.store
+      .listPatientHandovers(patientId)
+      .filter((candidate) => candidate.status === "rendered")
+      .at(-1);
+    return {
+      handover: handover
+        ? {
+            handoverId: handover.handoverId,
+            version: handover.version,
+            packet: handover.packet,
+            rendered: handover.rendered,
+            sourceSnapshotHash: handover.sourceSnapshotHash,
+          }
+        : null,
+    };
+  }
+
   completeMeeting(input: CompleteMeetingInput): MeetingResult {
     const scope = `meeting:complete:${input.meetingId}`;
     const requestHash = commandHash({
@@ -1008,6 +1100,29 @@ export class MeetingService {
       );
     }
     return meeting;
+  }
+
+  private requireReconciliationScope(
+    contextId: string,
+    reconciliationId: string,
+    patientId: string,
+  ): MeetingReconciliation {
+    const reconciliation =
+      this.store.requireMeetingReconciliation(reconciliationId);
+    if (
+      reconciliation.patientId !== patientId ||
+      this.store.patientForContext(contextId) !== patientId ||
+      this.store.contextForInteraction(reconciliation.interactionId) !==
+        contextId
+    ) {
+      throw new DomainError(
+        "PATIENT_SCOPE_DENIED",
+        "Meeting reconciliation scope is unavailable",
+        false,
+        403,
+      );
+    }
+    return reconciliation;
   }
 
   private buildSourceSnapshot(

@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import type { SqliteStore } from "../infra/store.js";
 import { CortiSdkGateway } from "./corti-gateway.js";
 import { HandoverAgentRunner } from "./handover-runner.js";
+import { MeetingAgentRunner } from "./meeting-runner.js";
 import { type AgentGateway, AgentRunner } from "./runner.js";
 
 export type AgentGatewayFactory = (
@@ -29,6 +30,15 @@ export function createAgentRunners(
       ? {
           handover: new HandoverAgentRunner(
             gatewayFactory(config.cortiHandoverAgentId, config.handoverMcpName),
+            store,
+            config.mcpBearerToken,
+          ),
+        }
+      : {}),
+    ...(config.cortiMeetingAgentId
+      ? {
+          meeting: new MeetingAgentRunner(
+            gatewayFactory(config.cortiMeetingAgentId, config.meetingMcpName),
             store,
             config.mcpBearerToken,
           ),
