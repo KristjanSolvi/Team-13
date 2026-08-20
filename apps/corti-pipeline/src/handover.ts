@@ -37,7 +37,7 @@ const forbiddenClinicalClaims = [
   /\b(?:fit|ready|clear) for discharge\b/i,
 ] as const;
 
-const operationalReference = /^(?:task|thread):/;
+const operationalReference = /^(?:task|thread):/i;
 const additionalLifecycleClaim =
   /\b(?:task|action|follow-up|check|referral|message|handoff|request)\s+(?:(?:has|have)\s+been\s+|(?:is|was)\s+)?(?:offered|escalated|drafted|in draft)\b/i;
 
@@ -193,6 +193,21 @@ function validateNarrativeItem(
     throw new PipelineError(
       "HANDOVER_UNSUPPORTED_LIFECYCLE_CLAIM",
       "The generated handover added a lifecycle claim that was absent from its cited source.",
+      { status: 422, retryable: false },
+    );
+  }
+
+  const exactSource = packet[item.section].find(
+    (statement) =>
+      statement.statement === item.text &&
+      item.sourceRefs.every((sourceRef) =>
+        statement.sourceRefs.includes(sourceRef),
+      ),
+  );
+  if (exactSource === undefined) {
+    throw new PipelineError(
+      "HANDOVER_UNSUPPORTED_CLAIM",
+      "The generated handover narrative did not exactly match its cited source statement.",
       { status: 422, retryable: false },
     );
   }

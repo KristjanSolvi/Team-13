@@ -239,7 +239,9 @@ snapshot hash must use `sha256:<64 lowercase hex characters>`.
 ```
 
 Text Generation receives only the three narrative sections and their source
-references. The pipeline rejects generated references from a different
+references. Narrative rendering is extractive: generated text must exactly
+match one complete statement in the same section, and that statement must
+contain every cited reference. The pipeline rejects references from a different
 narrative section, operational task/version refs used as clinical evidence,
 unsupported clinical or lifecycle claims, and malformed or empty generated
 output. Task state, team, owner, urgency, acceptance deadline, and due deadline

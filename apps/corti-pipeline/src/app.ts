@@ -68,7 +68,7 @@ const handoverTaskItemSchema = z
   .object({
     taskId: z.string().uuid(),
     threadId: z.string().uuid(),
-    summary: z.string().trim().min(1).max(240),
+    summary: z.string().min(1).max(240),
     state: z.enum([
       "draft",
       "offered_to_team",
@@ -77,8 +77,8 @@ const handoverTaskItemSchema = z
       "completed",
       "escalated",
     ]),
-    targetTeamId: z.string().trim().min(1).max(160),
-    assignedMemberId: z.string().trim().min(1).max(160).nullable(),
+    targetTeamId: z.string().min(1).max(160),
+    assignedMemberId: z.string().min(1).max(160).nullable(),
     clinicalUrgency: z.enum(["high", "medium", "routine"]),
     acceptBy: z.string().datetime(),
     dueBy: z.string().datetime(),
@@ -102,7 +102,7 @@ const handoverPacketSchema = z
 const renderHandoverRequestSchema = z
   .object({
     handoverId: z.string().uuid(),
-    patientId: z.string().trim().min(1).max(120),
+    patientId: z.string().trim().min(1).max(160),
     sourceSnapshotHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     packet: handoverPacketSchema,
   })

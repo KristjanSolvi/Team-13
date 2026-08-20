@@ -128,6 +128,24 @@ describe("grounded handover rendering", () => {
     );
   });
 
+  it("rejects generated narrative text that is not an exact cited source statement", () => {
+    expectPipelineCode(
+      () =>
+        normalizeGeneratedHandover({
+          input: input(),
+          generatedValue: [
+            {
+              section: "situation",
+              text: "Karen reports chest pain.",
+              sourceRefs: ["encounter:sentence-42"],
+            },
+          ],
+          creditsConsumed: 0.01,
+        }),
+      "HANDOVER_UNSUPPORTED_CLAIM",
+    );
+  });
+
   it.each([
     `task:${TASK_ID}@7`,
     `thread:${THREAD_ID}@3`,
@@ -190,6 +208,33 @@ describe("grounded handover rendering", () => {
       "HANDOVER_UNSUPPORTED_REFERENCE",
     );
   });
+
+  it.each([`Task:${TASK_ID}@7`, `Thread:${THREAD_ID}@3`])(
+    "rejects case-variant operational ref %s in narrative input",
+    (sourceRef) => {
+      const contaminated = packet();
+      contaminated.situation[0] = {
+        statement: "An operational item is present.",
+        sourceRefs: [sourceRef],
+      };
+
+      expectPipelineCode(
+        () =>
+          normalizeGeneratedHandover({
+            input: input(contaminated),
+            generatedValue: [
+              {
+                section: "situation",
+                text: "An operational item is present.",
+                sourceRefs: [sourceRef],
+              },
+            ],
+            creditsConsumed: 0.01,
+          }),
+        "HANDOVER_UNSUPPORTED_REFERENCE",
+      );
+    },
+  );
 
   it.each([
     "Karen was diagnosed with vertigo.",

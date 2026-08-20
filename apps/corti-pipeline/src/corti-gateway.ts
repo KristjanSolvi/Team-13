@@ -338,16 +338,16 @@ export class CortiSdkGateway implements CortiGateway {
                 generation: {
                   instructions: {
                     prompt:
-                      "Render only the supplied narrative statements. Preserve situation, background, and currentConcerns boundaries. Copy every source reference verbatim. Preserve explicit unknown wording without converting absence into a clinical conclusion. Do not add clinical or operational facts, diagnoses, recommendations, treatment instructions, lifecycle claims, reassurance, or discharge-readiness claims.",
+                      "Extract only the supplied narrative statements. Copy statement text and every source reference verbatim, preserving situation, background, and currentConcerns boundaries. Unknowns are preserved locally; never convert absence into a clinical conclusion. Do not add, paraphrase, or infer clinical or operational facts, diagnoses, recommendations, treatment instructions, lifecycle claims, reassurance, or discharge-readiness claims.",
                   },
                   sections: [
                     {
                       heading: "Grounded handover narrative",
                       instructions: {
                         contentPrompt:
-                          "Return concise direct clinical handover statements. Each object must identify its original section and cite only sourceRefs copied verbatim from statements in that same input section. Do not render tasks, owners, priorities, deadlines, or unknowns; those are appended deterministically by the application.",
+                          "Return an extractive list of retained input statements. The text field must exactly copy one complete input statement. Each object must identify that statement's original section and cite only sourceRefs copied verbatim from that same statement. Do not render tasks, owners, priorities, deadlines, or unknowns; those are appended deterministically by the application.",
                         writingStylePrompt:
-                          "Concise, factual clinical handover language. Preserve uncertainty explicitly.",
+                          "Copy source statement text exactly without rewriting.",
                       },
                       outputSchema: {
                         type: "array",
@@ -372,7 +372,7 @@ export class CortiSdkGateway implements CortiGateway {
                             {
                               key: "text",
                               description:
-                                "A concise statement grounded only in the cited input.",
+                                "One complete input statement copied exactly without paraphrase.",
                               value: { type: "string" },
                             },
                             {
