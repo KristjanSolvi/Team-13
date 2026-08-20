@@ -10,6 +10,7 @@ import type {
   Task,
   Team,
   Thread,
+  ThreadState,
 } from "../domain/types.js";
 import { inTransaction } from "./database.js";
 
@@ -737,5 +738,290 @@ export class SqliteStore {
       this.saveProcessedCommand(scope, key, { taskId: task.taskId }, createdAt);
       return task;
     });
+  }
+
+  requireTask(taskId: string): Task {
+    const task = this.getTask(taskId);
+    if (!task) {
+      throw new DomainError("TASK_NOT_FOUND", "Task not found", false, 404);
+    }
+    return task;
+  }
+
+  requireThread(threadId: string): Thread {
+    const thread = this.getThread(threadId);
+    if (!thread) {
+      throw new DomainError("THREAD_NOT_FOUND", "Thread not found", false, 404);
+    }
+    return thread;
+  }
+
+  teamCan(teamId: string, requiredCapabilities: string[]): boolean {
+    const team = this.listTeams().find(
+      (candidate) => candidate.teamId === teamId,
+    );
+    return Boolean(
+      team &&
+        requiredCapabilities.every((capability) =>
+          team.capabilities.includes(capability),
+        ),
+    );
+  }
+
+  findOpenDuplicate(
+    patientId: string,
+    taskType: string,
+    teamId: string,
+  ): Task | null {
+    const row = this.database
+      .prepare(`
+        SELECT *
+        FROM tasks
+        WHERE patient_id = ?
+          AND task_type = ?
+          AND target_team_id = ?
+          AND state NOT IN ('verified', 'dismissed')
+        ORDER BY created_at, task_id
+        LIMIT 1
+      `)
+      .get(patientId, taskType, teamId);
+    return row ? mapTask(row) : null;
+  }
+
+  appendTaskEvent(
+    task: Task,
+    interactionId: string,
+    contextId: string | null,
+    actor: Actor,
+    eventType: string,
+    detail: Record<string, unknown>,
+  ): DomainEvent {
+    return this.appendEvent({
+      eventType,
+      occurredAt: task.updatedAt,
+      correlationId: task.threadId,
+      patientId: task.patientId,
+      interactionId,
+      contextId,
+      actor,
+      payload: {
+        ...detail,
+        taskId: task.taskId,
+        threadId: task.threadId,
+        state: task.state,
+        version: task.version,
+      },
+    });
+  }
+
+  appendContextEvent(
+    contextId: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): DomainEvent {
+    const row = this.database
+      .prepare(`
+        SELECT patient_id, interaction_id
+        FROM context_mappings
+        WHERE context_id = ?
+      `)
+      .get(contextId);
+    if (!row) {
+      throw new DomainError(
+        "PATIENT_SCOPE_DENIED",
+        "Patient scope is unavailable",
+        false,
+        403,
+      );
+    }
+    const interactionId = rowText(row, "interaction_id");
+    return this.appendEvent({
+      eventType,
+      occurredAt: new Date().toISOString(),
+      correlationId: interactionId,
+      patientId: rowText(row, "patient_id"),
+      interactionId,
+      contextId,
+      actor: { type: "system", id: "follow-through" },
+      payload,
+    });
+  }
+
+  replaceTask(previous: Task, next: Task): void {
+    if (!Number.isSafeInteger(next.version) || next.version <= 0) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Task version must be a positive integer",
+        false,
+        409,
+      );
+    }
+    const result = this.database
+      .prepare(`
+        UPDATE tasks
+        SET summary = ?,
+            target_team_id = ?,
+            required_capabilities_json = ?,
+            clinical_urgency = ?,
+            operational_priority_score = ?,
+            priority_breakdown_json = ?,
+            accept_by = ?,
+            due_by = ?,
+            state = ?,
+            assigned_member_id = ?,
+            failed_offers = ?,
+            version = ?,
+            updated_at = ?
+        WHERE task_id = ? AND version = ?
+      `)
+      .run(
+        next.summary,
+        next.targetTeamId,
+        JSON.stringify(next.requiredCapabilities),
+        next.clinicalUrgency,
+        next.operationalPriorityScore,
+        JSON.stringify(next.priorityBreakdown),
+        next.acceptBy,
+        next.dueBy,
+        next.state,
+        next.assignedMemberId,
+        next.failedOffers,
+        next.version,
+        next.updatedAt,
+        next.taskId,
+        previous.version,
+      );
+    if (result.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Task changed concurrently",
+        false,
+        409,
+      );
+    }
+  }
+
+  updateTask(
+    taskId: string,
+    expectedVersion: number,
+    change: (task: Task) => Task,
+    actor: Actor,
+    eventType: string,
+    detail: Record<string, unknown>,
+  ): Task {
+    return this.transaction(() => {
+      const current = this.requireTask(taskId);
+      if (current.version !== expectedVersion) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Task changed concurrently",
+          false,
+          409,
+        );
+      }
+      const next = change(current);
+      this.replaceTask(current, next);
+      const thread = this.requireThread(next.threadId);
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        actor,
+        eventType,
+        detail,
+      );
+      const idempotencyKey = detail.idempotencyKey;
+      const acceptedMemberId = detail.memberId;
+      if (
+        eventType === "task.member_accepted" &&
+        typeof idempotencyKey === "string" &&
+        typeof acceptedMemberId === "string"
+      ) {
+        this.saveProcessedCommand(
+          `accept:${taskId}:${acceptedMemberId}`,
+          idempotencyKey,
+          { taskId },
+          next.updatedAt,
+        );
+      }
+      return next;
+    });
+  }
+
+  setThreadState(
+    threadId: string,
+    expectedVersion: number,
+    state: ThreadState,
+    updatedAt: string,
+  ): Thread {
+    return this.transaction(() => {
+      const current = this.requireThread(threadId);
+      if (current.version !== expectedVersion) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Thread changed concurrently",
+          false,
+          409,
+        );
+      }
+      const next: Thread = {
+        ...current,
+        state,
+        version: current.version + 1,
+        updatedAt,
+      };
+      const result = this.database
+        .prepare(`
+          UPDATE threads
+          SET state = ?, version = ?, updated_at = ?
+          WHERE thread_id = ? AND version = ?
+        `)
+        .run(state, next.version, updatedAt, threadId, expectedVersion);
+      if (result.changes !== 1) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Thread changed concurrently",
+          false,
+          409,
+        );
+      }
+      this.appendEvent({
+        eventType: "thread.state_changed",
+        occurredAt: updatedAt,
+        correlationId: threadId,
+        patientId: next.patientId,
+        interactionId: next.interactionId,
+        contextId: next.contextId,
+        actor: { type: "system", id: "ledger" },
+        payload: { threadId, state, version: next.version },
+      });
+      return next;
+    });
+  }
+
+  requireEligibleMember(memberId: string, task: Task): Member {
+    const member = this.listMembers(task.targetTeamId).find(
+      (candidate) => candidate.memberId === memberId,
+    );
+    const capable =
+      member &&
+      task.requiredCapabilities.every((capability) =>
+        member.capabilities.includes(capability),
+      );
+    if (
+      !member ||
+      !capable ||
+      !member.onShift ||
+      !member.available ||
+      member.openTaskCount >= member.capacity
+    ) {
+      throw new DomainError(
+        "MEMBER_NOT_ELIGIBLE",
+        "Member is not eligible for this task",
+        false,
+        409,
+      );
+    }
+    return member;
   }
 }
