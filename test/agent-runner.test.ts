@@ -74,7 +74,11 @@ test("first investigation completes data-free warmup and maps context before sco
       calls.push(input);
       if (calls.length === 1) {
         assert.equal(input.contextId, undefined);
-        assert.equal(input.data, undefined);
+        assert.deepEqual(input.data, { mcpToken: "mcp-secret" });
+        assert.equal(Object.hasOwn(input.data ?? {}, "patientId"), false);
+        assert.equal(Object.hasOwn(input.data ?? {}, "interactionId"), false);
+        assert.equal(Object.hasOwn(input.data ?? {}, "signalText"), false);
+        assert.equal(Object.hasOwn(input.data ?? {}, "evidenceRefs"), false);
         assert.doesNotMatch(input.text, /karen|patient|interaction/i);
         return result("ctx-karen", "corti-warmup", "submitted");
       }
