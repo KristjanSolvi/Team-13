@@ -57,6 +57,21 @@ function requestedActivity(extra: Record<string, unknown> = {}) {
   };
 }
 
+function contextInitializedActivity(extra: Record<string, unknown> = {}) {
+  return {
+    eventType: "handover.context_initialized",
+    occurredAt: "2026-08-20T11:59:01.000Z",
+    actor: { type: "agent", id: "corti" },
+    payload: {
+      handoverId: "11111111-1111-4111-8111-111111111111",
+      contextId: "ctx-handover-1",
+      status: "requested",
+      version: 1,
+    },
+    ...extra,
+  };
+}
+
 type HandoverAgenticGateway = AgenticGateway & {
   createHandoverDraft: NonNullable<AgenticGateway["createHandoverDraft"]>;
   finalizeHandover: NonNullable<AgenticGateway["finalizeHandover"]>;
@@ -203,7 +218,7 @@ describe("integration API", () => {
     }
     expect(
       response.body.components.schemas.HandoverActivity.oneOf,
-    ).toHaveLength(7);
+    ).toHaveLength(8);
     expect(
       response.body.components.schemas.RenderedSection.properties.sectionId
         .enum,
@@ -218,6 +233,7 @@ describe("integration API", () => {
     ]);
     for (const variant of [
       "HandoverRequestedActivity",
+      "HandoverContextInitializedActivity",
       "HandoverSourcesRetrievedActivity",
       "HandoverDraftSavedActivity",
       "HandoverRenderRequestedActivity",
@@ -435,6 +451,29 @@ describe("integration API", () => {
     expect(response.body).toEqual(handoverResponse("rendered"));
     expect(response.body).not.toHaveProperty("lifecycleStatus");
     expect(response.body).not.toHaveProperty("replayed");
+  });
+
+  it("accepts the exact safe context-initialized activity from the Agentic service", async () => {
+    const { agentic, app } = harness();
+    const activity = [requestedActivity(), contextInitializedActivity()];
+    vi.mocked(agentic.createHandoverDraft).mockResolvedValue({
+      replayed: false,
+      lifecycleStatus: "draft",
+      handover: { ...handoverResponse("pending"), activity },
+    });
+    vi.mocked(agentic.finalizeHandover).mockResolvedValue({
+      replayed: false,
+      lifecycleStatus: "rendered",
+      handover: { ...handoverResponse("rendered"), activity },
+    });
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(201);
+
+    expect(response.body.activity).toEqual(activity);
   });
 
   it("returns a rendered replay without another renderer or finalization call", async () => {

@@ -163,6 +163,20 @@ const handoverActivitySchema = z.discriminatedUnion("eventType", [
   z
     .object({
       ...handoverActivityBase,
+      eventType: z.literal("handover.context_initialized"),
+      payload: z
+        .object({
+          handoverId: handoverIdSchema,
+          contextId: z.string().min(1).max(160),
+          status: z.literal("requested"),
+          version: z.number().int().positive(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...handoverActivityBase,
       eventType: z.literal("handover.sources_retrieved"),
       payload: z
         .object({

@@ -804,6 +804,17 @@ export const integrationOpenApi = {
           version: { type: "integer", minimum: 1 },
         },
       },
+      HandoverContextInitializedPayload: {
+        type: "object",
+        additionalProperties: false,
+        required: ["handoverId", "contextId", "status", "version"],
+        properties: {
+          handoverId: { type: "string", format: "uuid" },
+          contextId: { type: "string", minLength: 1, maxLength: 160 },
+          status: { const: "requested" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
       HandoverSourcesRetrievedPayload: {
         type: "object",
         additionalProperties: false,
@@ -899,6 +910,10 @@ export const integrationOpenApi = {
         "handover.requested",
         "HandoverRequestedPayload",
       ),
+      HandoverContextInitializedActivity: handoverActivityVariant(
+        "handover.context_initialized",
+        "HandoverContextInitializedPayload",
+      ),
       HandoverSourcesRetrievedActivity: handoverActivityVariant(
         "handover.sources_retrieved",
         "HandoverSourcesRetrievedPayload",
@@ -926,6 +941,9 @@ export const integrationOpenApi = {
       HandoverActivity: {
         oneOf: [
           { $ref: "#/components/schemas/HandoverRequestedActivity" },
+          {
+            $ref: "#/components/schemas/HandoverContextInitializedActivity",
+          },
           { $ref: "#/components/schemas/HandoverSourcesRetrievedActivity" },
           { $ref: "#/components/schemas/HandoverDraftSavedActivity" },
           { $ref: "#/components/schemas/HandoverRenderRequestedActivity" },
@@ -938,6 +956,8 @@ export const integrationOpenApi = {
           mapping: {
             "handover.requested":
               "#/components/schemas/HandoverRequestedActivity",
+            "handover.context_initialized":
+              "#/components/schemas/HandoverContextInitializedActivity",
             "handover.sources_retrieved":
               "#/components/schemas/HandoverSourcesRetrievedActivity",
             "handover.draft_saved":
