@@ -1,0 +1,7 @@
+id: 41
+event: task.draft_created
+data: {"schemaVersion":"1","sequence":41,"eventType":"task.draft_created","patientId":"synthetic-karen","payload":{"taskId":"task-karen-bp","state":"draft","version":1}}
+
+id: 42
+event: thread.state_changed
+data: {"schemaVersion":"1","sequence":42,"eventType":"thread.state_changed","patientId":"synthetic-karen","payload":{"threadId":"thread-karen-bp","state":"awaiting_review","version":1}}
