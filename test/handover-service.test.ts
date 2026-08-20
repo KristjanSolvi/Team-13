@@ -1455,6 +1455,34 @@ test("finalize supports exact lost-response replay and conflicts on changed rend
   }
 });
 
+test("finalizeWithReplay reports the transaction winner without duplicating the rendered event", (t) => {
+  const setup = savePreparedDraft(t);
+  const rendered = renderedFor(setup.packet);
+
+  const first = setup.service.finalizeWithReplay(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+  const replay = setup.service.finalizeWithReplay(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+
+  assert.equal(first.replayed, false);
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.handover, first.handover);
+  assert.equal(
+    setup.store
+      .listEvents(0)
+      .filter(({ eventType }) => eventType === "handover.rendered").length,
+    1,
+  );
+});
+
 test("markRenderRequested is retryable for drafts, replays rendered, and rejects other states", (t) => {
   const requestedSetup = prepareRequested(t);
   assertDomainError(

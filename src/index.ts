@@ -35,6 +35,7 @@ createApp({
   mcpBearerToken: config.mcpBearerToken,
   uiOrigin: config.uiOrigin,
   ...(runners.task ? { runner: runners.task } : {}),
+  ...(runners.handover ? { handoverRunner: runners.handover } : {}),
 }).listen(config.port, config.host, () => {
   console.error(
     `Follow-Through listening on http://${config.host}:${config.port}`,

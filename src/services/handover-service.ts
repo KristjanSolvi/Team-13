@@ -46,7 +46,7 @@ interface GroundingState {
 }
 
 type FinalizeOutcome =
-  | { kind: "completed"; handover: HandoverRecord }
+  | { kind: "completed"; handover: HandoverRecord; replayed: boolean }
   | {
       kind: "source_changed";
       handoverId: string;
@@ -350,6 +350,20 @@ export class HandoverService {
     expectedSnapshotHash: string,
     rendered: RenderedHandover,
   ): HandoverRecord {
+    return this.finalizeWithReplay(
+      handoverId,
+      expectedVersion,
+      expectedSnapshotHash,
+      rendered,
+    ).handover;
+  }
+
+  finalizeWithReplay(
+    handoverId: string,
+    expectedVersion: number,
+    expectedSnapshotHash: string,
+    rendered: RenderedHandover,
+  ): { handover: HandoverRecord; replayed: boolean } {
     const parsedRendered = renderedHandoverSchema.parse(rendered);
     const outcome: FinalizeOutcome = this.store.transaction(() => {
       const handover = this.store.requireHandover(handoverId);
@@ -360,7 +374,7 @@ export class HandoverService {
           handover.rendered !== null &&
           sameJson(handover.rendered, parsedRendered)
         ) {
-          return { kind: "completed", handover };
+          return { kind: "completed", handover, replayed: true };
         }
         throw this.finalizeConflict();
       }
@@ -436,9 +450,11 @@ export class HandoverService {
           sectionCount: parsedRendered.sections.length,
         },
       });
-      return { kind: "completed", handover: saved };
+      return { kind: "completed", handover: saved, replayed: false };
     });
-    if (outcome.kind === "completed") return outcome.handover;
+    if (outcome.kind === "completed") {
+      return { handover: outcome.handover, replayed: outcome.replayed };
+    }
 
     const occurredAt = this.clock.now().toISOString();
     this.store.transaction(() => {
