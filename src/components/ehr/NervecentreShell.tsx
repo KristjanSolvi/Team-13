@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CaseNote, DocId, Patient } from "@/data/ward";
+import type { ActivityEntry, CaseNote, DocId, Patient } from "@/data/ward";
 import { documents, patients } from "@/data/ward";
 
 const tabs = [
@@ -10,7 +10,7 @@ const tabs = [
   "Procedures",
   "Fluids",
   "Charts",
-  "Case Notes",
+  "Notes",
   "Discharge",
   "Primary Care",
   "Patient App",
@@ -75,15 +75,18 @@ type ShellProps = {
   onSelectPatient?: ((id: string) => void) | undefined;
   notes?: CaseNote[] | undefined;
   onAddNote?: ((doc: DocId, text: string) => void) | undefined;
+  activity?: ActivityEntry[] | undefined;
 };
 
-export function NervecentreShell({ patient, onSelectPatient, notes = [], onAddNote }: ShellProps) {
+export function NervecentreShell({
+  patient,
+  onSelectPatient,
+  notes = [],
+  onAddNote,
+  activity = [],
+}: ShellProps) {
   const current = patient ?? patients[0]!;
   const [activeTab, setActiveTab] = useState("Obs");
-  const [activeDoc, setActiveDoc] = useState<DocId>("ward-round");
-  const [draft, setDraft] = useState("");
-  const doc = documents.find((d) => d.id === activeDoc)!;
-  const docNotes = notes.filter((n) => n.doc === activeDoc);
   return (
     <div className="min-h-screen bg-ehr-bg text-ehr-foreground">
       <div className="flex items-center justify-between bg-ehr-chrome px-3 py-1.5">
@@ -154,6 +157,14 @@ export function NervecentreShell({ patient, onSelectPatient, notes = [], onAddNo
         ))}
       </div>
 
+      {activeTab === "Notes" ? (
+        <NotesWorkspace
+          patientName={current.name}
+          notes={notes}
+          activity={activity}
+          onAddNote={onAddNote}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_1.6fr_1fr]">
         <div className="space-y-2">
           <Panel title="ED Clinical">
@@ -242,81 +253,197 @@ export function NervecentreShell({ patient, onSelectPatient, notes = [], onAddNo
             <Row left="Inpatient — COPD" right="09 Nov 2025" />
           </Panel>
           <Panel title="Clinical Documents">
-            <div className="mb-2 flex gap-1">
-              {documents.map((d) => {
-                const count = notes.filter((n) => n.doc === d.id).length;
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => setActiveDoc(d.id)}
-                    className={`flex-1 border px-1.5 py-1 text-[10px] leading-tight ${
-                      d.id === activeDoc
-                        ? "border-ehr-accent bg-ehr-accent/10 font-semibold text-ehr-foreground"
-                        : "border-ehr-line text-ehr-muted hover:text-ehr-foreground"
-                    }`}
-                  >
-                    {d.title}
-                    <span className="ml-1 text-ehr-muted">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mb-1 text-[10px] text-ehr-muted">
-              {doc.subtitle} · {current.name} · updated live by Ward Threads
-            </p>
-            <div className="max-h-72 space-y-2 overflow-y-auto border border-ehr-line bg-ehr-bg p-2">
-              {docNotes.length === 0 && (
-                <p className="text-ehr-muted">Nothing recorded in this document yet.</p>
-              )}
-              {docNotes.map((n) => (
-                <article
-                  key={n.id}
-                  className={`border-l-2 pl-2 ${
-                    n.source === "clinician" ? "border-ehr-line" : "border-ehr-accent"
-                  }`}
-                >
-                  <header className="flex justify-between gap-2 text-[10px] text-ehr-muted">
-                    <span>
-                      {n.author}
-                      {n.source !== "clinician" && (
-                        <span className="ml-1 rounded bg-ehr-accent/15 px-1 text-ehr-accent">
-                          {n.source === "scribe" ? "Auto-scribed" : "Ward Threads"}
-                        </span>
-                      )}
-                    </span>
-                    <span>{n.at}</span>
-                  </header>
-                  <p className="mt-[2px] whitespace-pre-line leading-snug">{n.text}</p>
-                </article>
-              ))}
-            </div>
-            <form
-              className="mt-2 flex gap-1"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const text = draft.trim();
-                if (!text) return;
-                onAddNote?.(activeDoc, text);
-                setDraft("");
-              }}
-            >
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={`Add to ${doc.title.toLowerCase()}…`}
-                className="min-w-0 flex-1 border border-ehr-line bg-ehr-bg px-1.5 py-1 text-[11px] outline-none focus:border-ehr-accent"
+            {documents.map((d) => (
+              <Row
+                key={d.id}
+                left={d.title}
+                right={`${notes.filter((n) => n.doc === d.id).length} entries`}
               />
-              <button
-                type="submit"
-                className="shrink-0 bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
-              >
-                Save
-              </button>
-            </form>
+            ))}
+            <button
+              type="button"
+              onClick={() => setActiveTab("Notes")}
+              className="mt-2 w-full bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
+            >
+              Open Notes
+            </button>
           </Panel>
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+function sourceLabel(source: CaseNote["source"]) {
+  if (source === "scribe") return "Auto-scribed";
+  if (source === "agent") return "Ward Threads";
+  return null;
+}
+
+function splitEntry(text: string) {
+  const idx = text.search(/\bPlan\s*:/i);
+  if (idx === -1) return { body: text.trim(), plan: null as string | null };
+  return {
+    body: text.slice(0, idx).trim(),
+    plan: text.slice(idx).replace(/^\s*Plan\s*:\s*/i, "").trim(),
+  };
+}
+
+function NotesWorkspace({
+  patientName,
+  notes,
+  activity,
+  onAddNote,
+}: {
+  patientName: string;
+  notes: CaseNote[];
+  activity: ActivityEntry[];
+  onAddNote?: ((doc: DocId, text: string) => void) | undefined;
+}) {
+  const [activeDoc, setActiveDoc] = useState<DocId>("ward-round");
+  const [draft, setDraft] = useState("");
+  const doc = documents.find((d) => d.id === activeDoc)!;
+  const docNotes = notes.filter((n) => n.doc === activeDoc);
+  const plans = docNotes.map((n) => ({ note: n, ...splitEntry(n.text) })).filter((e) => e.plan);
+  const latestPlan = plans[plans.length - 1] ?? null;
+  const fallback = docNotes[docNotes.length - 1];
+  const planText = latestPlan?.plan ?? fallback?.text ?? null;
+  const planNote = latestPlan?.note ?? fallback;
+
+  return (
+    <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-3 p-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <nav className="space-y-1">
+        <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+          Documents
+        </p>
+        {documents.map((d) => {
+          const count = notes.filter((n) => n.doc === d.id).length;
+          const active = d.id === activeDoc;
+          return (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => setActiveDoc(d.id)}
+              className={`w-full border px-2 py-2 text-left text-[11px] leading-tight transition-colors ${
+                active
+                  ? "border-ehr-accent bg-ehr-accent/10 text-ehr-foreground"
+                  : "border-ehr-line bg-ehr-panel text-ehr-muted hover:text-ehr-foreground"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className={active ? "font-semibold" : ""}>{d.title}</span>
+                <span className="tabular-nums text-ehr-muted">{count}</span>
+              </span>
+              <span className="mt-[2px] block text-[10px] text-ehr-muted">{d.subtitle}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <section className="border border-ehr-line bg-ehr-panel">
+        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ehr-line bg-ehr-chrome px-3 py-2">
+          <span className="text-[12px] font-semibold text-ehr-chrome-foreground">{doc.title}</span>
+          <span className="text-[10px] text-ehr-chrome-foreground/70">
+            {patientName} · {docNotes.length} entries · updated live by Ward Threads
+          </span>
+        </header>
+
+        <div className="space-y-3 p-3">
+          <div className="space-y-2">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+              Entries
+            </h3>
+            {docNotes.length === 0 && (
+              <p className="text-[11px] text-ehr-muted">Nothing recorded in this document yet.</p>
+            )}
+            {docNotes.map((n) => {
+              const { body, plan } = splitEntry(n.text);
+              const badge = sourceLabel(n.source);
+              return (
+                <article key={n.id} className="border border-ehr-line bg-ehr-bg">
+                  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ehr-line px-2 py-1 text-[10px] text-ehr-muted">
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-semibold text-ehr-foreground">{n.author}</span>
+                      {badge && (
+                        <span className="rounded bg-ehr-accent/15 px-1 text-ehr-accent">{badge}</span>
+                      )}
+                    </span>
+                    <span className="tabular-nums">{n.at}</span>
+                  </header>
+                  <div className="space-y-1 px-2 py-1.5 text-[11px] leading-snug">
+                    {body && <p className="whitespace-pre-line">{body}</p>}
+                    {plan && (
+                      <p className="whitespace-pre-line">
+                        <span className="font-semibold text-ehr-foreground">Plan: </span>
+                        {plan}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="border border-ehr-accent/40 bg-ehr-accent/5 p-2">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-accent">
+              Current plan
+            </h3>
+            <p className="mt-1 text-[11px] leading-snug text-ehr-foreground">
+              {planText ?? "No plan documented in this document yet."}
+            </p>
+            {planNote && (
+              <p className="mt-1 text-[10px] text-ehr-muted">
+                {planNote.author} · {planNote.at}
+              </p>
+            )}
+          </div>
+
+          <form
+            className="flex gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const text = draft.trim();
+              if (!text) return;
+              onAddNote?.(activeDoc, text);
+              setDraft("");
+            }}
+          >
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={`Add an entry to ${doc.title.toLowerCase()}…`}
+              className="min-w-0 flex-1 border border-ehr-line bg-ehr-bg px-2 py-1.5 text-[11px] outline-none focus:border-ehr-accent"
+            />
+            <button
+              type="submit"
+              className="shrink-0 bg-ehr-chrome px-3 py-1.5 text-[10px] font-semibold text-ehr-chrome-foreground"
+            >
+              Save entry
+            </button>
+          </form>
+
+          <div className="border-t border-ehr-line pt-2">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+              Activity feed
+            </h3>
+            <ol className="mt-1.5 space-y-1.5">
+              {activity.length === 0 && (
+                <li className="text-[11px] text-ehr-muted">No tracked activity for this patient.</li>
+              )}
+              {activity.map((a) => (
+                <li key={a.id} className="flex gap-2 text-[11px] leading-snug">
+                  <span className="w-10 shrink-0 tabular-nums text-ehr-muted">{a.at}</span>
+                  <span className="min-w-0">
+                    <span className="text-ehr-foreground">{a.text}</span>{" "}
+                    <span className="text-ehr-muted">— {a.actor}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
