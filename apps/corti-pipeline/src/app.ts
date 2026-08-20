@@ -45,6 +45,15 @@ const candidateRequestSchema = z.object({
   segments: z.array(transcriptSegmentSchema).min(1).max(500),
 });
 
+const transcriptReviewRequestSchema = z
+  .object({
+    interactionId: z.string().min(1).max(160),
+    segments: z.array(transcriptSegmentSchema).min(1).max(500),
+    contextTerms: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+    protectedTerms: z.array(z.string().trim().min(1).max(120)).max(25).default([]),
+  })
+  .strict();
+
 const supportingDocumentSchema = z.object({
   approvalId: z.string().min(1).max(120),
   approvedClinicalText: z.string().min(1).max(50_000),
@@ -248,6 +257,22 @@ export function createPipelineApp(options: CreatePipelineAppOptions) {
     "/api/corti/dictation/token",
     route(async (_request, response) => {
       response.json(await requireGateway().mintDictationToken());
+    }),
+  );
+
+  app.post(
+    "/api/corti/transcripts/review",
+    route(async (request, response) => {
+      const input = transcriptReviewRequestSchema.parse(request.body);
+      response.json(
+        await requireGateway().reviewTranscript({
+          interactionId: input.interactionId,
+          correlationId: correlationId(response),
+          segments: input.segments.map(transcriptSegment),
+          contextTerms: input.contextTerms,
+          protectedTerms: input.protectedTerms,
+        }),
+      );
     }),
   );
 

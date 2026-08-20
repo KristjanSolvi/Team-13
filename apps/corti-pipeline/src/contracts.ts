@@ -24,6 +24,26 @@ export interface TranscriptSegment {
   audioQuality?: AudioQualityState;
 }
 
+export interface TranscriptReviewSuggestion {
+  suggestionId: string;
+  segmentKey: string;
+  originalText: string;
+  suggestedText: string;
+  originalStart: number;
+  originalEnd: number;
+  reason: string;
+  confidence: "high";
+  requiresConfirmation: true;
+}
+
+export interface TranscriptReviewResult {
+  status: "reviewed";
+  suggestions: TranscriptReviewSuggestion[];
+  rejectedSuggestionCount: number;
+  creditsConsumed: number;
+  originalTranscriptPreserved: true;
+}
+
 export interface EvidenceReference {
   interactionId: string;
   segmentKey: string;

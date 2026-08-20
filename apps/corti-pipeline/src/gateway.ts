@@ -8,6 +8,7 @@ import type {
   RenderHandoverInput,
   ScopedToken,
   SupportingDocumentType,
+  TranscriptReviewResult,
   TranscriptSegment,
 } from "./contracts.js";
 
@@ -23,6 +24,14 @@ export interface GenerateCandidatesResult {
   rejectedEvidenceCount: number;
   rejectedAudioQualityCount: number;
   creditsConsumed: number;
+}
+
+export interface ReviewTranscriptInput {
+  interactionId: string;
+  correlationId: string;
+  segments: TranscriptSegment[];
+  contextTerms: string[];
+  protectedTerms: string[];
 }
 
 export interface GenerateSupportingDocumentInput {
@@ -44,6 +53,7 @@ export interface CortiGateway {
   generateCandidates(
     input: GenerateCandidatesInput,
   ): Promise<GenerateCandidatesResult>;
+  reviewTranscript(input: ReviewTranscriptInput): Promise<TranscriptReviewResult>;
   generateSupportingDocument(
     input: GenerateSupportingDocumentInput,
   ): Promise<GeneratedSupportingDocument>;

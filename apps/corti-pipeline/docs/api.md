@@ -58,6 +58,67 @@ review, but must not turn them into an Agentic signal.
 `ENDED`, then releases the socket and microphone. The UI must always show a
 recording/consent indicator even though the rail otherwise stays quiet.
 
+## Conservative transcript review
+
+`POST /api/corti/transcripts/review`
+
+```json
+{
+  "interactionId": "interaction-karen-1",
+  "segments": [
+    {
+      "interactionId": "interaction-karen-1",
+      "segmentKey": "interaction-karen-1:12",
+      "text": "The patient has been taking parachutes for pain.",
+      "startSeconds": 12,
+      "endSeconds": 16,
+      "isFinal": true,
+      "audioQuality": "clear"
+    }
+  ],
+  "contextTerms": ["paracetamol", "medication change"],
+  "protectedTerms": ["Karen Jensen"]
+}
+```
+
+Corti Text Generation reviews final Ambient wording for a maximum of three
+high-confidence possible recognition errors. Context terms are hints, not
+proof. The server accepts only minimal replacements whose `originalText` occurs
+exactly once and contiguously in the named final segment. It rejects cosmetic,
+low-confidence, invented, overlapping, or whole-sentence changes.
+
+The defensive normalizer also rejects replacements touching negation, doses,
+numbers, units, allergies, dates, times, or a supplied protected name. A valid
+response is a confirmation list, never a rewritten transcript:
+
+```json
+{
+  "status": "reviewed",
+  "suggestions": [
+    {
+      "suggestionId": "suggestion-uuid",
+      "segmentKey": "interaction-karen-1:12",
+      "originalText": "parachutes",
+      "suggestedText": "paracetamol",
+      "originalStart": 28,
+      "originalEnd": 38,
+      "reason": "Paracetamol better matches the nearby medication context.",
+      "confidence": "high",
+      "requiresConfirmation": true
+    }
+  ],
+  "rejectedSuggestionCount": 0,
+  "creditsConsumed": 1,
+  "originalTranscriptPreserved": true
+}
+```
+
+An empty `suggestions` array is the normal success result when no safe change
+is clear. The browser starts this request without waiting for it before
+candidate extraction, shows a real review state only while it is pending, and
+requires the clinician to keep the original or confirm each interpretation.
+The raw Corti transcript remains unchanged in either case.
+
 ## Dictation
 
 ### Scoped token
