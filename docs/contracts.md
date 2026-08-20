@@ -158,6 +158,126 @@ The response is intentionally not a published task:
 The Corti agent publishes that exact approved draft with the MCP
 `publish_team_task` tool, then verifies authoritative state with `get_task`.
 
+## Grounded on-demand patient handovers
+
+The UI has one public operation through the integration API:
+
+```text
+POST /api/patients/:patientId/handovers
+x-actor-id: clinician:demo
+x-correlation-id: handover-demo-1
+```
+
+```json
+{
+  "idempotencyKey": "handover-demo-001",
+  "reason": "on_demand",
+  "focus": null
+}
+```
+
+`x-actor-id` is required and becomes `requestedBy`; `x-correlation-id` is
+propagated across the integration, Agentic, and pipeline services. `focus` is
+only an emphasis hint. It is never treated as patient evidence. A new result
+returns `201`; an exact saved or finalized replay returns `200`. The response is
+always labelled `status: "draft"` because it is decision support, never an
+approved clinical record. `renderingStatus` distinguishes `pending` from
+`rendered`.
+
+The integration service owns orchestration, not clinical state:
+
+1. `POST /api/patients/:patientId/handover-drafts` on the Agentic service
+   persists the request, runs the dedicated Corti agent, verifies that the
+   completed Corti task saved exactly one draft, and returns the canonical
+   packet.
+2. `POST /api/corti/handovers/render` on the pipeline is an internal-only Text
+   Generation boundary. It renders extractive narrative, appends authoritative
+   task facts deterministically, and copies unknowns locally.
+3. `POST /api/handovers/:handoverId/finalize` on the Agentic service accepts the
+   render only if the patient source snapshot is unchanged. `GET
+   /api/handovers/:handoverId` reads the safe Agentic projection.
+
+The Agentic HTTP endpoints require `APP_BEARER_TOKEN`; the integration gateway
+holds it server-side. Both MCP mounts require `MCP_BEARER_TOKEN`. Browser code
+must not call either internal service directly or receive either bearer.
+
+### Handover-only MCP boundary
+
+The dedicated handover agent connects to `/mcp/handover`, not the task agent's
+`/mcp` mount. It has exactly these tools:
+
+| Tool | Authority |
+| --- | --- |
+| `get_patient_context` | Read registered patient record facts |
+| `list_open_threads` | Read current non-terminal threads |
+| `list_patient_tasks` | Read every current non-terminal patient task |
+| `get_task` | Read one authoritative task without an audit side effect |
+| `save_handover_draft` | Save one grounded packet idempotently |
+
+There is no task creation, publication, approval, assignment, acceptance,
+completion, verification, dismissal, or reopen tool on this server. Generating
+or reading a handover cannot change task state or ownership.
+
+### Grounding and lifecycle rules
+
+- Every clinical statement cites one or more references already registered for
+  that patient. Narrative claims may cite clinical `record:` and `encounter:`
+  references, never task or thread references as clinical evidence.
+- Every active task appears exactly once in `outstandingTasks`,
+  `awaitingVerification`, or `escalations`. Its summary, state, team, member,
+  urgency, deadlines, version, and `task:<id>@<version>` reference must exactly
+  match the ledger. `verified` and `dismissed` tasks are terminal and excluded.
+- Text Generation sees only the three clinical narrative sections. Generated
+  narrative must be an exact statement from the same canonical section with
+  the same supported references. Task sentences are formatted locally from
+  ledger values; unknowns are copied exactly and have no evidence references.
+- A canonical hash covers sorted record content hashes plus current thread and
+  task versions. Finalization rebuilds it. A mismatch returns
+  `HANDOVER_SOURCE_CHANGED` and never returns a stale render.
+- The durable lifecycle is `requested` → agent-verified `draft` → `rendered`, or
+  `failed`. A draft is replayable only after the Corti completion and saved
+  draft have been verified together. Reusing a key while generation is still
+  running returns `HANDOVER_IN_PROGRESS` and does not start another agent.
+
+Idempotency is scoped to the requester and key. Within that requester scope,
+reuse with a different patient, reason, or focus returns
+`IDEMPOTENCY_CONFLICT`; a different requester has a separate key scope. A
+failed attempt requires a new key. A verified saved draft can resume rendering
+without another agent call; an already rendered result is replayed exactly.
+
+### Handover failures
+
+| Code | HTTP | Meaning and recovery |
+| --- | ---: | --- |
+| `HANDOVER_IN_PROGRESS` | 409 | Same request is still running; retry the same key later |
+| `IDEMPOTENCY_CONFLICT` | 409 | Key was reused for different inputs; correct the caller |
+| `HANDOVER_RETRY_REQUIRES_NEW_KEY` | 409 | Prior request failed; explicitly start a new attempt |
+| `HANDOVER_SOURCE_CHANGED` | 409 | Record, thread, or task version changed; regenerate with a new key |
+| `HANDOVER_EVIDENCE_NOT_FOUND` | 409 | A clinical or rendered reference is missing, stale, or unsupported |
+| `HANDOVER_TASK_SET_MISMATCH` | 409 | Packet omitted, duplicated, or invented an active task |
+| `HANDOVER_TASK_MISMATCH` | 409 | Packet changed an authoritative task field |
+| `HANDOVER_SECTION_MISMATCH` | 409 | Task was placed in the wrong lifecycle section |
+| `CORTI_HANDOVER_AGENT_FAILED` | 502 | Agent completion or saved-draft verification failed; new key required |
+| `HANDOVER_RENDER_FAILED` | 502 | Renderer rejected or could not safely validate output; retryable |
+| `UPSTREAM_INVALID_RESPONSE` | 502 | A service returned a structurally or semantically invalid handover |
+| `UPSTREAM_UNAVAILABLE` | 502 | An internal service could not be reached |
+| `UPSTREAM_TIMEOUT` | 504 | An internal call exceeded the configured timeout |
+| `HANDOVER_NOT_CONFIGURED` | 503 | Integration gateways are unavailable |
+
+The grounding mismatch codes are authoritative domain/MCP errors. If the
+dedicated agent produces one while saving its draft, the internal HTTP boundary
+records the stable cause in `handover.failed` but returns the public-safe
+`CORTI_HANDOVER_AGENT_FAILED` envelope. Snapshot and render validation errors
+that occur during finalization keep their safe stable code.
+
+Safe activity names are `handover.requested`,
+`handover.context_initialized`, `handover.sources_retrieved`,
+`handover.draft_saved`, `handover.render_requested`, `handover.rendered`,
+`handover.source_changed`, and `handover.failed`. Activity payloads contain only
+allow-listed identifiers, counts, hashes, status, version, credit totals, and
+stable failure metadata. They never contain prompts, credentials, source prose,
+full packets, model messages, or hidden reasoning.
+
 ## Queries and event stream
 
 - `GET /api/patients/:patientId/threads` returns `{ "threads": [Thread] }`.
