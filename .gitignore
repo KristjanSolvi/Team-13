@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+
+# Credentials and local overrides
+.env
+.env.*
+!.env.example
+
+# Local logs and editor state
+*.log
+.idea/
+.vscode/
