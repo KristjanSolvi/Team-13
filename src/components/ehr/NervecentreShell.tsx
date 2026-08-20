@@ -82,15 +82,6 @@ export function NervecentreShell({
           <span className="text-[13px] font-semibold lowercase tracking-tight text-ehr-chrome-foreground">
             nervecentre
           </span>
-          <nav className="hidden gap-4 text-[11px] text-ehr-chrome-foreground/80 md:flex">
-            {["Home", "Patient List", "Bed Board", "All Tasks", "e-Observations", "EPMA", "Orders", "Handover", "Flow", "Search"].map(
-              (i) => (
-                <button key={i} type="button" className="hover:text-ehr-chrome-foreground">
-                  {i}
-                </button>
-              ),
-            )}
-          </nav>
         </div>
         <span className="text-[11px] text-ehr-chrome-foreground/70">S. Marriott · North Wing L4</span>
       </div>
