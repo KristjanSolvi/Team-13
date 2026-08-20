@@ -3,8 +3,10 @@ import express, { type Express } from "express";
 import type { AgentRunner } from "../agent/runner.js";
 import type { DemoClock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
+import { createHandoverMcp } from "../mcp/handover-tools.js";
 import { createFollowThroughMcp } from "../mcp/tools.js";
 import { mountMcp } from "../mcp/transport.js";
+import type { HandoverService } from "../services/handover-service.js";
 import type { LedgerService } from "../services/ledger-service.js";
 import type { RecordService } from "../services/record-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
@@ -14,6 +16,7 @@ export interface AppDependencies {
   store: SqliteStore;
   clock: DemoClock;
   ledger: LedgerService;
+  handovers: HandoverService;
   records: RecordService;
   scheduler: SchedulerService;
   uiOrigin: string;
@@ -57,6 +60,12 @@ export function createApp(dependencies: AppDependencies): Express {
         dependencies.store,
       ),
     dependencies.mcpBearerToken,
+  );
+  mountMcp(
+    app,
+    () => createHandoverMcp(dependencies.records, dependencies.handovers),
+    dependencies.mcpBearerToken,
+    "/mcp/handover",
   );
   mountRoutes(app, dependencies);
   return app;

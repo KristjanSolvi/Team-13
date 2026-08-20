@@ -1,9 +1,7 @@
 import { DomainError } from "../domain/errors.js";
-import type { Team, Thread } from "../domain/types.js";
-import type {
-  PatientRecordItem,
-  SqliteStore,
-} from "../infra/store.js";
+import { isHandoverTaskActive } from "../domain/handover.js";
+import type { Task, Team, Thread } from "../domain/types.js";
+import type { PatientRecordItem, SqliteStore } from "../infra/store.js";
 
 export interface PatientContext {
   patientId: string;
@@ -22,10 +20,7 @@ export interface EligibleTeam extends Team {
 export class RecordService {
   constructor(private readonly store: SqliteStore) {}
 
-  private requirePatient(
-    contextId: string,
-    requestedPatientId: string,
-  ): void {
+  private requirePatient(contextId: string, requestedPatientId: string): void {
     const scopedPatientId = this.store.patientForContext(contextId);
     if (!scopedPatientId || scopedPatientId !== requestedPatientId) {
       throw new DomainError(
@@ -68,6 +63,11 @@ export class RecordService {
   listOpenThreads(contextId: string, patientId: string): Thread[] {
     this.requirePatient(contextId, patientId);
     return this.store.listOpenThreads(patientId);
+  }
+
+  listPatientTasks(contextId: string, patientId: string): Task[] {
+    this.requirePatient(contextId, patientId);
+    return this.store.listPatientTasks(patientId).filter(isHandoverTaskActive);
   }
 
   listEligibleTeams(

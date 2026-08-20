@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 
 import { DomainError } from "../domain/errors.js";
+import {
+  type HandoverRecord,
+  handoverPacketSchema,
+  handoverSourceSnapshotSchema,
+  renderedHandoverSchema,
+} from "../domain/handover.js";
 import { calculatePriority } from "../domain/priority.js";
 import { requireTransition } from "../domain/state-machine.js";
 import type {
@@ -162,6 +168,25 @@ function parseThreadState(value: string): Thread["state"] {
   throw new TypeError("Expected a valid thread state");
 }
 
+function parseHandoverReason(value: string): HandoverRecord["reason"] {
+  if (value === "assignment" || value === "on_demand") {
+    return value;
+  }
+  throw new TypeError("Expected a valid handover reason");
+}
+
+function parseHandoverStatus(value: string): HandoverRecord["status"] {
+  if (
+    value === "requested" ||
+    value === "draft" ||
+    value === "rendered" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  throw new TypeError("Expected a valid handover status");
+}
+
 function isActorType(value: unknown): value is Actor["type"] {
   return (
     value === "agent" ||
@@ -225,6 +250,43 @@ function mapTask(row: SqlRow): Task {
     version: rowNumber(row, "version"),
     createdAt: rowText(row, "created_at"),
     updatedAt: rowText(row, "updated_at"),
+  };
+}
+
+function mapHandover(row: SqlRow): HandoverRecord {
+  const packetJson = rowOptionalText(row, "packet_json");
+  const renderedJson = rowOptionalText(row, "rendered_json");
+  const sourceSnapshotJson = rowOptionalText(row, "source_snapshot_json");
+
+  return {
+    handoverId: rowText(row, "handover_id"),
+    patientId: rowText(row, "patient_id"),
+    interactionId: rowText(row, "interaction_id"),
+    contextId: rowOptionalText(row, "context_id"),
+    requestedBy: rowText(row, "requested_by"),
+    reason: parseHandoverReason(rowText(row, "reason")),
+    focus: rowOptionalText(row, "focus"),
+    correlationId: rowText(row, "correlation_id"),
+    idempotencyKey: rowText(row, "idempotency_key"),
+    requestHash: rowText(row, "request_hash"),
+    status: parseHandoverStatus(rowText(row, "status")),
+    version: rowNumber(row, "version"),
+    packet:
+      packetJson === null
+        ? null
+        : handoverPacketSchema.parse(parseJson(packetJson)),
+    rendered:
+      renderedJson === null
+        ? null
+        : renderedHandoverSchema.parse(parseJson(renderedJson)),
+    sourceSnapshot:
+      sourceSnapshotJson === null
+        ? null
+        : handoverSourceSnapshotSchema.parse(parseJson(sourceSnapshotJson)),
+    sourceSnapshotHash: rowOptionalText(row, "source_snapshot_hash"),
+    createdAt: rowText(row, "created_at"),
+    updatedAt: rowText(row, "updated_at"),
+    generatedAt: rowOptionalText(row, "generated_at"),
   };
 }
 
@@ -436,6 +498,186 @@ export class SqliteStore {
       )
       .get(interactionId);
     return row ? rowText(row, "context_id") : null;
+  }
+
+  putHandover(value: HandoverRecord): void {
+    this.database
+      .prepare(`
+        INSERT INTO handovers
+          (handover_id, patient_id, interaction_id, context_id, requested_by,
+           reason, focus, correlation_id, idempotency_key, request_hash, status,
+           version, packet_json, rendered_json, source_snapshot_json,
+           source_snapshot_hash, created_at, updated_at, generated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        value.handoverId,
+        value.patientId,
+        value.interactionId,
+        value.contextId,
+        value.requestedBy,
+        value.reason,
+        value.focus,
+        value.correlationId,
+        value.idempotencyKey,
+        value.requestHash,
+        value.status,
+        value.version,
+        value.packet === null ? null : JSON.stringify(value.packet),
+        value.rendered === null ? null : JSON.stringify(value.rendered),
+        value.sourceSnapshot === null
+          ? null
+          : JSON.stringify(value.sourceSnapshot),
+        value.sourceSnapshotHash,
+        value.createdAt,
+        value.updatedAt,
+        value.generatedAt,
+      );
+  }
+
+  updateHandover(
+    value: HandoverRecord,
+    expectedVersion: number,
+  ): HandoverRecord {
+    if (
+      !Number.isSafeInteger(expectedVersion) ||
+      !Number.isSafeInteger(value.version) ||
+      value.version !== expectedVersion + 1
+    ) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Handover version must advance by one",
+        false,
+        409,
+      );
+    }
+
+    return this.transaction(() => {
+      const current =
+        this.getHandover(value.handoverId) ??
+        this.getHandoverByRequest(value.requestedBy, value.idempotencyKey);
+      if (!current) {
+        throw new DomainError(
+          "HANDOVER_NOT_FOUND",
+          "Handover not found",
+          false,
+          404,
+        );
+      }
+      if (
+        current.handoverId !== value.handoverId ||
+        current.patientId !== value.patientId ||
+        current.interactionId !== value.interactionId ||
+        current.requestedBy !== value.requestedBy ||
+        current.reason !== value.reason ||
+        current.focus !== value.focus ||
+        current.correlationId !== value.correlationId ||
+        current.idempotencyKey !== value.idempotencyKey ||
+        current.requestHash !== value.requestHash ||
+        current.createdAt !== value.createdAt
+      ) {
+        throw new DomainError(
+          "HANDOVER_IDENTITY_MISMATCH",
+          "Handover request identity cannot change",
+          false,
+          409,
+        );
+      }
+
+      const result = this.database
+        .prepare(`
+          UPDATE handovers
+          SET context_id = ?,
+              status = ?,
+              version = ?,
+              packet_json = ?,
+              rendered_json = ?,
+              source_snapshot_json = ?,
+              source_snapshot_hash = ?,
+              updated_at = ?,
+              generated_at = ?
+          WHERE handover_id = ? AND version = ?
+        `)
+        .run(
+          value.contextId,
+          value.status,
+          value.version,
+          value.packet === null ? null : JSON.stringify(value.packet),
+          value.rendered === null ? null : JSON.stringify(value.rendered),
+          value.sourceSnapshot === null
+            ? null
+            : JSON.stringify(value.sourceSnapshot),
+          value.sourceSnapshotHash,
+          value.updatedAt,
+          value.generatedAt,
+          value.handoverId,
+          expectedVersion,
+        );
+      if (result.changes !== 1) {
+        if (!this.getHandover(value.handoverId)) {
+          throw new DomainError(
+            "HANDOVER_NOT_FOUND",
+            "Handover not found",
+            false,
+            404,
+          );
+        }
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Handover changed concurrently",
+          false,
+          409,
+        );
+      }
+
+      return this.requireHandover(value.handoverId);
+    });
+  }
+
+  getHandover(handoverId: string): HandoverRecord | null {
+    const row = this.database
+      .prepare("SELECT * FROM handovers WHERE handover_id = ?")
+      .get(handoverId);
+    return row ? mapHandover(row) : null;
+  }
+
+  requireHandover(handoverId: string): HandoverRecord {
+    const handover = this.getHandover(handoverId);
+    if (!handover) {
+      throw new DomainError(
+        "HANDOVER_NOT_FOUND",
+        "Handover not found",
+        false,
+        404,
+      );
+    }
+    return handover;
+  }
+
+  getHandoverByRequest(
+    requestedBy: string,
+    idempotencyKey: string,
+  ): HandoverRecord | null {
+    const row = this.database
+      .prepare(`
+        SELECT *
+        FROM handovers
+        WHERE requested_by = ? AND idempotency_key = ?
+      `)
+      .get(requestedBy, idempotencyKey);
+    return row ? mapHandover(row) : null;
+  }
+
+  listPatientHandovers(patientId: string): HandoverRecord[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM handovers
+        WHERE patient_id = ?
+        ORDER BY created_at, handover_id
+      `)
+      .all(patientId);
+    return rows.map(mapHandover);
   }
 
   appendEvent(

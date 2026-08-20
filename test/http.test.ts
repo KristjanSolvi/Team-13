@@ -6,8 +6,67 @@ import {
   close,
   createAppHarness,
   listen,
+  MCP_TOKEN,
   UI_ORIGIN,
 } from "./support.js";
+
+function rpcHeaders(sessionId?: string, authenticated = true): Headers {
+  const headers = new Headers({
+    accept: "application/json, text/event-stream",
+    "content-type": "application/json",
+  });
+  if (authenticated) headers.set("authorization", `Bearer ${MCP_TOKEN}`);
+  if (sessionId !== undefined) headers.set("mcp-session-id", sessionId);
+  return headers;
+}
+
+async function initializeMcp(baseUrl: string, path: string, id: number) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: rpcHeaders(),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "http-contract-test", version: "1.0.0" },
+      },
+    }),
+  });
+  assert.equal(response.status, 200);
+  const sessionId = response.headers.get("mcp-session-id");
+  assert.ok(sessionId);
+  return sessionId;
+}
+
+async function listMcpTools(
+  baseUrl: string,
+  path: string,
+  sessionId: string,
+  id: number,
+) {
+  const initialized = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: rpcHeaders(sessionId),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+    }),
+  });
+  assert.equal(initialized.status, 202);
+  const listed = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: rpcHeaders(sessionId),
+    body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list" }),
+  });
+  assert.equal(listed.status, 200);
+  const result = (await listed.json()) as {
+    result: { tools: Array<{ name: string }> };
+  };
+  return result.result.tools.map((tool) => tool.name).toSorted();
+}
 
 test("health is public while application and MCP data surfaces require their bearer", async (t) => {
   const harness = createAppHarness();
@@ -46,6 +105,59 @@ test("health is public while application and MCP data surfaces require their bea
     ).status,
     401,
   );
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/mcp/handover`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/list",
+        }),
+      })
+    ).status,
+    401,
+  );
+});
+
+test("task and handover MCP endpoints expose separate authenticated sessions and tool sets", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+
+  const taskSession = await initializeMcp(baseUrl, "/mcp", 10);
+  const handoverSession = await initializeMcp(baseUrl, "/mcp/handover", 11);
+
+  assert.deepEqual(await listMcpTools(baseUrl, "/mcp", taskSession, 12), [
+    "create_task_draft",
+    "get_patient_context",
+    "get_task",
+    "list_eligible_teams",
+    "list_open_threads",
+    "publish_team_task",
+  ]);
+  assert.deepEqual(
+    await listMcpTools(baseUrl, "/mcp/handover", handoverSession, 13),
+    [
+      "get_patient_context",
+      "get_task",
+      "list_open_threads",
+      "list_patient_tasks",
+      "save_handover_draft",
+    ],
+  );
+
+  const crossed = await fetch(`${baseUrl}/mcp/handover`, {
+    method: "POST",
+    headers: rpcHeaders(taskSession),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 14, method: "tools/list" }),
+  });
+  assert.equal(crossed.status, 400);
+  assert.match(await crossed.text(), /Invalid MCP session/);
 });
 
 test("reference-only pipeline signal is retained but blocked from evidence-grounded agent drafting", async (t) => {

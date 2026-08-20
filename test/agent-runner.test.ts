@@ -292,6 +292,7 @@ test("agent-enabled signal route investigates only after source evidence registr
     store: harness.store,
     clock: harness.clock,
     ledger: harness.ledger,
+    handovers: harness.handovers,
     records: harness.records,
     scheduler: harness.scheduler,
     uiOrigin: UI_ORIGIN,

@@ -248,17 +248,6 @@ export function createFollowThroughMcp(
             403,
           );
         }
-        if (task.state !== "draft") {
-          const thread = store.requireThread(task.threadId);
-          store.appendTaskEvent(
-            task,
-            thread.interactionId,
-            thread.contextId,
-            { type: "agent", id: "corti" },
-            "task.publish_verified",
-            {},
-          );
-        }
         return success(task);
       } catch (error) {
         return failure(error);
