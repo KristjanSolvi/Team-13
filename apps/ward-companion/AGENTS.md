@@ -40,3 +40,19 @@ After each sync, audit `src/data/ward.ts`, demo fixture files,
 `src/components/ward`, and `src/routes/index.tsx` to keep fixtures separate from
 backend state, then run typecheck, lint, and the production build before
 committing.
+
+Use `npm run sync:lovable` after fetching `ward-ui` to classify changes against
+`lovable-sync.lock.json`. `npm run sync:lovable:safe` may mechanically copy only
+the allowlisted generic UI paths. Deletions, product components, styles, routes,
+data, and Team-13-protected integrations always require review. After the full
+upstream batch has been reviewed, use `npm run sync:lovable:mark` and include the
+updated lock in the same descriptive commit.
+
+Keep backend and UI responsibilities separated:
+
+- `src/features/ward-runtime` owns persistence, authoritative refresh, ledger
+  concurrency, and state-changing commands.
+- Presentational components receive state and callbacks; do not move API calls,
+  backend IDs, or storage access back into Lovable-owned route/layout code.
+- Corti capture, transcript review, task correction, change radar, handover, EHR
+  filing, and `src/lib` integration clients are protected adapter surfaces.

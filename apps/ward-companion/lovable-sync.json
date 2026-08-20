@@ -1,0 +1,21 @@
+{
+  "remote": "ward-ui",
+  "branch": "main",
+  "safePaths": [
+    "public/",
+    "src/components/ui/",
+    "src/hooks/use-mobile.tsx",
+    "src/lib/utils.ts"
+  ],
+  "protectedPaths": [
+    "src/features/",
+    "src/lib/follow-through-api.ts",
+    "src/lib/ward-persistence.ts",
+    "src/components/ehr/",
+    "src/components/ward/ChangeRadar.tsx",
+    "src/components/ward/HandoverPanel.tsx",
+    "src/components/ward/LiveStrip.tsx",
+    "src/components/ward/TaskCorrectionPanel.tsx",
+    "src/components/ward/TranscriptReviewPanel.tsx"
+  ]
+}

@@ -41,22 +41,6 @@ export function ListSkeleton() {
   );
 }
 
-export function InsightsSkeleton() {
-  return (
-    <div className="grid gap-4 p-5 sm:grid-cols-2" aria-busy="true" aria-label="Loading insights">
-      {[0, 1, 2, 3].map((item) => (
-        <div key={item} className="rounded-xl border border-border bg-panel p-4">
-          <Shimmer className="h-3 w-24" />
-          <Shimmer className="mt-4 h-7 w-1/2" />
-          <Shimmer className="mt-4 h-1.5 w-full" />
-          <Shimmer className="mt-4 h-3 w-full" />
-          <Shimmer className="mt-2 h-3 w-5/6" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function Spinner({ className = "" }: { className?: string }) {
   return (
     <span

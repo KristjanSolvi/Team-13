@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BarChart3, LayoutGrid, ListChecks } from "lucide-react";
+import { LayoutGrid, ListChecks } from "lucide-react";
 
-export type ViewKey = "board" | "activity" | "insights";
+export type ViewKey = "board" | "activity";
 
 const tabs = [
-  { key: "board", label: "Ward board", Icon: LayoutGrid },
-  { key: "activity", label: "Activity", Icon: ListChecks },
-  { key: "insights", label: "Insights", Icon: BarChart3 },
+  { key: "activity", label: "Main", Icon: ListChecks },
+  { key: "board", label: "Ward", Icon: LayoutGrid },
 ] as const;
 
 export function ViewTabs({

@@ -2,9 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
-import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
-import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
+import { BoardSkeleton, ListSkeleton } from "@/components/ward/Loading";
 import { ViewTabs } from "@/components/ward/ViewTabs";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
@@ -50,7 +49,7 @@ function Index() {
   } = runtime;
   const [open, setOpen] = useState(true);
   const [maximized, setMaximized] = useState(false);
-  const [view, setView] = useState<"board" | "activity" | "insights">("board");
+  const [view, setView] = useState<"board" | "activity">("board");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [scopeId, setScopeId] = useState<string>("p1");
@@ -88,7 +87,7 @@ function Index() {
       }
       if (!typing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         setView((v) => {
-          const order = ["board", "activity", "insights"] as const;
+          const order = ["activity", "board"] as const;
           const i = order.indexOf(v);
           const next =
             e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
@@ -172,8 +171,6 @@ function Index() {
             {loadingView ? (
               view === "board" ? (
                 <BoardSkeleton />
-              ) : view === "insights" ? (
-                <InsightsSkeleton />
               ) : (
                 <ListSkeleton />
               )
@@ -204,10 +201,6 @@ function Index() {
                   }}
                 />
               </div>
-            ) : view === "insights" ? (
-              <div key="insights" className="fade-in-view h-full">
-                <Insights threads={threads} />
-              </div>
             ) : (
               <div key="board" className="fade-in-view flex h-full flex-col">
                 <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border px-5 py-3">
@@ -231,6 +224,7 @@ function Index() {
                 <div className="flex-1 overflow-y-auto p-5">
                   <WardBoard
                     threads={threads}
+                    notes={notes}
                     activePatientId={ehrPatientId}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
