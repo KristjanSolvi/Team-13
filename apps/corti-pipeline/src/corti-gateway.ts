@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { CortiAuth, CortiClient, type Corti } from "@corti/sdk";
 import { normalizeGeneratedCandidates } from "./candidates.js";
 import { normalizeCodingResult } from "./coding.js";
+import { evaluateSupportingDocumentSafety } from "./document-safety.js";
 import type { CortiCredentials } from "./config.js";
 import {
   candidateCategories,
@@ -37,7 +38,7 @@ const documentProfiles: Record<
     name: "Follow-Through Receiving-Team Handoff",
     heading: "Receiving-team handoff",
     contentPrompt:
-      "Create a brief handoff using only the approved context. State why the task was created, the requested action, the owner or team, the deadline, and the source evidence only when present. Do not promise eligibility or completion.",
+      "Create a brief handoff using only the approved context. State why follow-through is requested, the requested action, the receiving team, the deadline, and the source evidence only when present. Use request language. Do not say a task, referral, message, or handoff was created, sent, routed, assigned, accepted, completed, or verified unless that exact lifecycle status is explicitly present in the approved input.",
     writingStylePrompt: "Direct operational handoff language with short sentences.",
   },
   "patient-receipt": {
@@ -174,19 +175,19 @@ export class CortiSdkGateway implements CortiGateway {
               generation: {
                 instructions: {
                   prompt:
-                    "Extract only explicitly stated symptoms, medication concerns, investigations, referrals, follow-ups, or practical care barriers that may need follow-through. Do not diagnose, recommend care, select an owner, or invent a deadline. Return no item when no explicit candidate exists.",
+                    "Select at most one explicit, high-value unresolved concern that may be lost without follow-through. Prefer a new symptom linked by the speaker to a medication change, an investigation or referral that lacks follow-up, or a practical barrier tied to a specific care step. Combine related clauses from the same concern into one item. Ignore generic discharge logistics, conversational framing, acknowledgements, and standalone uncertainty that does not change a care step. Do not diagnose, recommend care, select an action or owner, or invent a deadline. Return no item when no sufficiently specific candidate exists.",
                 },
                 sections: [
                   {
                     heading: "Candidate follow-through items",
                     instructions: {
                       contentPrompt:
-                        "Return at most three conservative items. For each item, copy sourceQuote exactly and contiguously from one transcript segment. Keep summary factual and close to the speaker's words.",
+                        "Return at most one conservative item. Copy sourceQuote exactly and contiguously from one transcript segment, including the related symptom and follow-up uncertainty when they occur together. Keep summary factual and close to the speaker's words.",
                       writingStylePrompt: "Short factual phrases without speculation.",
                     },
                     outputSchema: {
                       type: "array",
-                      maxItems: 3,
+                      maxItems: 1,
                       items: {
                         type: "object",
                         fields: [
@@ -263,7 +264,7 @@ export class CortiSdkGateway implements CortiGateway {
               generation: {
                 instructions: {
                   prompt:
-                    "Use only the supplied clinician-approved content. Omit missing information. Never add a diagnosis, treatment instruction, owner, deadline, assurance, or completed status.",
+                    "Use only the supplied clinician-approved content. Omit missing information. Never add a diagnosis, treatment instruction, owner, deadline, assurance, or lifecycle status. An approved proposal is not a created, sent, routed, assigned, accepted, completed, or verified task.",
                 },
                 sections: [
                   {
@@ -291,14 +292,29 @@ export class CortiSdkGateway implements CortiGateway {
         text: response.document.stringDocument[section.sectionId] ?? "",
       }));
 
-      return {
+      const document: GeneratedSupportingDocument = {
         documentType: input.documentType,
         name: response.document.name,
         sections,
         creditsConsumed: response.usageInfo.creditsConsumed,
         status: "draft",
       };
+      const safety = evaluateSupportingDocumentSafety(
+        document,
+        input.approvedClinicalText,
+      );
+      if (!safety.safe) {
+        throw new PipelineError(
+          "UNSUPPORTED_LIFECYCLE_CLAIM",
+          "The generated draft implied a workflow status that was not present in the approved input.",
+          { status: 422, retryable: false },
+        );
+      }
+      return document;
     } catch (error) {
+      if (error instanceof PipelineError) {
+        throw error;
+      }
       throw upstreamPipelineError("document generation", error);
     }
   }

@@ -49,6 +49,12 @@ export function normalizeGeneratedCandidates(
       rejectedAudioQualityCount += 1;
       continue;
     }
+    if (candidates.length > 0) {
+      // The product surfaces one quiet review item at a natural pause. The
+      // schema asks Corti for one; this guard keeps the normalized boundary
+      // conservative if an upstream response ever exceeds that instruction.
+      continue;
+    }
     candidates.push({
       schemaVersion: "1",
       candidateId: createId(),

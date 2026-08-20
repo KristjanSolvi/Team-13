@@ -1,8 +1,13 @@
 import type {
   AmbientSession,
+  CodingResult,
+  CodingSystem,
   FollowThroughCandidate,
+  GeneratedSupportingDocument,
   ScopedToken,
+  SupportingDocumentType,
   TaskRevisionDraft,
+  TranscriptSegment,
 } from "../contracts.js";
 import {
   buildIntegrationCandidateRequest,
@@ -68,6 +73,73 @@ export async function getDictationToken(
 export interface CandidateInvestigationResponse {
   candidateId: string;
   handoff: unknown;
+}
+
+export interface CandidateGenerationResponse {
+  candidates: FollowThroughCandidate[];
+  rejectedEvidenceCount: number;
+  rejectedAudioQualityCount: number;
+  creditsConsumed: number;
+}
+
+export async function generateCandidates(
+  pipelineBaseUrl: string,
+  input: {
+    patientId: string;
+    interactionId: string;
+    segments: readonly TranscriptSegment[];
+  },
+  correlationId: string,
+): Promise<CandidateGenerationResponse> {
+  const response = await fetch(
+    new URL("/api/corti/candidates/generate", pipelineBaseUrl),
+    {
+      method: "POST",
+      headers: requestHeaders(correlationId),
+      body: JSON.stringify(input),
+    },
+  );
+  return responseJson<CandidateGenerationResponse>(response);
+}
+
+export async function generateSupportingDocument(
+  pipelineBaseUrl: string,
+  input: {
+    approvalId: string;
+    approvedClinicalText: string;
+    documentType: SupportingDocumentType;
+  },
+  correlationId: string,
+): Promise<GeneratedSupportingDocument> {
+  const response = await fetch(
+    new URL("/api/corti/documents/generate", pipelineBaseUrl),
+    {
+      method: "POST",
+      headers: requestHeaders(correlationId),
+      body: JSON.stringify(input),
+    },
+  );
+  return responseJson<GeneratedSupportingDocument>(response);
+}
+
+export async function predictMedicalCodes(
+  pipelineBaseUrl: string,
+  input: {
+    approvalId: string;
+    approvedClinicalText: string;
+    system?: CodingSystem;
+  },
+  correlationId: string,
+): Promise<CodingResult> {
+  const response = await fetch(
+    new URL("/api/corti/coding/predict", pipelineBaseUrl),
+    {
+      method: "POST",
+      headers: requestHeaders(correlationId),
+      body: JSON.stringify(input),
+    },
+  );
+  return responseJson<CodingResult>(response);
 }
 
 /** Send a reviewed pipeline candidate through the integration API boundary. */
