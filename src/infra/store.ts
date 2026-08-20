@@ -20,6 +20,12 @@ import type {
   Thread,
   ThreadState,
 } from "../domain/types.js";
+import type {
+  DemoAssignment,
+  DemoParticipant,
+  DemoScenario,
+  DemoSession,
+} from "../demo/types.js";
 import { inTransaction } from "./database.js";
 
 export interface ApprovalRecord {
@@ -168,6 +174,17 @@ function parseThreadState(value: string): Thread["state"] {
   throw new TypeError("Expected a valid thread state");
 }
 
+function parseDemoScenario(value: string): DemoScenario {
+  if (
+    value === "meeting" ||
+    value === "discharge_coordination" ||
+    value === "ward_consultation"
+  ) {
+    return value;
+  }
+  throw new TypeError("Expected a valid demo scenario");
+}
+
 function parseHandoverReason(value: string): HandoverRecord["reason"] {
   if (value === "assignment" || value === "on_demand") {
     return value;
@@ -250,6 +267,48 @@ function mapTask(row: SqlRow): Task {
     version: rowNumber(row, "version"),
     createdAt: rowText(row, "created_at"),
     updatedAt: rowText(row, "updated_at"),
+  };
+}
+
+function mapDemoSession(row: SqlRow): DemoSession {
+  const groupSize = rowNumber(row, "group_size");
+  if (groupSize !== 1 && groupSize !== 2) {
+    throw new TypeError("Expected demo group size to be one or two");
+  }
+  return {
+    sessionId: rowText(row, "session_id"),
+    joinCode: rowText(row, "join_code"),
+    title: rowText(row, "title"),
+    scenario: parseDemoScenario(rowText(row, "scenario")),
+    groupSize,
+    targetTeamId: rowText(row, "target_team_id"),
+    createdBy: rowText(row, "created_by"),
+    createdAt: rowText(row, "created_at"),
+  };
+}
+
+function mapDemoParticipant(row: SqlRow): DemoParticipant {
+  return {
+    participantId: rowText(row, "participant_id"),
+    sessionId: rowText(row, "session_id"),
+    groupId: rowText(row, "group_id"),
+    displayName: rowText(row, "display_name"),
+    memberId: rowText(row, "member_id"),
+    joinKey: rowText(row, "join_key"),
+    tokenHash: rowText(row, "token_hash"),
+    joinedAt: rowText(row, "joined_at"),
+  };
+}
+
+function mapDemoAssignment(row: SqlRow): DemoAssignment {
+  return {
+    assignmentId: rowText(row, "assignment_id"),
+    sessionId: rowText(row, "session_id"),
+    groupId: rowText(row, "group_id"),
+    participantId: rowText(row, "participant_id"),
+    taskId: rowText(row, "task_id"),
+    assignedBy: rowText(row, "assigned_by"),
+    assignedAt: rowText(row, "assigned_at"),
   };
 }
 
@@ -446,6 +505,10 @@ export class SqliteStore {
     }));
   }
 
+  getTeam(teamId: string): Team | null {
+    return this.listTeams().find((team) => team.teamId === teamId) ?? null;
+  }
+
   listMembers(teamId: string): Member[] {
     const rows = this.database
       .prepare(`
@@ -467,6 +530,169 @@ export class SqliteStore {
       capacity: rowNumber(row, "capacity"),
       tieBreakKey: rowText(row, "tie_break_key"),
     }));
+  }
+
+  putDemoSession(session: DemoSession): void {
+    this.database
+      .prepare(`
+        INSERT INTO demo_sessions
+          (session_id, join_code, title, scenario, group_size, target_team_id,
+           created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          join_code = excluded.join_code,
+          title = excluded.title,
+          scenario = excluded.scenario,
+          group_size = excluded.group_size,
+          target_team_id = excluded.target_team_id,
+          created_by = excluded.created_by,
+          created_at = excluded.created_at
+      `)
+      .run(
+        session.sessionId,
+        session.joinCode,
+        session.title,
+        session.scenario,
+        session.groupSize,
+        session.targetTeamId,
+        session.createdBy,
+        session.createdAt,
+      );
+  }
+
+  getDemoSession(sessionId: string): DemoSession | null {
+    const row = this.database
+      .prepare("SELECT * FROM demo_sessions WHERE session_id = ?")
+      .get(sessionId);
+    return row ? mapDemoSession(row) : null;
+  }
+
+  getDemoSessionByJoinCode(joinCode: string): DemoSession | null {
+    const row = this.database
+      .prepare("SELECT * FROM demo_sessions WHERE join_code = ?")
+      .get(joinCode);
+    return row ? mapDemoSession(row) : null;
+  }
+
+  putDemoParticipant(participant: DemoParticipant): void {
+    this.database
+      .prepare(`
+        INSERT INTO demo_participants
+          (participant_id, session_id, group_id, display_name, member_id,
+           join_key, token_hash, joined_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(participant_id) DO UPDATE SET
+          display_name = excluded.display_name,
+          token_hash = excluded.token_hash
+      `)
+      .run(
+        participant.participantId,
+        participant.sessionId,
+        participant.groupId,
+        participant.displayName,
+        participant.memberId,
+        participant.joinKey,
+        participant.tokenHash,
+        participant.joinedAt,
+      );
+  }
+
+  getDemoParticipantByJoinKey(
+    sessionId: string,
+    joinKey: string,
+  ): DemoParticipant | null {
+    const row = this.database
+      .prepare(`
+        SELECT * FROM demo_participants
+        WHERE session_id = ? AND join_key = ?
+      `)
+      .get(sessionId, joinKey);
+    return row ? mapDemoParticipant(row) : null;
+  }
+
+  getDemoParticipantByTokenHash(tokenHash: string): DemoParticipant | null {
+    const row = this.database
+      .prepare("SELECT * FROM demo_participants WHERE token_hash = ?")
+      .get(tokenHash);
+    return row ? mapDemoParticipant(row) : null;
+  }
+
+  requireDemoParticipant(participantId: string): DemoParticipant {
+    const row = this.database
+      .prepare("SELECT * FROM demo_participants WHERE participant_id = ?")
+      .get(participantId);
+    if (!row) {
+      throw new DomainError(
+        "DEMO_PARTICIPANT_NOT_FOUND",
+        "Demo participant not found",
+        false,
+        404,
+      );
+    }
+    return mapDemoParticipant(row);
+  }
+
+  listDemoParticipants(sessionId: string): DemoParticipant[] {
+    const rows = this.database
+      .prepare(`
+        SELECT * FROM demo_participants
+        WHERE session_id = ?
+        ORDER BY rowid
+      `)
+      .all(sessionId);
+    return rows.map(mapDemoParticipant);
+  }
+
+  putDemoAssignment(assignment: DemoAssignment): void {
+    this.database
+      .prepare(`
+        INSERT INTO demo_assignments
+          (assignment_id, session_id, group_id, participant_id, task_id,
+           assigned_by, assigned_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        assignment.assignmentId,
+        assignment.sessionId,
+        assignment.groupId,
+        assignment.participantId,
+        assignment.taskId,
+        assignment.assignedBy,
+        assignment.assignedAt,
+      );
+  }
+
+  getDemoAssignmentByTask(taskId: string): DemoAssignment | null {
+    const row = this.database
+      .prepare("SELECT * FROM demo_assignments WHERE task_id = ?")
+      .get(taskId);
+    return row ? mapDemoAssignment(row) : null;
+  }
+
+  requireDemoAssignment(assignmentId: string): DemoAssignment {
+    const row = this.database
+      .prepare("SELECT * FROM demo_assignments WHERE assignment_id = ?")
+      .get(assignmentId);
+    if (!row) {
+      throw new DomainError(
+        "DEMO_ASSIGNMENT_NOT_FOUND",
+        "Demo assignment not found",
+        false,
+        404,
+      );
+    }
+    return mapDemoAssignment(row);
+  }
+
+  listDemoAssignments(sessionId: string): DemoAssignment[] {
+    const rows = this.database
+      .prepare(`
+        SELECT * FROM demo_assignments
+        WHERE session_id = ?
+        ORDER BY assigned_at, assignment_id
+      `)
+      .all(sessionId);
+    return rows.map(mapDemoAssignment);
   }
 
   putContextMapping(
@@ -1391,6 +1617,59 @@ export class SqliteStore {
         actor,
         "task.member_assigned",
         { memberId },
+      );
+      return next;
+    });
+  }
+
+  assignMemberForDemo(
+    taskId: string,
+    expectedVersion: number,
+    memberId: string,
+    assignedAt: string,
+    sessionId: string,
+    groupId: string,
+  ): Task {
+    return this.transaction(() => {
+      const current = this.requireTask(taskId);
+      if (
+        current.version !== expectedVersion ||
+        current.state !== "offered_to_team"
+      ) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Task changed before demo assignment",
+          false,
+          409,
+        );
+      }
+      requireTransition(current.state, "assigned_to_member");
+      const member = this.requireEligibleMember(memberId, current);
+      const candidate: Task = {
+        ...current,
+        state: "assigned_to_member",
+        assignedMemberId: member.memberId,
+        version: current.version + 1,
+        updatedAt: assignedAt,
+      };
+      const priorityBreakdown = calculatePriority(
+        candidate,
+        new Date(assignedAt),
+      );
+      const next: Task = {
+        ...candidate,
+        operationalPriorityScore: priorityBreakdown.total,
+        priorityBreakdown,
+      };
+      this.replaceTask(current, next);
+      const thread = this.requireThread(next.threadId);
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        { type: "router", id: "demo-audience-router" },
+        "task.member_assigned",
+        { memberId, demoSessionId: sessionId, demoGroupId: groupId },
       );
       return next;
     });

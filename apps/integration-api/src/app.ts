@@ -10,6 +10,9 @@ import { ZodError } from "zod";
 
 import {
   candidateSchema,
+  demoAssignmentSchema,
+  demoJoinSchema,
+  demoSessionCreateSchema,
   ehrCreateDocumentSchema,
   ehrFileDocumentSchema,
   ehrProfileUpdateSchema,
@@ -277,6 +280,68 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
   );
 
   app.post(
+    "/api/demo/sessions",
+    route(async (request, response) => {
+      response.status(201).json(
+        await options.service.createDemoSession(
+          demoSessionCreateSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/demo/sessions/:sessionId",
+    route(async (request, response) => {
+      response.json(
+        await options.service.getDemoSession(
+          pathParam(request, "sessionId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/demo/join/:joinCode",
+    route(async (request, response) => {
+      response.status(201).json(
+        await options.service.joinDemoSession(
+          pathParam(request, "joinCode"),
+          demoJoinSchema.parse(request.body),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/demo/sessions/:sessionId/assign",
+    route(async (request, response) => {
+      response.json(
+        await options.service.assignDemoTask(
+          pathParam(request, "sessionId"),
+          demoAssignmentSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/demo/participants/me",
+    route(async (request, response) => {
+      response.json(
+        await options.service.demoParticipantView(
+          participantToken(request),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
     "/api/tasks/:taskId/:command",
     route(async (request, response) => {
       const taskId = pathParam(request, "taskId");
@@ -395,6 +460,19 @@ function actorId(request: Request): string {
     throw new IntegrationError("ACTOR_REQUIRED", "x-actor-id is required");
   }
   return value;
+}
+
+function participantToken(request: Request): string {
+  const authorization = request.header("authorization");
+  const match = authorization?.match(/^Bearer ([A-Za-z0-9_-]{32,200})$/);
+  if (!match?.[1]) {
+    throw new IntegrationError(
+      "DEMO_PARTICIPANT_AUTH_REQUIRED",
+      "Demo participant authentication is required",
+      401,
+    );
+  }
+  return match[1];
 }
 
 function requestMeta(request: Request, response: Response) {

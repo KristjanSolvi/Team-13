@@ -129,6 +129,140 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/demo/sessions": {
+      post: {
+        summary: "Create an audience-participation demo session",
+        parameters: [
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DemoSessionCreate" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Session, QR join path, groups, and assignments",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/demo/sessions/{sessionId}": {
+      get: {
+        summary: "Read the current demo groups and assignments",
+        parameters: [
+          { $ref: "#/components/parameters/DemoSessionId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": {
+            description: "Current session projection",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/demo/join/{joinCode}": {
+      post: {
+        summary: "Join a solo or duo audience group from a QR code",
+        parameters: [
+          { $ref: "#/components/parameters/DemoJoinCode" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DemoJoin" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Participant identity, group, and one-time participant token",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/demo/sessions/{sessionId}/assign": {
+      post: {
+        summary: "Assign a published team task to one participant in a group",
+        parameters: [
+          { $ref: "#/components/parameters/DemoSessionId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DemoAssignment" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "The selected participant and authoritative assigned task",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/demo/participants/me": {
+      get: {
+        summary: "Read the current participant's assigned demo tasks",
+        security: [{ DemoParticipantToken: [] }],
+        parameters: [{ $ref: "#/components/parameters/CorrelationId" }],
+        responses: {
+          "200": {
+            description: "Participant identity and assignments",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/corti/ambient/session": pipelineProxy(
       "Create a Corti Ambient interaction and scoped browser session",
       "201",
@@ -520,6 +654,13 @@ export const integrationOpenApi = {
   },
   components: {
     securitySchemes: {
+      DemoParticipantToken: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "opaque participant token",
+        description:
+          "Opaque demo participant credential returned only by the QR join endpoint.",
+      },
       integrationBearer: {
         type: "http",
         scheme: "bearer",
@@ -527,6 +668,18 @@ export const integrationOpenApi = {
       },
     },
     parameters: {
+      DemoSessionId: {
+        name: "sessionId",
+        in: "path",
+        required: true,
+        schema: { type: "string", format: "uuid" },
+      },
+      DemoJoinCode: {
+        name: "joinCode",
+        in: "path",
+        required: true,
+        schema: { type: "string", pattern: "^[A-Z0-9_-]{8,32}$" },
+      },
       PatientId: {
         name: "patientId",
         in: "path",
@@ -563,6 +716,62 @@ export const integrationOpenApi = {
       },
     },
     schemas: {
+      DemoSessionCreate: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "title",
+          "scenario",
+          "groupSize",
+          "targetTeamId",
+          "idempotencyKey",
+        ],
+        properties: {
+          title: { type: "string", minLength: 3, maxLength: 120 },
+          scenario: {
+            type: "string",
+            enum: [
+              "meeting",
+              "discharge_coordination",
+              "ward_consultation",
+            ],
+          },
+          groupSize: { type: "integer", enum: [1, 2] },
+          targetTeamId: { type: "string", minLength: 1, maxLength: 160 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      DemoJoin: {
+        type: "object",
+        additionalProperties: false,
+        required: ["displayName", "joinKey"],
+        properties: {
+          displayName: { type: "string", minLength: 1, maxLength: 80 },
+          joinKey: {
+            type: "string",
+            minLength: 8,
+            maxLength: 200,
+            description:
+              "Stable browser-generated retry key; it is not an authentication token.",
+          },
+        },
+      },
+      DemoAssignment: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "groupId",
+          "taskId",
+          "expectedVersion",
+          "idempotencyKey",
+        ],
+        properties: {
+          groupId: { type: "string", pattern: "^group-[1-9][0-9]*$" },
+          taskId: { type: "string", format: "uuid" },
+          expectedVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
       HandoverRequest: {
         type: "object",
         additionalProperties: false,

@@ -1131,3 +1131,110 @@ test("SSE replays audit events after Last-Event-ID without credentials in the st
   assert.doesNotMatch(text, /app-secret|mcp-secret/);
   controller.abort();
 });
+
+test("demo audience endpoints group QR joiners and expose only their assigned task", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+
+  const create = await fetch(`${baseUrl}/api/demo/sessions`, {
+    method: "POST",
+    headers: appHeaders("clinician:demo-host"),
+    body: JSON.stringify({
+      title: "Audience discharge coordination",
+      scenario: "discharge_coordination",
+      groupSize: 2,
+      targetTeamId: "district-nursing",
+      idempotencyKey: "http-demo-session-001",
+    }),
+  });
+  assert.equal(create.status, 201);
+  const session = (await create.json()) as {
+    sessionId: string;
+    joinCode: string;
+  };
+
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/demo/join/${session.joinCode}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          displayName: "Denied",
+          joinKey: "browser-key-denied",
+        }),
+      })
+    ).status,
+    401,
+  );
+
+  const joined = await fetch(`${baseUrl}/api/demo/join/${session.joinCode}`, {
+    method: "POST",
+    headers: appHeaders(),
+    body: JSON.stringify({
+      displayName: "Alex",
+      joinKey: "browser-key-alex",
+    }),
+  });
+  assert.equal(joined.status, 201);
+  const participant = (await joined.json()) as {
+    participant: { participantId: string; memberId: string; groupId: string };
+    participantToken: string;
+  };
+  assert.equal(participant.participant.groupId, "group-1");
+
+  const draft = harness.ledger.createKarenDraft(
+    "ctx-karen",
+    "http-demo-audience-draft",
+  );
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician:demo-host",
+    "app_one_tap",
+    "http-demo-audience-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "http-demo-audience-publish",
+  );
+
+  const assigned = await fetch(
+    `${baseUrl}/api/demo/sessions/${session.sessionId}/assign`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician:demo-host"),
+      body: JSON.stringify({
+        groupId: "group-1",
+        taskId: offered.taskId,
+        expectedVersion: offered.version,
+        idempotencyKey: "http-demo-assignment-001",
+      }),
+    },
+  );
+  assert.equal(assigned.status, 200);
+  assert.equal(
+    ((await assigned.json()) as { task: { assignedMemberId: string } }).task
+      .assignedMemberId,
+    participant.participant.memberId,
+  );
+
+  const participantView = await fetch(
+    `${baseUrl}/api/demo/participants/lookup`,
+    {
+      method: "POST",
+      headers: appHeaders(),
+      body: JSON.stringify({ participantToken: participant.participantToken }),
+    },
+  );
+  assert.equal(participantView.status, 200);
+  const view = (await participantView.json()) as {
+    assignments: Array<{ task: { taskId: string } }>;
+  };
+  assert.equal(view.assignments[0]?.task.taskId, offered.taskId);
+});

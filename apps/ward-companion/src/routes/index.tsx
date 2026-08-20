@@ -18,7 +18,7 @@ import {
 } from "@/lib/follow-through-api";
 import { loadWardState, saveWardState } from "@/lib/ward-persistence";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
-import { initialNotes, initialThreads, patients, statusDotClass, statusLabels } from "@/data/ward";
+import { initialNotes, initialThreads, patients, statusLabels } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -62,6 +62,7 @@ function Index() {
   const [scopeId, setScopeId] = useState<string | null>(null);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
+  const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
@@ -85,6 +86,21 @@ function Index() {
       // Retain current local work when authoritative services are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const launcherClicked =
+        target instanceof Element && target.closest("[data-ward-launcher]") !== null;
+      if (!launcherClicked && !panelRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   useEffect(() => {
     const persisted = loadWardState(window.localStorage);
@@ -345,7 +361,10 @@ function Index() {
       />
 
       {open && (
-        <section className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300">
+        <section
+          ref={panelRef}
+          className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300"
+        >
           <header className="border-b border-white/25 bg-white/12 px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <ViewTabs
@@ -356,24 +375,7 @@ function Index() {
                 }}
               />
 
-              <div className="flex items-center gap-3">
-                <span className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
-                  {(
-                    [
-                      ["pending", "Needs action"],
-                      ["tracking", "In progress"],
-                      ["verified", "Completed"],
-                      ["escalated", "Escalated"],
-                    ] as [ThreadStatus, string][]
-                  ).map(([s, label]) => (
-                    <span key={s} className="flex items-center gap-1.5" title={label}>
-                      <span className={`size-2 rounded-full ${statusDotClass[s]}`} />
-                      <span className="text-[11px]">{label}</span>
-                      <span className="text-[11px] tabular-nums text-foreground">{counts[s]}</span>
-                      <span className="sr-only">{statusLabels[s]}</span>
-                    </span>
-                  ))}
-                </span>
+              <div className="flex items-center">
                 <button
                   onClick={() => setOpen(false)}
                   aria-label="Hide panel"
@@ -479,7 +481,7 @@ function Index() {
         </section>
       )}
 
-      {!open && <FloatingLauncher onOpen={() => setOpen(true)} />}
+      <FloatingLauncher open={open} onToggle={() => setOpen((current) => !current)} />
     </div>
   );
 }
