@@ -273,6 +273,9 @@ export const integrationOpenApi = {
     "/api/corti/dictation/token": pipelineProxy(
       "Create a scoped Corti Dictation browser token",
     ),
+    "/api/corti/transcripts/review": pipelineProxy(
+      "Review final Ambient wording for conservative human-confirmed corrections",
+    ),
     "/api/corti/candidates/generate": pipelineProxy(
       "Generate conservative follow-through candidates",
     ),

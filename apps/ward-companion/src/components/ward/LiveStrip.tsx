@@ -4,6 +4,7 @@ import { AmbientCapture } from "@pipeline/browser/ambient.js";
 import type {
   FollowThroughCandidate,
   PipelineEvent,
+  TranscriptReviewSuggestion,
   TranscriptSegment,
 } from "@pipeline/contracts.js";
 import type { Patient } from "@/data/ward";
@@ -13,8 +14,10 @@ import {
   getIntegrationReadiness,
   investigateCandidate,
   refreshAmbientToken,
+  reviewTranscript,
 } from "@/lib/follow-through-api";
 import { LiveInterimText } from "./LiveInterimText";
+import { TranscriptReviewPanel, type TranscriptReviewDecision } from "./TranscriptReviewPanel";
 
 type CaptureState =
   | "checking"
@@ -28,6 +31,7 @@ type CaptureState =
   | "error";
 
 type InvestigationState = "checking" | "sent" | "failed";
+type TranscriptReviewState = "idle" | "reviewing" | "complete" | "unavailable";
 
 type CandidateView = {
   candidate: FollowThroughCandidate;
@@ -88,6 +92,12 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const [audioMessage, setAudioMessage] = useState("Audio not checked");
   const [ambientCredits, setAmbientCredits] = useState<number | null>(null);
   const [generationCredits, setGenerationCredits] = useState<number | null>(null);
+  const [reviewCredits, setReviewCredits] = useState<number | null>(null);
+  const [reviewState, setReviewState] = useState<TranscriptReviewState>("idle");
+  const [reviewSuggestions, setReviewSuggestions] = useState<TranscriptReviewSuggestion[]>([]);
+  const [reviewDecisions, setReviewDecisions] = useState<Record<string, TranscriptReviewDecision>>(
+    {},
+  );
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState("");
@@ -162,6 +172,10 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     setCandidateViews([]);
     setAmbientCredits(null);
     setGenerationCredits(null);
+    setReviewCredits(null);
+    setReviewState("idle");
+    setReviewSuggestions([]);
+    setReviewDecisions({});
     setElapsedSeconds(0);
     recordingStartedAtRef.current = null;
     setAudioMessage("Audio not checked");
@@ -237,6 +251,10 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     setCandidateViews([]);
     setAmbientCredits(null);
     setGenerationCredits(null);
+    setReviewCredits(null);
+    setReviewState("idle");
+    setReviewSuggestions([]);
+    setReviewDecisions({});
     setElapsedSeconds(0);
     setAudioMessage("Checking audio…");
     try {
@@ -285,11 +303,37 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
       captureRef.current = null;
       setSegments([...capture.segments]);
       setState("analysing");
-      setMessage("Checking exact evidence for conservative follow-through candidates…");
+      setMessage("Reviewing final wording while checking conservative follow-through evidence…");
       const interactionId = finalSegments[0]?.interactionId;
       if (interactionId === undefined) {
         throw new Error("No final transcript was available for candidate analysis.");
       }
+      const reviewCorrelationId = correlationIdRef.current;
+      setReviewState("reviewing");
+      void reviewTranscript({
+        interactionId,
+        correlationId: reviewCorrelationId,
+        segments: finalSegments,
+        contextTerms: [
+          patient.name,
+          patient.todaySchedule ?? "",
+          patient.waitingFor ?? "",
+          "blood pressure",
+          "district nursing",
+          "medication change",
+        ].filter((term) => term.length > 0),
+        protectedTerms: [patient.name],
+      })
+        .then((result) => {
+          if (correlationIdRef.current !== reviewCorrelationId) return;
+          setReviewSuggestions(result.suggestions);
+          setReviewCredits(result.creditsConsumed);
+          setReviewState("complete");
+        })
+        .catch(() => {
+          if (correlationIdRef.current !== reviewCorrelationId) return;
+          setReviewState("unavailable");
+        });
       const generated = await generateCandidates({
         patientId: patient.pipelinePatientId,
         interactionId,
@@ -437,6 +481,22 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
             <span>Text Generation · candidate extraction: {creditsLabel(generationCredits)}</span>
           </>
         )}
+        {reviewState !== "idle" && (
+          <>
+            <span className="px-2">·</span>
+            <span>
+              Transcript review: {reviewState === "reviewing" && "reviewing wording…"}
+              {reviewState === "unavailable" && "unavailable · original retained"}
+              {reviewState === "complete" &&
+                (reviewSuggestions.length === 0
+                  ? "no changes suggested"
+                  : `${reviewSuggestions.length} phrase${reviewSuggestions.length === 1 ? "" : "s"} to confirm`)}
+              {reviewState === "complete" && reviewCredits !== null
+                ? ` · ${creditsLabel(reviewCredits)}`
+                : ""}
+            </span>
+          </>
+        )}
       </div>
 
       {(state === "recording" || segments.length > 0) && (
@@ -479,6 +539,17 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
           ) : null}
         </div>
       )}
+
+      <TranscriptReviewPanel
+        suggestions={reviewSuggestions}
+        decisions={reviewDecisions}
+        onDecision={(suggestion, decision) =>
+          setReviewDecisions((current) => ({
+            ...current,
+            [suggestion.suggestionId]: decision,
+          }))
+        }
+      />
 
       {candidateViews.length > 0 && (
         <div className="space-y-2 border-t border-border px-4 py-3">

@@ -7,6 +7,7 @@ import type {
   ScopedToken,
   SupportingDocumentType,
   TaskRevisionPreview,
+  TranscriptReviewResult,
   TranscriptSegment,
 } from "@pipeline/contracts.js";
 import type { Thread } from "@/data/ward";
@@ -235,6 +236,27 @@ export async function generateCandidates(input: {
         patientId: input.patientId,
         interactionId: input.interactionId,
         segments: input.segments,
+      }),
+    }),
+  );
+}
+
+export async function reviewTranscript(input: {
+  interactionId: string;
+  correlationId: string;
+  segments: TranscriptSegment[];
+  contextTerms: string[];
+  protectedTerms: string[];
+}): Promise<TranscriptReviewResult> {
+  return responseJson<TranscriptReviewResult>(
+    await fetch(integrationUrl("/api/corti/transcripts/review"), {
+      method: "POST",
+      headers: jsonHeaders(input.correlationId),
+      body: JSON.stringify({
+        interactionId: input.interactionId,
+        segments: input.segments,
+        contextTerms: input.contextTerms,
+        protectedTerms: input.protectedTerms,
       }),
     }),
   );

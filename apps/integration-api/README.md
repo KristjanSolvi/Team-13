@@ -20,8 +20,9 @@ Medical Coding.
   and retain it as one idempotent Agentic signal. Each validated evidence item
   is forwarded with its generated reference, exact quote, timestamps, and
   optional speaker ID so the Agentic backend can register grounded evidence.
-- `POST /api/corti/...`: explicit allow-listed proxy for the seven existing
-  pipeline endpoints, preserving their request and response contracts.
+- `POST /api/corti/...`: explicit allow-listed proxy for eight pipeline
+  endpoints, preserving their request and response contracts. This includes
+  the non-mutating `POST /api/corti/transcripts/review` confirmation flow.
 - `GET /api/patients/:patientId/overview`: return authoritative threads, tasks,
   and review-required source-change impacts from the Agentic backend.
 - `GET /api/patients/:patientId/companion`: map those authoritative records
