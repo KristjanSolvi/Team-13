@@ -86,6 +86,7 @@ export function mountMcp(
   router: Router,
   createServer: () => McpServer,
   bearerToken: string,
+  routePath = "/mcp",
 ): void {
   const sessions = new Map<string, StatefulTransport>();
 
@@ -156,7 +157,7 @@ export function mountMcp(
     await transport.handleRequest(request, response, body);
   };
 
-  router.post("/mcp", (request, response) => {
+  router.post(routePath, (request, response) => {
     void handlePost(request, response).catch(() => failInternal(response));
   });
 
@@ -175,10 +176,10 @@ export function mountMcp(
     await transport.handleRequest(request, response);
   };
 
-  router.get("/mcp", (request, response) => {
+  router.get(routePath, (request, response) => {
     void handleExisting(request, response).catch(() => failInternal(response));
   });
-  router.delete("/mcp", (request, response) => {
+  router.delete(routePath, (request, response) => {
     void handleExisting(request, response).catch(() => failInternal(response));
   });
 }

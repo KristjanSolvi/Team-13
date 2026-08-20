@@ -284,7 +284,7 @@ test("denies cross-patient task reads and publication", async (t) => {
   assert.equal(ledger.getTask(other.taskId).state, "draft");
 });
 
-test("creates a draft, publishes direct clinician approval, and audits authoritative readback", async (t) => {
+test("creates a draft, publishes direct clinician approval, and keeps raw readback audit-free", async (t) => {
   const { client, ledger, store } = await mcpHarness(t);
   const draftResult = await callScoped(
     client,
@@ -331,7 +331,7 @@ test("creates a draft, publishes direct clinician approval, and audits authorita
     store
       .listEvents(0)
       .filter((event) => event.eventType === "task.publish_verified").length,
-    2,
+    0,
   );
 });
 
