@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/apps/downstream-gateway/**"]
 buildCommand = "npm ci && npm run build"
 
 [deploy]
