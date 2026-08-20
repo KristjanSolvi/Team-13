@@ -2,19 +2,7 @@ import { useState } from "react";
 import type { ActivityEntry, CaseNote, DocId, Patient } from "@/data/ward";
 import { documents, patients } from "@/data/ward";
 
-const tabs = [
-  "Summary",
-  "Obs",
-  "Assessments",
-  "Investigations",
-  "Procedures",
-  "Fluids",
-  "Charts",
-  "Notes",
-  "Discharge",
-  "Primary Care",
-  "Patient App",
-];
+const tabs = ["Summary", "Notes", "Investigations", "Procedures", "Discharge"];
 
 const obsRows: { label: string; values: string[] }[] = [
   { label: "Resp rate", values: ["18", "17", "20", "19", "18"] },
@@ -86,7 +74,7 @@ export function NervecentreShell({
   activity = [],
 }: ShellProps) {
   const current = patient ?? patients[0]!;
-  const [activeTab, setActiveTab] = useState("Obs");
+  const [activeTab, setActiveTab] = useState("Summary");
   return (
     <div className="min-h-screen bg-ehr-bg text-ehr-foreground">
       <div className="flex items-center justify-between bg-ehr-chrome px-3 py-1.5">
@@ -182,8 +170,50 @@ export function NervecentreShell({
               <Row left="Presenting complaint" right="Breathlessness" />
               <Row left="Allergies" right="Penicillin" />
               <Row left="Comorbidities" right="COPD, T2DM" />
-              <Row left="Management plan" right="Nebs + steroids" />
               <Row left="Diagnosis" right="Infective exacerbation" />
+            </Panel>
+            <Panel title="Clinical Documents">
+              {documents.map((d) => (
+                <Row
+                  key={d.id}
+                  left={d.title}
+                  right={`${notes.filter((n) => n.doc === d.id).length} entries`}
+                />
+              ))}
+              <div className="mt-2 space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+                  Latest entries
+                </p>
+                {notes.length === 0 && <p className="text-ehr-muted">No entries yet.</p>}
+                {notes
+                  .slice(-3)
+                  .reverse()
+                  .map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => setActiveTab("Notes")}
+                      className="block w-full border border-ehr-line bg-ehr-bg px-2 py-1 text-left hover:border-ehr-accent"
+                    >
+                      <span className="flex items-center justify-between gap-2 text-[10px] text-ehr-muted">
+                        <span className="truncate font-semibold text-ehr-foreground">
+                          {n.author}
+                        </span>
+                        <span className="tabular-nums">{n.at}</span>
+                      </span>
+                      <span className="mt-[2px] line-clamp-2 block text-[10px] leading-snug">
+                        {n.text}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("Notes")}
+                className="mt-2 w-full bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
+              >
+                Open Notes
+              </button>
             </Panel>
             <Panel title="Alerts & Flags">
               <Row left="Falls risk" right="Moderate" />
@@ -264,22 +294,6 @@ export function NervecentreShell({
               <Row left="Resp clinic" right="28 Jan 2026" />
               <Row left="Inpatient — COPD" right="09 Nov 2025" />
             </Panel>
-            <Panel title="Clinical Documents">
-              {documents.map((d) => (
-                <Row
-                  key={d.id}
-                  left={d.title}
-                  right={`${notes.filter((n) => n.doc === d.id).length} entries`}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={() => setActiveTab("Notes")}
-                className="mt-2 w-full bg-ehr-chrome px-2 py-1 text-[10px] font-semibold text-ehr-chrome-foreground"
-              >
-                Open Notes
-              </button>
-            </Panel>
           </div>
         </div>
       )}
@@ -316,7 +330,7 @@ function NotesWorkspace({
   activity: ActivityEntry[];
   onAddNote?: ((doc: DocId, text: string) => void) | undefined;
 }) {
-  const [activeDoc, setActiveDoc] = useState<DocId>("ward-round");
+  const [activeDoc, setActiveDoc] = useState<DocId>("medical");
   const [draft, setDraft] = useState("");
   const doc = documents.find((d) => d.id === activeDoc)!;
   const docNotes = notes.filter((n) => n.doc === activeDoc);

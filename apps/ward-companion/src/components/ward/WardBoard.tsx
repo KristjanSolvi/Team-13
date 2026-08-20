@@ -24,7 +24,7 @@ function dueStyle(due: string) {
 export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activePatientId }: Props) {
   const latestPlanFor = (p: Patient) => {
     const list = notes?.[p.id] ?? [];
-    const candidates = list.filter((n) => n.doc === "ward-round");
+    const candidates = list.filter((n) => n.doc === "medical");
     const note = (candidates.length ? candidates : list).at(-1);
     return note ? { text: note.text, at: note.at } : null;
   };

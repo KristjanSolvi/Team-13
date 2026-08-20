@@ -379,11 +379,10 @@ export const statusBorderClass: Record<ThreadStatus, string> = {
   verified: "border-verified",
   escalated: "border-escalated",
 };
-export type DocId = "ward-round" | "nursing" | "discharge";
+export type DocId = "medical" | "discharge";
 
 export const documents: { id: DocId; title: string; subtitle: string }[] = [
-  { id: "ward-round", title: "Ward round note", subtitle: "Dictated & agent-scribed" },
-  { id: "nursing", title: "Nursing note", subtitle: "Care delivered this shift" },
+  { id: "medical", title: "Medical notes", subtitle: "Dictated & agent-scribed" },
   { id: "discharge", title: "Discharge summary", subtitle: "Draft — builds as things complete" },
 ];
 
@@ -400,7 +399,7 @@ export const initialNotes: Record<string, CaseNote[]> = {
   p1: [
     {
       id: "n1",
-      doc: "ward-round",
+      doc: "medical",
       at: "08:12",
       author: "Dr R. Duthagray",
       source: "clinician",
@@ -408,7 +407,7 @@ export const initialNotes: Record<string, CaseNote[]> = {
     },
     {
       id: "n1b",
-      doc: "nursing",
+      doc: "medical",
       at: "07:40",
       author: "V. Kilfoy",
       source: "clinician",
@@ -418,7 +417,7 @@ export const initialNotes: Record<string, CaseNote[]> = {
   p2: [
     {
       id: "n2",
-      doc: "ward-round",
+      doc: "medical",
       at: "07:55",
       author: "V. Kilfoy",
       source: "clinician",
@@ -438,7 +437,7 @@ export const initialNotes: Record<string, CaseNote[]> = {
 initialNotes["p3"] = [
   {
     id: "n3",
-    doc: "ward-round",
+    doc: "medical",
     at: "08:30",
     author: "Dr. Aris",
     source: "scribe",
@@ -448,7 +447,7 @@ initialNotes["p3"] = [
 initialNotes["p4"] = [
   {
     id: "n4",
-    doc: "ward-round",
+    doc: "medical",
     at: "08:50",
     author: "Surgical SHO",
     source: "scribe",
@@ -458,7 +457,7 @@ initialNotes["p4"] = [
 initialNotes["p5"] = [
   {
     id: "n5",
-    doc: "ward-round",
+    doc: "medical",
     at: "08:05",
     author: "Dr. Neve Halloran",
     source: "scribe",
@@ -468,7 +467,7 @@ initialNotes["p5"] = [
 initialNotes["p6"] = [
   {
     id: "n6",
-    doc: "ward-round",
+    doc: "medical",
     at: "07:20",
     author: "Dr. Neve Halloran",
     source: "scribe",
@@ -478,7 +477,7 @@ initialNotes["p6"] = [
 initialNotes["p7"] = [
   {
     id: "n7",
-    doc: "ward-round",
+    doc: "medical",
     at: "09:10",
     author: "V. Kilfoy",
     source: "scribe",
@@ -488,7 +487,7 @@ initialNotes["p7"] = [
 initialNotes["p8"] = [
   {
     id: "n8",
-    doc: "ward-round",
+    doc: "medical",
     at: "08:40",
     author: "Dr. Yuki T.",
     source: "scribe",

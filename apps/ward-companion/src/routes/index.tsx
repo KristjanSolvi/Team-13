@@ -116,7 +116,7 @@ function Index() {
   const addNote = (
     patientId: string,
     text: string,
-    doc: DocId = "ward-round",
+    doc: DocId = "medical",
     source: CaseNote["source"] = "agent",
     author = "Ward Threads agent",
   ) =>
