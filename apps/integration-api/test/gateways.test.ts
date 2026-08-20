@@ -197,6 +197,102 @@ describe("HTTP gateways", () => {
     );
   });
 
+  it("uses authenticated encoded paths for the ward meeting lifecycle", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const gateway = new HttpAgenticGateway(
+      "http://agentic.test",
+      1_000,
+      "server-only-token",
+      fetchImpl,
+      2_000,
+    );
+    const meta = {
+      actorId: "clinician:evelyn",
+      correlationId: "corr-meeting-1",
+    };
+    const meetingId = "meeting/with spaces";
+    const segmentId = "segment/with spaces";
+
+    await gateway.startWardMeeting(
+      {
+        wardId: "ward-13",
+        interactionId: "interaction-13",
+        idempotencyKey: "meeting-start-13",
+      },
+      meta,
+    );
+    await gateway.openMeetingSegment(
+      meetingId,
+      {
+        patientId: "synthetic-karen",
+        expectedMeetingVersion: 1,
+        idempotencyKey: "meeting-open-13",
+      },
+      meta,
+    );
+    await gateway.appendMeetingTranscript(
+      meetingId,
+      {
+        patientSegmentId: null,
+        segments: [
+          {
+            segmentKey: "interaction-13:1",
+            text: "Unscoped board-round context.",
+            startSeconds: 1,
+            endSeconds: 2,
+            isFinal: true,
+            audioQuality: "clear",
+          },
+        ],
+        idempotencyKey: "meeting-transcript-13",
+      },
+      meta,
+    );
+    await gateway.closeMeetingSegment(
+      meetingId,
+      segmentId,
+      {
+        expectedMeetingVersion: 2,
+        expectedSegmentVersion: 1,
+        idempotencyKey: "meeting-close-13",
+      },
+      meta,
+    );
+    await gateway.reconcileMeetingSegment(
+      meetingId,
+      segmentId,
+      {
+        expectedSegmentVersion: 2,
+        idempotencyKey: "meeting-reconcile-13",
+      },
+      meta,
+    );
+    await gateway.completeWardMeeting(
+      meetingId,
+      { expectedMeetingVersion: 3, idempotencyKey: "meeting-complete-13" },
+      meta,
+    );
+    await gateway.getWardMeeting(meetingId, meta);
+
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://agentic.test/api/ward-meetings",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces/segments",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces/transcript-segments",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces/segments/segment%2Fwith%20spaces/close",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces/segments/segment%2Fwith%20spaces/reconcile",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces/complete",
+      "http://agentic.test/api/ward-meetings/meeting%2Fwith%20spaces",
+    ]);
+    for (const [, options] of fetchImpl.mock.calls) {
+      const headers = new Headers(options?.headers);
+      expect(headers.get("authorization")).toBe("Bearer server-only-token");
+      expect(headers.get("x-actor-id")).toBe("clinician:evelyn");
+      expect(headers.get("x-correlation-id")).toBe("corr-meeting-1");
+    }
+  });
+
   it("calls the internal renderer with metadata but never an agentic bearer", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(

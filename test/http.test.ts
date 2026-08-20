@@ -706,29 +706,23 @@ test("an unverified in-flight draft cannot replay before the Corti terminal resu
   const gateway: AgentGateway = {
     async send(input) {
       sends += 1;
-      if (sends === 1) {
-        return {
-          contextId: "ctx-concurrent",
-          taskId: "warmup",
-          state: "completed",
-        };
-      }
+      assert.ok(input.contextId);
+      const contextId = input.contextId;
       const handoverId = String(input.data?.handoverId);
       harness.handovers.saveDraft({
         handoverId,
         patientId: "synthetic-karen",
-        contextId: "ctx-concurrent",
+        contextId,
         packet: HANDOVER_PACKET,
       });
       signalDraftSaved?.();
       return {
-        contextId: "ctx-concurrent",
+        contextId,
         taskId: "generate",
         state: "submitted",
       };
     },
     async waitForCompletion(result) {
-      if (result.taskId === "warmup") return result;
       await terminalResultReleased;
       return { ...result, state: "failed" };
     },
@@ -773,6 +767,7 @@ test("an unverified in-flight draft cannot replay before the Corti terminal resu
   assert.ok(failed);
   assert.equal(failed.status, "failed");
   assert.equal(runnerCalls, 1);
+  assert.equal(sends, 1);
   assert.equal(
     harness.store
       .listEvents(0)

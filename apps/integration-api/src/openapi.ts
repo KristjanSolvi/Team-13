@@ -356,6 +356,174 @@ export const integrationOpenApi = {
         security: [{ integrationBearer: [] }],
       },
     },
+    "/api/ward-meetings": {
+      post: {
+        summary: "Start an Ambient ward meeting",
+        description:
+          "Creates the Corti Ambient browser session and the attributable ward-meeting ledger record as one public orchestration flow.",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/WardMeetingStart" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Existing meeting replayed" },
+          "201": { description: "Ambient session and meeting created" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+          "504": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ward-meetings/{meetingId}": {
+      get: {
+        summary: "Read a ward meeting and its patient segments",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/MeetingId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": { description: "Safe meeting projection" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ward-meetings/{meetingId}/segments": {
+      post: {
+        summary: "Explicitly select the patient now being discussed",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/MeetingId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MeetingSegmentOpen" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Existing selected segment replayed" },
+          "201": { description: "Patient segment opened" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ward-meetings/{meetingId}/transcript-segments": {
+      post: {
+        summary: "Retain final Ambient transcript segments",
+        description:
+          "A null patientSegmentId retains unscoped meeting context but can never create patient evidence or a task.",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/MeetingId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/MeetingTranscriptAppend",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Existing transcript append replayed" },
+          "201": { description: "Final transcript retained" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ward-meetings/{meetingId}/segments/{segmentId}/close": {
+      post: {
+        summary: "Close and automatically reconcile one patient discussion",
+        description:
+          "Freezes patient evidence, compares it with prior meeting context, handover and active tasks, then creates draft-only suggestions and carry-forward warnings.",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/MeetingId" },
+          { $ref: "#/components/parameters/SegmentId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MeetingSegmentClose" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Close and reconciliation replayed" },
+          "201": { description: "Segment closed and reconciled" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+          "504": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ward-meetings/{meetingId}/complete": {
+      post: {
+        summary: "Complete a ward meeting after every patient segment closes",
+        security: [{ integrationBearer: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/MeetingId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/WardMeetingComplete" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Meeting completed or replayed" },
+          "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/patients/{patientId}/companion": {
       get: {
         summary: "Read a Ward Companion-compatible patient projection",
@@ -686,6 +854,18 @@ export const integrationOpenApi = {
         required: true,
         schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
       },
+      MeetingId: {
+        name: "meetingId",
+        in: "path",
+        required: true,
+        schema: { type: "string", format: "uuid" },
+      },
+      SegmentId: {
+        name: "segmentId",
+        in: "path",
+        required: true,
+        schema: { type: "string", format: "uuid" },
+      },
       DocumentId: {
         name: "documentId",
         in: "path",
@@ -716,6 +896,151 @@ export const integrationOpenApi = {
       },
     },
     schemas: {
+      WardMeetingStart: {
+        type: "object",
+        additionalProperties: false,
+        required: ["wardId", "idempotencyKey"],
+        properties: {
+          wardId: { type: "string", minLength: 1, maxLength: 200 },
+          encounterIdentifier: {
+            type: "string",
+            minLength: 1,
+            maxLength: 120,
+          },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      WardMeeting: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "meetingId",
+          "wardId",
+          "interactionId",
+          "status",
+          "startedBy",
+          "startedAt",
+          "completedAt",
+          "version",
+        ],
+        properties: {
+          meetingId: { type: "string", format: "uuid" },
+          wardId: { type: "string" },
+          interactionId: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["recording", "completed", "failed"],
+          },
+          startedBy: { type: "string" },
+          startedAt: { type: "string", format: "date-time" },
+          completedAt: { type: ["string", "null"], format: "date-time" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      PatientMeetingSegment: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "segmentId",
+          "meetingId",
+          "patientId",
+          "status",
+          "openedBy",
+          "openedAt",
+          "closedAt",
+          "version",
+        ],
+        properties: {
+          segmentId: { type: "string", format: "uuid" },
+          meetingId: { type: "string", format: "uuid" },
+          patientId: { type: "string" },
+          status: {
+            type: "string",
+            enum: [
+              "recording",
+              "closed",
+              "reconciling",
+              "reconciled",
+              "failed",
+            ],
+          },
+          openedBy: { type: "string" },
+          openedAt: { type: "string", format: "date-time" },
+          closedAt: { type: ["string", "null"], format: "date-time" },
+          version: { type: "integer", minimum: 1 },
+        },
+      },
+      MeetingSegmentOpen: {
+        type: "object",
+        additionalProperties: false,
+        required: ["patientId", "expectedMeetingVersion", "idempotencyKey"],
+        properties: {
+          patientId: { type: "string", minLength: 1, maxLength: 160 },
+          expectedMeetingVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      MeetingTranscriptAppend: {
+        type: "object",
+        additionalProperties: false,
+        required: ["patientSegmentId", "segments", "idempotencyKey"],
+        properties: {
+          patientSegmentId: { type: ["string", "null"], format: "uuid" },
+          segments: {
+            type: "array",
+            minItems: 1,
+            maxItems: 500,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "segmentKey",
+                "text",
+                "startSeconds",
+                "endSeconds",
+                "isFinal",
+                "audioQuality",
+              ],
+              properties: {
+                segmentKey: { type: "string" },
+                text: { type: "string" },
+                startSeconds: { type: "number", minimum: 0 },
+                endSeconds: { type: "number", minimum: 0 },
+                speakerId: { type: "integer" },
+                isFinal: { type: "boolean" },
+                audioQuality: {
+                  type: "string",
+                  enum: ["clear", "uncertain"],
+                },
+              },
+            },
+          },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      MeetingSegmentClose: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "expectedMeetingVersion",
+          "expectedSegmentVersion",
+          "idempotencyKey",
+        ],
+        properties: {
+          expectedMeetingVersion: { type: "integer", minimum: 1 },
+          expectedSegmentVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      WardMeetingComplete: {
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedMeetingVersion", "idempotencyKey"],
+        properties: {
+          expectedMeetingVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
       DemoSessionCreate: {
         type: "object",
         additionalProperties: false,

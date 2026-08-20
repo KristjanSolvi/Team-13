@@ -9,6 +9,7 @@ import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
 import { LedgerService } from "../src/services/ledger-service.js";
+import { MeetingService } from "../src/services/meeting-service.js";
 import {
   APP_TOKEN,
   appHeaders,
@@ -549,6 +550,7 @@ test("agent-enabled signal route investigates only after source evidence registr
     clock: harness.clock,
     ledger: harness.ledger,
     handovers: harness.handovers,
+    meetings: new MeetingService(harness.store, harness.clock, harness.ledger),
     records: harness.records,
     scheduler: harness.scheduler,
     demoAudience: harness.demoAudience,

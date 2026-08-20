@@ -1,17 +1,20 @@
 import type { Server } from "node:http";
 
 import type { GenerateHandoverInput } from "../src/agent/handover-runner.js";
+import type { GenerateMeetingReconciliationInput } from "../src/agent/meeting-runner.js";
 import type { HandoverRecord } from "../src/domain/handover.js";
+import type { MeetingReconciliation } from "../src/domain/meeting.js";
 import { seedKaren } from "../src/fixtures/karen.js";
 import { createApp } from "../src/http/app.js";
 import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
+import { DemoAudienceService } from "../src/services/demo-audience-service.js";
 import { HandoverService } from "../src/services/handover-service.js";
 import { LedgerService } from "../src/services/ledger-service.js";
+import { MeetingService } from "../src/services/meeting-service.js";
 import { RecordService } from "../src/services/record-service.js";
 import { SchedulerService } from "../src/services/scheduler-service.js";
-import { DemoAudienceService } from "../src/services/demo-audience-service.js";
 
 export const APP_TOKEN = "app-secret";
 export const MCP_TOKEN = "mcp-secret";
@@ -21,6 +24,11 @@ export function createAppHarness(
   options: {
     handoverRunner?: {
       generate(input: GenerateHandoverInput): Promise<HandoverRecord>;
+    };
+    meetingRunner?: {
+      generate(
+        input: GenerateMeetingReconciliationInput,
+      ): Promise<MeetingReconciliation>;
     };
   } = {},
 ) {
@@ -40,6 +48,7 @@ export function createAppHarness(
   );
   const records = new RecordService(store);
   const handovers = new HandoverService(store, clock);
+  const meetings = new MeetingService(store, clock, ledger);
   const scheduler = new SchedulerService(store, clock);
   const demoAudience = new DemoAudienceService(store, clock);
   const app = createApp({
@@ -47,6 +56,7 @@ export function createAppHarness(
     clock,
     ledger,
     handovers,
+    meetings,
     records,
     scheduler,
     demoAudience,
@@ -56,6 +66,7 @@ export function createAppHarness(
     ...(options.handoverRunner
       ? { handoverRunner: options.handoverRunner }
       : {}),
+    ...(options.meetingRunner ? { meetingRunner: options.meetingRunner } : {}),
   });
   return {
     app,
@@ -63,6 +74,7 @@ export function createAppHarness(
     clock,
     ledger,
     handovers,
+    meetings,
     records,
     scheduler,
     demoAudience,

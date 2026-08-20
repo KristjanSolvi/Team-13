@@ -6,7 +6,7 @@ import express, {
   type Request,
   type Response,
 } from "express";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 import {
   candidateSchema,
@@ -19,8 +19,13 @@ import {
   ehrReviseDocumentSchema,
   handoverRequestSchema,
   isTaskCommand,
+  meetingSegmentCloseSchema,
+  meetingSegmentOpenSchema,
+  meetingTranscriptAppendSchema,
   pipelineProxyPaths,
   taskCommandSchemas,
+  wardMeetingCompleteSchema,
+  wardMeetingStartSchema,
 } from "./contracts.js";
 import { IntegrationError } from "./errors.js";
 import { integrationOpenApi } from "./openapi.js";
@@ -200,6 +205,85 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
         meta,
       );
       response.status(result.status).json(result.body);
+    }),
+  );
+
+  app.post(
+    "/api/ward-meetings",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      const result = await options.service.startWardMeeting(
+        wardMeetingStartSchema.parse(request.body),
+        requestMeta(request, response),
+      );
+      response.status(result.status).json(result.body);
+    }),
+  );
+
+  app.post(
+    "/api/ward-meetings/:meetingId/segments",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      const result = await options.service.openMeetingSegment(
+        meetingIdentifier(request, "meetingId"),
+        meetingSegmentOpenSchema.parse(request.body),
+        requestMeta(request, response),
+      );
+      response.status(result.status).json(result.body);
+    }),
+  );
+
+  app.post(
+    "/api/ward-meetings/:meetingId/transcript-segments",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      const result = await options.service.appendMeetingTranscript(
+        meetingIdentifier(request, "meetingId"),
+        meetingTranscriptAppendSchema.parse(request.body),
+        requestMeta(request, response),
+      );
+      response.status(result.status).json(result.body);
+    }),
+  );
+
+  app.post(
+    "/api/ward-meetings/:meetingId/segments/:segmentId/close",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      const result = await options.service.closeAndReconcileMeetingSegment(
+        meetingIdentifier(request, "meetingId"),
+        meetingIdentifier(request, "segmentId"),
+        meetingSegmentCloseSchema.parse(request.body),
+        requestMeta(request, response),
+      );
+      response.status(result.status).json(result.body);
+    }),
+  );
+
+  app.post(
+    "/api/ward-meetings/:meetingId/complete",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      response.json(
+        await options.service.completeWardMeeting(
+          meetingIdentifier(request, "meetingId"),
+          wardMeetingCompleteSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/ward-meetings/:meetingId",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      response.json(
+        await options.service.getWardMeeting(
+          meetingIdentifier(request, "meetingId"),
+          requestMeta(request, response),
+        ),
+      );
     }),
   );
 
@@ -452,6 +536,10 @@ function ehrIdentifier(request: Request, name: string): string {
     );
   }
   return value;
+}
+
+function meetingIdentifier(request: Request, name: string): string {
+  return z.string().uuid().parse(pathParam(request, name));
 }
 
 function actorId(request: Request): string {

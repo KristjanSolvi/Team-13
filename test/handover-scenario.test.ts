@@ -21,9 +21,10 @@ import { SqliteStore } from "../src/infra/store.js";
 import { DemoAudienceService } from "../src/services/demo-audience-service.js";
 import { HandoverService } from "../src/services/handover-service.js";
 import { LedgerService } from "../src/services/ledger-service.js";
+import { MeetingService } from "../src/services/meeting-service.js";
 import { RecordService } from "../src/services/record-service.js";
 import { SchedulerService } from "../src/services/scheduler-service.js";
-import { APP_TOKEN, MCP_TOKEN, UI_ORIGIN, close, listen } from "./support.js";
+import { APP_TOKEN, close, listen, MCP_TOKEN, UI_ORIGIN } from "./support.js";
 
 const NOW = "2026-08-20T10:00:00.000Z";
 const PATIENT_ID = "synthetic-karen";
@@ -217,6 +218,7 @@ function scenario(t: TestContext) {
     "approval-secret-with-at-least-32-bytes",
   );
   const handovers = new HandoverService(store, clock);
+  const meetings = new MeetingService(store, clock, ledger);
   const gateway = new DraftSavingGateway(store, handovers);
   const handoverRunner = new HandoverAgentRunner(gateway, store, MCP_TOKEN);
   const app = createApp({
@@ -224,6 +226,7 @@ function scenario(t: TestContext) {
     clock,
     ledger,
     handovers,
+    meetings,
     records: new RecordService(store),
     scheduler: new SchedulerService(store, clock),
     demoAudience: new DemoAudienceService(store, clock),

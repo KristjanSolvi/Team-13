@@ -8,6 +8,18 @@ import {
   handoverSourceSnapshotSchema,
   renderedHandoverSchema,
 } from "../domain/handover.js";
+import {
+  type CarryForwardWarning,
+  carryForwardWarningSchema,
+  type MeetingReconciliation,
+  type MeetingTranscriptEvidence,
+  meetingReconciliationSchema,
+  meetingTranscriptEvidenceSchema,
+  type PatientMeetingSegment,
+  patientMeetingSegmentSchema,
+  type WardMeeting,
+  wardMeetingSchema,
+} from "../domain/meeting.js";
 import { calculatePriority } from "../domain/priority.js";
 import { requireTransition } from "../domain/state-machine.js";
 import type {
@@ -349,6 +361,86 @@ function mapHandover(row: SqlRow): HandoverRecord {
   };
 }
 
+function mapMeeting(row: SqlRow): WardMeeting {
+  return wardMeetingSchema.parse({
+    meetingId: rowText(row, "meeting_id"),
+    wardId: rowText(row, "ward_id"),
+    interactionId: rowText(row, "interaction_id"),
+    status: rowText(row, "status"),
+    startedBy: rowText(row, "started_by"),
+    startedAt: rowText(row, "started_at"),
+    completedAt: rowOptionalText(row, "completed_at"),
+    version: rowNumber(row, "version"),
+  });
+}
+
+function mapPatientMeetingSegment(row: SqlRow): PatientMeetingSegment {
+  return patientMeetingSegmentSchema.parse({
+    segmentId: rowText(row, "segment_id"),
+    meetingId: rowText(row, "meeting_id"),
+    patientId: rowText(row, "patient_id"),
+    status: rowText(row, "status"),
+    openedBy: rowText(row, "opened_by"),
+    openedAt: rowText(row, "opened_at"),
+    closedAt: rowOptionalText(row, "closed_at"),
+    version: rowNumber(row, "version"),
+  });
+}
+
+function mapMeetingTranscript(row: SqlRow): MeetingTranscriptEvidence {
+  const speakerId = row.speaker_id;
+  return meetingTranscriptEvidenceSchema.parse({
+    evidenceId: rowText(row, "evidence_id"),
+    meetingId: rowText(row, "meeting_id"),
+    patientSegmentId: rowOptionalText(row, "patient_segment_id"),
+    interactionId: rowText(row, "interaction_id"),
+    segmentKey: rowText(row, "segment_key"),
+    text: rowText(row, "text"),
+    startSeconds: rowNumber(row, "start_seconds"),
+    endSeconds: rowNumber(row, "end_seconds"),
+    ...(typeof speakerId === "number" ? { speakerId } : {}),
+    isFinal: rowNumber(row, "is_final") === 1,
+    audioQuality: rowText(row, "audio_quality"),
+    eligible: rowNumber(row, "eligible") === 1,
+    sourceRef: rowOptionalText(row, "source_ref"),
+    recordedAt: rowText(row, "recorded_at"),
+  });
+}
+
+function mapMeetingReconciliation(row: SqlRow): MeetingReconciliation {
+  return meetingReconciliationSchema.parse({
+    reconciliationId: rowText(row, "reconciliation_id"),
+    meetingId: rowText(row, "meeting_id"),
+    patientSegmentId: rowText(row, "patient_segment_id"),
+    patientId: rowText(row, "patient_id"),
+    interactionId: rowText(row, "interaction_id"),
+    contextId: rowOptionalText(row, "context_id"),
+    idempotencyKey: rowText(row, "idempotency_key"),
+    sourceSnapshot: parseJson(rowText(row, "source_snapshot_json")),
+    sourceSnapshotHash: rowText(row, "source_snapshot_hash"),
+    status: rowText(row, "status"),
+    newDraftTaskIds: parseStrings(rowText(row, "new_draft_task_ids_json")),
+    carryForwardTaskRefs: parseStrings(
+      rowText(row, "carry_forward_task_refs_json"),
+    ),
+    createdAt: rowText(row, "created_at"),
+    updatedAt: rowText(row, "updated_at"),
+    version: rowNumber(row, "version"),
+  });
+}
+
+function mapCarryForward(row: SqlRow): CarryForwardWarning {
+  return carryForwardWarningSchema.parse({
+    warningId: rowText(row, "warning_id"),
+    reconciliationId: rowText(row, "reconciliation_id"),
+    patientId: rowText(row, "patient_id"),
+    taskRef: rowText(row, "task_ref"),
+    reason: rowText(row, "reason"),
+    sourceRefs: parseStrings(rowText(row, "source_refs_json")),
+    createdAt: rowText(row, "created_at"),
+  });
+}
+
 export class SqliteStore {
   private transactionDepth = 0;
 
@@ -397,6 +489,478 @@ export class SqliteStore {
       displayName: rowText(row, "display_name"),
       record: parseJson(rowText(row, "record_json")),
     };
+  }
+
+  putMeeting(value: WardMeeting): void {
+    const meeting = wardMeetingSchema.parse(value);
+    this.database
+      .prepare(`
+        INSERT INTO ward_meetings
+          (meeting_id, ward_id, interaction_id, status, started_by, started_at,
+           completed_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        meeting.meetingId,
+        meeting.wardId,
+        meeting.interactionId,
+        meeting.status,
+        meeting.startedBy,
+        meeting.startedAt,
+        meeting.completedAt,
+        meeting.version,
+      );
+  }
+
+  getMeeting(meetingId: string): WardMeeting | null {
+    const row = this.database
+      .prepare("SELECT * FROM ward_meetings WHERE meeting_id = ?")
+      .get(meetingId);
+    return row ? mapMeeting(row) : null;
+  }
+
+  requireMeeting(meetingId: string): WardMeeting {
+    const meeting = this.getMeeting(meetingId);
+    if (!meeting) {
+      throw new DomainError(
+        "MEETING_NOT_FOUND",
+        "Meeting not found",
+        false,
+        404,
+      );
+    }
+    return meeting;
+  }
+
+  updateMeeting(value: WardMeeting, expectedVersion: number): WardMeeting {
+    const next = wardMeetingSchema.parse(value);
+    if (next.version !== expectedVersion + 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting version must advance by one",
+        false,
+        409,
+      );
+    }
+    const current = this.requireMeeting(next.meetingId);
+    if (
+      current.wardId !== next.wardId ||
+      current.interactionId !== next.interactionId ||
+      current.startedBy !== next.startedBy ||
+      current.startedAt !== next.startedAt
+    ) {
+      throw new DomainError(
+        "MEETING_IDENTITY_MISMATCH",
+        "Meeting identity cannot change",
+        false,
+        409,
+      );
+    }
+    const updated = this.database
+      .prepare(`
+        UPDATE ward_meetings
+        SET status = ?, completed_at = ?, version = ?
+        WHERE meeting_id = ? AND version = ?
+      `)
+      .run(
+        next.status,
+        next.completedAt,
+        next.version,
+        next.meetingId,
+        expectedVersion,
+      );
+    if (updated.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting changed concurrently",
+        false,
+        409,
+      );
+    }
+    return this.requireMeeting(next.meetingId);
+  }
+
+  putPatientMeetingSegment(value: PatientMeetingSegment): void {
+    const segment = patientMeetingSegmentSchema.parse(value);
+    const meeting = this.requireMeeting(segment.meetingId);
+    if (meeting.status !== "recording") {
+      throw new DomainError(
+        "MEETING_NOT_RECORDING",
+        "Meeting is not recording",
+        false,
+        409,
+      );
+    }
+    this.database
+      .prepare(`
+        INSERT INTO patient_meeting_segments
+          (segment_id, meeting_id, patient_id, status, opened_by, opened_at,
+           closed_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        segment.segmentId,
+        segment.meetingId,
+        segment.patientId,
+        segment.status,
+        segment.openedBy,
+        segment.openedAt,
+        segment.closedAt,
+        segment.version,
+      );
+  }
+
+  getPatientMeetingSegment(segmentId: string): PatientMeetingSegment | null {
+    const row = this.database
+      .prepare("SELECT * FROM patient_meeting_segments WHERE segment_id = ?")
+      .get(segmentId);
+    return row ? mapPatientMeetingSegment(row) : null;
+  }
+
+  requirePatientMeetingSegment(segmentId: string): PatientMeetingSegment {
+    const segment = this.getPatientMeetingSegment(segmentId);
+    if (!segment) {
+      throw new DomainError(
+        "PATIENT_SEGMENT_NOT_FOUND",
+        "Patient meeting segment not found",
+        false,
+        404,
+      );
+    }
+    return segment;
+  }
+
+  listMeetingPatientSegments(meetingId: string): PatientMeetingSegment[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM patient_meeting_segments
+        WHERE meeting_id = ?
+        ORDER BY opened_at, segment_id
+      `)
+      .all(meetingId);
+    return rows.map(mapPatientMeetingSegment);
+  }
+
+  updatePatientMeetingSegment(
+    value: PatientMeetingSegment,
+    expectedVersion: number,
+  ): PatientMeetingSegment {
+    const next = patientMeetingSegmentSchema.parse(value);
+    if (next.version !== expectedVersion + 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Patient segment version must advance by one",
+        false,
+        409,
+      );
+    }
+    const current = this.requirePatientMeetingSegment(next.segmentId);
+    if (
+      current.meetingId !== next.meetingId ||
+      current.patientId !== next.patientId ||
+      current.openedBy !== next.openedBy ||
+      current.openedAt !== next.openedAt
+    ) {
+      throw new DomainError(
+        "PATIENT_SEGMENT_IDENTITY_MISMATCH",
+        "Patient segment identity cannot change",
+        false,
+        409,
+      );
+    }
+    const updated = this.database
+      .prepare(`
+        UPDATE patient_meeting_segments
+        SET status = ?, closed_at = ?, version = ?
+        WHERE segment_id = ? AND version = ?
+      `)
+      .run(
+        next.status,
+        next.closedAt,
+        next.version,
+        next.segmentId,
+        expectedVersion,
+      );
+    if (updated.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Patient segment changed concurrently",
+        false,
+        409,
+      );
+    }
+    return this.requirePatientMeetingSegment(next.segmentId);
+  }
+
+  putMeetingTranscript(value: MeetingTranscriptEvidence): void {
+    const evidence = meetingTranscriptEvidenceSchema.parse(value);
+    const meeting = this.requireMeeting(evidence.meetingId);
+    if (meeting.interactionId !== evidence.interactionId) {
+      throw new DomainError(
+        "MEETING_INTERACTION_MISMATCH",
+        "Transcript interaction does not belong to this meeting",
+        false,
+        409,
+      );
+    }
+    if (evidence.patientSegmentId !== null) {
+      const segment = this.requirePatientMeetingSegment(
+        evidence.patientSegmentId,
+      );
+      if (
+        segment.meetingId !== evidence.meetingId ||
+        segment.status !== "recording"
+      ) {
+        throw new DomainError(
+          "PATIENT_SEGMENT_CLOSED",
+          "Transcript cannot be appended after segment close",
+          false,
+          409,
+        );
+      }
+    }
+    this.database
+      .prepare(`
+        INSERT INTO meeting_transcript_segments
+          (evidence_id, meeting_id, patient_segment_id, interaction_id,
+           segment_key, text, start_seconds, end_seconds, speaker_id, is_final,
+           audio_quality, eligible, source_ref, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        evidence.evidenceId,
+        evidence.meetingId,
+        evidence.patientSegmentId,
+        evidence.interactionId,
+        evidence.segmentKey,
+        evidence.text,
+        evidence.startSeconds,
+        evidence.endSeconds,
+        evidence.speakerId ?? null,
+        evidence.isFinal ? 1 : 0,
+        evidence.audioQuality,
+        evidence.eligible ? 1 : 0,
+        evidence.sourceRef,
+        evidence.recordedAt,
+      );
+  }
+
+  listPatientMeetingEvidence(segmentId: string): MeetingTranscriptEvidence[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM meeting_transcript_segments
+        WHERE patient_segment_id = ?
+        ORDER BY start_seconds, evidence_id
+      `)
+      .all(segmentId);
+    return rows.map(mapMeetingTranscript);
+  }
+
+  getMeetingTranscriptEvidence(
+    evidenceId: string,
+  ): MeetingTranscriptEvidence | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_transcript_segments WHERE evidence_id = ?",
+      )
+      .get(evidenceId);
+    return row ? mapMeetingTranscript(row) : null;
+  }
+
+  listMeetingTranscript(meetingId: string): MeetingTranscriptEvidence[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM meeting_transcript_segments
+        WHERE meeting_id = ?
+        ORDER BY start_seconds, evidence_id
+      `)
+      .all(meetingId);
+    return rows.map(mapMeetingTranscript);
+  }
+
+  getPreviousPatientMeeting(
+    patientId: string,
+    beforeMeetingId: string,
+  ): PatientMeetingSegment | null {
+    const row = this.database
+      .prepare(`
+        SELECT segment.*
+        FROM patient_meeting_segments AS segment
+        JOIN ward_meetings AS meeting
+          ON meeting.meeting_id = segment.meeting_id
+        JOIN ward_meetings AS current
+          ON current.meeting_id = ?
+        WHERE segment.patient_id = ?
+          AND segment.meeting_id <> current.meeting_id
+          AND meeting.started_at < current.started_at
+        ORDER BY meeting.started_at DESC, segment.opened_at DESC,
+                 segment.segment_id DESC
+        LIMIT 1
+      `)
+      .get(beforeMeetingId, patientId);
+    return row ? mapPatientMeetingSegment(row) : null;
+  }
+
+  putMeetingReconciliation(value: MeetingReconciliation): void {
+    const reconciliation = meetingReconciliationSchema.parse(value);
+    this.database
+      .prepare(`
+        INSERT INTO meeting_reconciliations
+          (reconciliation_id, meeting_id, patient_segment_id, patient_id,
+           interaction_id, context_id, idempotency_key, source_snapshot_json,
+           source_snapshot_hash, status, new_draft_task_ids_json,
+           carry_forward_task_refs_json, created_at, updated_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        reconciliation.reconciliationId,
+        reconciliation.meetingId,
+        reconciliation.patientSegmentId,
+        reconciliation.patientId,
+        reconciliation.interactionId,
+        reconciliation.contextId,
+        reconciliation.idempotencyKey,
+        JSON.stringify(reconciliation.sourceSnapshot),
+        reconciliation.sourceSnapshotHash,
+        reconciliation.status,
+        JSON.stringify(reconciliation.newDraftTaskIds),
+        JSON.stringify(reconciliation.carryForwardTaskRefs),
+        reconciliation.createdAt,
+        reconciliation.updatedAt,
+        reconciliation.version,
+      );
+  }
+
+  getMeetingReconciliation(
+    reconciliationId: string,
+  ): MeetingReconciliation | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_reconciliations WHERE reconciliation_id = ?",
+      )
+      .get(reconciliationId);
+    return row ? mapMeetingReconciliation(row) : null;
+  }
+
+  getMeetingReconciliationForSegment(
+    segmentId: string,
+  ): MeetingReconciliation | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_reconciliations WHERE patient_segment_id = ?",
+      )
+      .get(segmentId);
+    return row ? mapMeetingReconciliation(row) : null;
+  }
+
+  requireMeetingReconciliation(
+    reconciliationId: string,
+  ): MeetingReconciliation {
+    const reconciliation = this.getMeetingReconciliation(reconciliationId);
+    if (!reconciliation) {
+      throw new DomainError(
+        "MEETING_RECONCILIATION_NOT_FOUND",
+        "Meeting reconciliation not found",
+        false,
+        404,
+      );
+    }
+    return reconciliation;
+  }
+
+  updateMeetingReconciliation(
+    value: MeetingReconciliation,
+    expectedVersion: number,
+  ): MeetingReconciliation {
+    const next = meetingReconciliationSchema.parse(value);
+    if (next.version !== expectedVersion + 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting reconciliation version must advance by one",
+        false,
+        409,
+      );
+    }
+    const current = this.requireMeetingReconciliation(next.reconciliationId);
+    if (
+      current.meetingId !== next.meetingId ||
+      current.patientSegmentId !== next.patientSegmentId ||
+      current.patientId !== next.patientId ||
+      current.interactionId !== next.interactionId ||
+      current.idempotencyKey !== next.idempotencyKey ||
+      current.sourceSnapshotHash !== next.sourceSnapshotHash ||
+      JSON.stringify(current.sourceSnapshot) !==
+        JSON.stringify(next.sourceSnapshot) ||
+      current.createdAt !== next.createdAt
+    ) {
+      throw new DomainError(
+        "MEETING_RECONCILIATION_IDENTITY_MISMATCH",
+        "Meeting reconciliation identity cannot change",
+        false,
+        409,
+      );
+    }
+    const updated = this.database
+      .prepare(`
+        UPDATE meeting_reconciliations
+        SET context_id = ?, status = ?, new_draft_task_ids_json = ?,
+            carry_forward_task_refs_json = ?, updated_at = ?, version = ?
+        WHERE reconciliation_id = ? AND version = ?
+      `)
+      .run(
+        next.contextId,
+        next.status,
+        JSON.stringify(next.newDraftTaskIds),
+        JSON.stringify(next.carryForwardTaskRefs),
+        next.updatedAt,
+        next.version,
+        next.reconciliationId,
+        expectedVersion,
+      );
+    if (updated.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting reconciliation changed concurrently",
+        false,
+        409,
+      );
+    }
+    return this.requireMeetingReconciliation(next.reconciliationId);
+  }
+
+  putMeetingCarryForward(value: CarryForwardWarning): void {
+    const warning = carryForwardWarningSchema.parse(value);
+    this.database
+      .prepare(`
+        INSERT INTO meeting_carry_forwards
+          (warning_id, reconciliation_id, patient_id, task_ref, reason,
+           source_refs_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        warning.warningId,
+        warning.reconciliationId,
+        warning.patientId,
+        warning.taskRef,
+        warning.reason,
+        JSON.stringify(warning.sourceRefs),
+        warning.createdAt,
+      );
+  }
+
+  listMeetingCarryForwards(reconciliationId: string): CarryForwardWarning[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM meeting_carry_forwards
+        WHERE reconciliation_id = ?
+        ORDER BY created_at, warning_id
+      `)
+      .all(reconciliationId);
+    return rows.map(mapCarryForward);
   }
 
   putRecordItem(item: PatientRecordItem): void {

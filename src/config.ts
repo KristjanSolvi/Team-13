@@ -16,8 +16,11 @@ const environmentSchema = z.object({
     .union([z.literal(""), z.string().url()])
     .optional(),
   HANDOVER_MCP_NAME: z.string().min(1).default("follow-through-handover"),
+  MEETING_MCP_PUBLIC_URL: z.union([z.literal(""), z.string().url()]).optional(),
+  MEETING_MCP_NAME: z.string().min(1).default("follow-through-meeting"),
   CORTI_AGENT_ID: z.string().optional(),
   CORTI_HANDOVER_AGENT_ID: z.string().optional(),
+  CORTI_MEETING_AGENT_ID: z.string().optional(),
   CORTI_TENANT_NAME: z.string().min(1),
   CORTI_CLIENT_ID: z.string().min(1),
   CORTI_CLIENT_SECRET: z.string().min(1),
@@ -29,6 +32,8 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
   const parsed = environmentSchema.parse(environment);
   const taskMcpUrl = new URL(parsed.MCP_PUBLIC_URL);
   taskMcpUrl.pathname = `${taskMcpUrl.pathname.replace(/\/+$/, "")}/handover`;
+  const meetingMcpUrl = new URL(parsed.MCP_PUBLIC_URL);
+  meetingMcpUrl.pathname = `${meetingMcpUrl.pathname.replace(/\/+$/, "")}/meeting`;
 
   return {
     port: parsed.PORT,
@@ -43,8 +48,12 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     handoverMcpPublicUrl:
       parsed.HANDOVER_MCP_PUBLIC_URL || taskMcpUrl.toString(),
     handoverMcpName: parsed.HANDOVER_MCP_NAME,
+    meetingMcpPublicUrl:
+      parsed.MEETING_MCP_PUBLIC_URL || meetingMcpUrl.toString(),
+    meetingMcpName: parsed.MEETING_MCP_NAME,
     cortiAgentId: parsed.CORTI_AGENT_ID,
     cortiHandoverAgentId: parsed.CORTI_HANDOVER_AGENT_ID,
+    cortiMeetingAgentId: parsed.CORTI_MEETING_AGENT_ID,
     demoMode: parsed.DEMO_MODE,
     corti: {
       tenantName: parsed.CORTI_TENANT_NAME,
