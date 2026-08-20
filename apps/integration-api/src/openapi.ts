@@ -746,7 +746,18 @@ export const integrationOpenApi = {
         additionalProperties: false,
         required: ["sectionId", "heading", "statements"],
         properties: {
-          sectionId: { type: "string", minLength: 1, maxLength: 80 },
+          sectionId: {
+            type: "string",
+            enum: [
+              "situation",
+              "background",
+              "current-concerns",
+              "outstanding-tasks",
+              "awaiting-verification",
+              "escalations",
+              "unknowns",
+            ],
+          },
           heading: { type: "string", minLength: 1, maxLength: 160 },
           statements: {
             type: "array",

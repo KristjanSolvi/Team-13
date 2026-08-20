@@ -204,6 +204,18 @@ describe("integration API", () => {
     expect(
       response.body.components.schemas.HandoverActivity.oneOf,
     ).toHaveLength(7);
+    expect(
+      response.body.components.schemas.RenderedSection.properties.sectionId
+        .enum,
+    ).toEqual([
+      "situation",
+      "background",
+      "current-concerns",
+      "outstanding-tasks",
+      "awaiting-verification",
+      "escalations",
+      "unknowns",
+    ]);
     for (const variant of [
       "HandoverRequestedActivity",
       "HandoverSourcesRetrievedActivity",
@@ -512,6 +524,120 @@ describe("integration API", () => {
       message: "Please retry rendering",
       retryable: true,
     });
+    expect(agentic.finalizeHandover).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "malformed sections",
+      {
+        title: "Current handover",
+        sections: "private malformed renderer output",
+        creditsConsumed: 1,
+      },
+    ],
+    [
+      "extra renderer field",
+      {
+        title: "Current handover",
+        sections: [],
+        creditsConsumed: 1,
+        hiddenReasoning: "private renderer reasoning",
+      },
+    ],
+    [
+      "unknown section with evidence",
+      {
+        title: "Current handover",
+        sections: [
+          {
+            sectionId: "unknowns",
+            heading: "Unknowns",
+            statements: [
+              {
+                statement: "An unsafe unknown statement.",
+                sourceRefs: ["record:not-in-packet"],
+              },
+            ],
+          },
+        ],
+        creditsConsumed: 1,
+      },
+    ],
+    [
+      "uncited clinical section",
+      {
+        title: "Current handover",
+        sections: [
+          {
+            sectionId: "situation",
+            heading: "Situation",
+            statements: [
+              {
+                statement: "An uncited clinical claim.",
+                sourceRefs: [],
+              },
+            ],
+          },
+        ],
+        creditsConsumed: 1,
+      },
+    ],
+    [
+      "source outside packet",
+      {
+        title: "Current handover",
+        sections: [
+          {
+            sectionId: "situation",
+            heading: "Situation",
+            statements: [
+              {
+                statement: "A claim with ungrounded evidence.",
+                sourceRefs: ["record:not-in-packet"],
+              },
+            ],
+          },
+        ],
+        creditsConsumed: 1,
+      },
+    ],
+    [
+      "unsupported section id",
+      {
+        title: "Current handover",
+        sections: [
+          {
+            sectionId: "diagnosis",
+            heading: "Diagnosis",
+            statements: [
+              {
+                statement: "An invented diagnosis section.",
+                sourceRefs: ["record:not-in-packet"],
+              },
+            ],
+          },
+        ],
+        creditsConsumed: 1,
+      },
+    ],
+  ])("rejects %s from a successful renderer before finalization", async (_label, rendered) => {
+    const { agentic, pipeline, app } = harness();
+    vi.mocked(pipeline.renderHandover).mockResolvedValue(rendered);
+
+    const response = await request(app)
+      .post("/api/patients/synthetic-karen/handovers")
+      .set("x-actor-id", "clinician:karen")
+      .send({ idempotencyKey: "handover-karen-001", reason: "on_demand" })
+      .expect(502);
+
+    expect(response.body.error).toMatchObject({
+      code: "HANDOVER_RENDER_FAILED",
+      retryable: true,
+    });
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /private malformed|private renderer reasoning|invented diagnosis/,
+    );
     expect(agentic.finalizeHandover).not.toHaveBeenCalled();
   });
 

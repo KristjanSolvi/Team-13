@@ -84,6 +84,15 @@ const renderedStatementSchema = z
     sourceRefs: z.array(z.string().min(1).max(240)).max(20),
   })
   .strict();
+const renderedSectionIdSchema = z.enum([
+  "situation",
+  "background",
+  "current-concerns",
+  "outstanding-tasks",
+  "awaiting-verification",
+  "escalations",
+  "unknowns",
+]);
 const renderedHandoverSchema = z
   .object({
     title: trimmedString(160),
@@ -91,11 +100,35 @@ const renderedHandoverSchema = z
       .array(
         z
           .object({
-            sectionId: trimmedString(80),
+            sectionId: renderedSectionIdSchema,
             heading: trimmedString(160),
             statements: z.array(renderedStatementSchema).max(50),
           })
-          .strict(),
+          .strict()
+          .superRefine((section, context) => {
+            for (const [index, statement] of section.statements.entries()) {
+              if (
+                section.sectionId === "unknowns" &&
+                statement.sourceRefs.length !== 0
+              ) {
+                context.addIssue({
+                  code: "custom",
+                  message: "Unknown statements must not cite evidence",
+                  path: ["statements", index, "sourceRefs"],
+                });
+              }
+              if (
+                section.sectionId !== "unknowns" &&
+                statement.sourceRefs.length === 0
+              ) {
+                context.addIssue({
+                  code: "custom",
+                  message: "Rendered statements require evidence",
+                  path: ["statements", index, "sourceRefs"],
+                });
+              }
+            }
+          }),
       )
       .max(10),
     creditsConsumed: z.number().nonnegative(),
@@ -490,15 +523,18 @@ export class IntegrationService {
     }
 
     const draft = draftEnvelope.handover;
-    const rendered = await render.call(
-      this.pipeline,
-      {
-        handoverId: draft.handoverId,
-        patientId: draft.patientId,
-        sourceSnapshotHash: draft.sourceSnapshotHash,
-        packet: draft.packet,
-      },
-      meta,
+    const rendered = parseRenderedHandover(
+      await render.call(
+        this.pipeline,
+        {
+          handoverId: draft.handoverId,
+          patientId: draft.patientId,
+          sourceSnapshotHash: draft.sourceSnapshotHash,
+          packet: draft.packet,
+        },
+        meta,
+      ),
+      draft.packet,
     );
     const finalEnvelope = parseHandoverEnvelope(
       await finalize.call(
@@ -552,6 +588,32 @@ function parseHandoverEnvelope(value: unknown): HandoverEnvelope {
   return result.data;
 }
 
+function parseRenderedHandover(
+  value: unknown,
+  packet: z.infer<typeof handoverPacketSchema>,
+): z.infer<typeof renderedHandoverSchema> {
+  const result = renderedHandoverSchema.safeParse(value);
+  if (!result.success) {
+    throw invalidRenderedHandover();
+  }
+  const allowedSourceRefs = new Set([
+    ...packet.situation,
+    ...packet.background,
+    ...packet.currentConcerns,
+    ...packet.outstandingTasks,
+    ...packet.awaitingVerification,
+    ...packet.escalations,
+  ].flatMap((item) => item.sourceRefs));
+  for (const section of result.data.sections) {
+    for (const statement of section.statements) {
+      if (statement.sourceRefs.some((sourceRef) => !allowedSourceRefs.has(sourceRef))) {
+        throw invalidRenderedHandover();
+      }
+    }
+  }
+  return result.data;
+}
+
 function sameJson(left: unknown, right: unknown): boolean {
   return isDeepStrictEqual(left, right);
 }
@@ -560,6 +622,15 @@ function invalidUpstreamHandover(): IntegrationError {
   return new IntegrationError(
     "UPSTREAM_INVALID_RESPONSE",
     "An upstream service returned an invalid response",
+    502,
+    true,
+  );
+}
+
+function invalidRenderedHandover(): IntegrationError {
+  return new IntegrationError(
+    "HANDOVER_RENDER_FAILED",
+    "The handover renderer returned an invalid response",
     502,
     true,
   );
