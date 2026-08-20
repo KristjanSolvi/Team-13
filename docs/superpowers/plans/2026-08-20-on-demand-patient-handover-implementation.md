@@ -486,7 +486,7 @@ git commit -m "feat: persist grounded handovers"
 - Create: `test/handover-service.test.ts`
 - Modify: `src/services/record-service.ts`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Cover these concrete cases with an in-memory seeded store and fixed
 `DemoClock`:
@@ -506,7 +506,7 @@ test("a draft replay does not request another agent run", () => {});
 Use a real Karen task from `LedgerService` so task IDs, states, versions, and
 deadlines are authoritative rather than invented test doubles.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
 ```bash
 npx tsx --test test/handover-service.test.ts
@@ -514,7 +514,7 @@ npx tsx --test test/handover-service.test.ts
 
 Expected: failure because `HandoverService` does not exist.
 
-- [ ] **Step 3: Add the patient-scoped active-task read**
+- [x] **Step 3: Add the patient-scoped active-task read**
 
 Add this method to `RecordService`:
 
@@ -528,7 +528,7 @@ listPatientTasks(contextId: string, patientId: string): Task[] {
 Import `Task` and `isHandoverTaskActive`. This method is the only list used by
 the handover MCP tool.
 
-- [ ] **Step 4: Implement request and snapshot lifecycle**
+- [x] **Step 4: Implement request and snapshot lifecycle**
 
 Create `HandoverService` with this public surface:
 
@@ -635,7 +635,7 @@ may occur more than once when a saved packet is retried after a renderer outage.
 containing event type, occurrence time, actor, and non-sensitive payload. It must
 never include prompts, credentials, or opaque Corti metadata.
 
-- [ ] **Step 5: Run focused and root checks**
+- [x] **Step 5: Run focused and root checks**
 
 ```bash
 npx tsx --test test/handover-service.test.ts
@@ -644,7 +644,7 @@ npm run check
 
 Expected: all tests and Biome checks pass.
 
-- [ ] **Step 6: Commit the service**
+- [x] **Step 6: Commit the service**
 
 ```bash
 git add src/services/handover-service.ts src/services/record-service.ts test/handover-service.test.ts
