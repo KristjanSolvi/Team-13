@@ -24,6 +24,24 @@ function createStore(t: TestContext): SqliteStore {
   return store;
 }
 
+function assertStoreDomainError(
+  operation: () => unknown,
+  code: string,
+  status: number,
+): DomainError {
+  let caught: unknown;
+  try {
+    operation();
+  } catch (error) {
+    caught = error;
+  }
+  assert.ok(caught instanceof DomainError);
+  assert.equal(caught.code, code);
+  assert.equal(caught.status, status);
+  assert.equal(caught.retryable, false);
+  return caught;
+}
+
 function createTeam(overrides: Partial<Team> = {}): Team {
   return {
     teamId: "district-nursing",
@@ -278,7 +296,10 @@ test("a draft handover preserves its packet and source snapshot after restart", 
     const firstStore = new SqliteStore(openDatabase(databasePath));
     seedKaren(firstStore, now);
     firstStore.putHandover(requested);
-    firstStore.putHandover(draft);
+    assert.deepEqual(
+      firstStore.updateHandover(draft, requested.version),
+      draft,
+    );
     firstStore.close();
 
     const secondStore = new SqliteStore(openDatabase(databasePath));
@@ -298,26 +319,159 @@ test("a rendered handover maps every field and preserves its original creation t
   const requested = createRequestedHandover();
   store.putHandover(requested);
 
-  const rendered: HandoverRecord = {
+  const draft: HandoverRecord = {
     ...requested,
-    reason: "on_demand",
-    focus: null,
-    status: "rendered",
-    version: 3,
+    contextId: "context-handover-1",
+    status: "draft",
+    version: 2,
     packet: draftPacket,
-    rendered: renderedHandover,
     sourceSnapshot: draftSourceSnapshot,
     sourceSnapshotHash: `sha256:${"3".repeat(64)}`,
-    createdAt: "2026-08-20T10:02:00.000Z",
+    updatedAt: "2026-08-20T10:01:00.000Z",
+  };
+  store.updateHandover(draft, requested.version);
+
+  const rendered: HandoverRecord = {
+    ...draft,
+    status: "rendered",
+    version: 3,
+    rendered: renderedHandover,
     updatedAt: "2026-08-20T10:03:00.000Z",
     generatedAt: "2026-08-20T10:03:00.000Z",
   };
-  store.putHandover(rendered);
+  assert.deepEqual(store.updateHandover(rendered, draft.version), rendered);
 
-  assert.deepEqual(store.getHandover(rendered.handoverId), {
-    ...rendered,
-    createdAt: requested.createdAt,
-  });
+  assert.deepEqual(store.getHandover(rendered.handoverId), rendered);
+  assert.equal(rendered.createdAt, requested.createdAt);
+});
+
+test("putHandover is creation-only and cannot overwrite an existing ID", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const requested = createRequestedHandover();
+  store.putHandover(requested);
+
+  assert.throws(
+    () =>
+      store.putHandover({
+        ...requested,
+        interactionId: "handover:replacement",
+        requestedBy: "clinician-2",
+        idempotencyKey: "handover-replacement-001",
+        status: "draft",
+        version: 2,
+        packet: draftPacket,
+        updatedAt: "2026-08-20T10:01:00.000Z",
+      }),
+    /UNIQUE constraint failed: handovers.handover_id/,
+  );
+  assert.deepEqual(store.getHandover(requested.handoverId), requested);
+});
+
+test("a stale handover update cannot overwrite the winning lifecycle state", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const requested = createRequestedHandover();
+  store.putHandover(requested);
+  const winner: HandoverRecord = {
+    ...requested,
+    status: "draft",
+    version: 2,
+    packet: draftPacket,
+    sourceSnapshot: draftSourceSnapshot,
+    sourceSnapshotHash: `sha256:${"3".repeat(64)}`,
+    updatedAt: "2026-08-20T10:01:00.000Z",
+  };
+  store.updateHandover(winner, requested.version);
+  const winnerBytes = JSON.stringify(store.requireHandover(winner.handoverId));
+
+  const stale: HandoverRecord = {
+    ...requested,
+    status: "rendered",
+    version: 2,
+    rendered: renderedHandover,
+    generatedAt: "2026-08-20T10:02:00.000Z",
+    updatedAt: "2026-08-20T10:02:00.000Z",
+  };
+  assertStoreDomainError(
+    () => store.updateHandover(stale, requested.version),
+    "VERSION_CONFLICT",
+    409,
+  );
+
+  assert.equal(
+    JSON.stringify(store.requireHandover(winner.handoverId)),
+    winnerBytes,
+  );
+});
+
+test("handover updates reject every immutable request identity change", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const requested = createRequestedHandover();
+  store.putHandover(requested);
+  const identityChanges: Array<readonly [string, Partial<HandoverRecord>]> = [
+    ["handoverId", { handoverId: "66666666-6666-4666-8666-666666666666" }],
+    ["patientId", { patientId: "patient-2" }],
+    ["interactionId", { interactionId: "handover:changed" }],
+    ["requestedBy", { requestedBy: "clinician-2" }],
+    ["reason", { reason: "on_demand" }],
+    ["focus", { focus: "Discharge planning" }],
+    ["correlationId", { correlationId: "corr-handover-2" }],
+    ["idempotencyKey", { idempotencyKey: "handover-karen-002" }],
+    ["requestHash", { requestHash: `sha256:${"4".repeat(64)}` }],
+    ["createdAt", { createdAt: "2026-08-20T09:00:00.000Z" }],
+  ];
+
+  for (const [field, change] of identityChanges) {
+    assertStoreDomainError(
+      () =>
+        store.updateHandover(
+          {
+            ...requested,
+            ...change,
+            status: "draft",
+            version: 2,
+            packet: draftPacket,
+            updatedAt: "2026-08-20T10:01:00.000Z",
+          },
+          requested.version,
+        ),
+      "HANDOVER_IDENTITY_MISMATCH",
+      409,
+    );
+    assert.deepEqual(
+      store.getHandover(requested.handoverId),
+      requested,
+      `${field} mismatch changed the stored handover`,
+    );
+  }
+});
+
+test("handover updates reject same-version writes and version skips", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const requested = createRequestedHandover();
+  store.putHandover(requested);
+
+  for (const version of [requested.version, requested.version + 2]) {
+    assertStoreDomainError(
+      () =>
+        store.updateHandover(
+          {
+            ...requested,
+            status: "draft",
+            version,
+            packet: draftPacket,
+            updatedAt: "2026-08-20T10:01:00.000Z",
+          },
+          requested.version,
+        ),
+      "VERSION_CONFLICT",
+      409,
+    );
+    assert.deepEqual(store.getHandover(requested.handoverId), requested);
+  }
 });
 
 test("patient handovers are scoped and ordered by creation time then ID", (t) => {
@@ -377,7 +531,7 @@ test("requireHandover returns a row or throws the canonical not-found error", (t
   assert.equal(caught.retryable, false);
 });
 
-test("handover inserts enforce patient and request identity constraints", (t) => {
+test("handover inserts enforce the patient foreign key", (t) => {
   const store = createStore(t);
   const handover = createRequestedHandover();
 
@@ -385,19 +539,51 @@ test("handover inserts enforce patient and request identity constraints", (t) =>
     () => store.putHandover(handover),
     /FOREIGN KEY constraint failed/,
   );
+  assert.equal(store.getHandover(handover.handoverId), null);
+});
 
-  seedKaren(store, now);
-  store.putHandover(handover);
-  const duplicateRequest = createRequestedHandover({
-    handoverId: "55555555-5555-4555-8555-555555555555",
-    interactionId: "handover:55555555-5555-4555-8555-555555555555",
-  });
-  assert.throws(
-    () => store.putHandover(duplicateRequest),
-    /UNIQUE constraint failed: handovers.requested_by, handovers.idempotency_key/,
-  );
-  assert.equal(store.getHandover(duplicateRequest.handoverId), null);
-  assert.deepEqual(store.listPatientHandovers(handover.patientId), [handover]);
+test("concurrent stores enforce one durable request identity winner", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "handover-identity-"));
+  const databasePath = path.join(directory, "test.sqlite");
+  const firstStore = new SqliteStore(openDatabase(databasePath));
+  const secondStore = new SqliteStore(openDatabase(databasePath));
+  const winner = createRequestedHandover();
+
+  try {
+    seedKaren(firstStore, now);
+    firstStore.putHandover(winner);
+    const competing = createRequestedHandover({
+      handoverId: "55555555-5555-4555-8555-555555555555",
+      interactionId: "handover:55555555-5555-4555-8555-555555555555",
+    });
+
+    assert.throws(
+      () => secondStore.putHandover(competing),
+      /UNIQUE constraint failed: handovers.requested_by, handovers.idempotency_key/,
+    );
+    assert.deepEqual(firstStore.getHandover(winner.handoverId), winner);
+    assert.deepEqual(secondStore.getHandover(winner.handoverId), winner);
+    assert.deepEqual(
+      firstStore.getHandoverByRequest(
+        winner.requestedBy,
+        winner.idempotencyKey,
+      ),
+      winner,
+    );
+    assert.deepEqual(
+      secondStore.getHandoverByRequest(
+        winner.requestedBy,
+        winner.idempotencyKey,
+      ),
+      winner,
+    );
+    assert.equal(firstStore.getHandover(competing.handoverId), null);
+    assert.equal(secondStore.getHandover(competing.handoverId), null);
+  } finally {
+    firstStore.close();
+    secondStore.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("a failed transaction rolls patient state and its event back together", (t) => {
