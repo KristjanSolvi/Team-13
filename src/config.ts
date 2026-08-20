@@ -12,7 +12,12 @@ const environmentSchema = z.object({
   APPROVAL_HMAC_SECRET: z.string().min(32),
   MCP_PUBLIC_URL: z.string().url(),
   MCP_NAME: z.string().min(1).default("follow-through-ledger"),
+  HANDOVER_MCP_PUBLIC_URL: z
+    .union([z.literal(""), z.string().url()])
+    .optional(),
+  HANDOVER_MCP_NAME: z.string().min(1).default("follow-through-handover"),
   CORTI_AGENT_ID: z.string().optional(),
+  CORTI_HANDOVER_AGENT_ID: z.string().optional(),
   CORTI_TENANT_NAME: z.string().min(1),
   CORTI_CLIENT_ID: z.string().min(1),
   CORTI_CLIENT_SECRET: z.string().min(1),
@@ -22,6 +27,8 @@ const environmentSchema = z.object({
 
 export function parseConfig(environment: NodeJS.ProcessEnv) {
   const parsed = environmentSchema.parse(environment);
+  const taskMcpUrl = new URL(parsed.MCP_PUBLIC_URL);
+  taskMcpUrl.pathname = `${taskMcpUrl.pathname.replace(/\/+$/, "")}/handover`;
 
   return {
     port: parsed.PORT,
@@ -33,7 +40,11 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     approvalHmacSecret: parsed.APPROVAL_HMAC_SECRET,
     mcpPublicUrl: parsed.MCP_PUBLIC_URL,
     mcpName: parsed.MCP_NAME,
+    handoverMcpPublicUrl:
+      parsed.HANDOVER_MCP_PUBLIC_URL || taskMcpUrl.toString(),
+    handoverMcpName: parsed.HANDOVER_MCP_NAME,
     cortiAgentId: parsed.CORTI_AGENT_ID,
+    cortiHandoverAgentId: parsed.CORTI_HANDOVER_AGENT_ID,
     demoMode: parsed.DEMO_MODE,
     corti: {
       tenantName: parsed.CORTI_TENANT_NAME,

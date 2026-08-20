@@ -52,8 +52,9 @@ export class CortiSdkGateway implements AgentGateway {
   constructor(
     private readonly agentId: string,
     config: AppConfig,
+    mcpName = config.mcpName,
   ) {
-    this.mcpName = config.mcpName;
+    this.mcpName = mcpName;
     this.client = new CortiClient({
       environment: config.corti.environment,
       tenantName: config.corti.tenantName,

@@ -214,6 +214,16 @@ test("approved publication sends the exact proof and draft version into the mapp
     idempotencyKey: "publish-for-agent",
     mcpToken: "mcp-secret",
   });
+  const verified = store
+    .listEvents(0)
+    .filter((event) => event.eventType === "task.publish_verified");
+  assert.equal(verified.length, 1);
+  assert.deepEqual(verified[0]?.payload, {
+    taskId: draft.taskId,
+    threadId: draft.threadId,
+    state: "offered_to_team",
+    version: draft.version + 1,
+  });
 });
 
 test("a completed Corti response cannot claim publication without committed ledger state", async (t) => {

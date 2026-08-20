@@ -183,18 +183,28 @@ export class AgentRunner {
     });
     const completed = await this.gateway.waitForCompletion(submitted);
     const result = this.requireCompletedInContext(completed, contextId);
-    const committed = this.store.requireTask(input.taskId);
-    if (
-      committed.state !== "offered_to_team" ||
-      committed.version !== input.expectedVersion + 1
-    ) {
-      throw new DomainError(
-        "TASK_PUBLICATION_UNCONFIRMED",
-        "Task publication was not committed",
-        true,
-        502,
+    this.store.transaction(() => {
+      const committed = this.store.requireTask(input.taskId);
+      if (
+        committed.state !== "offered_to_team" ||
+        committed.version !== input.expectedVersion + 1
+      ) {
+        throw new DomainError(
+          "TASK_PUBLICATION_UNCONFIRMED",
+          "Task publication was not committed",
+          true,
+          502,
+        );
+      }
+      this.store.appendTaskEvent(
+        committed,
+        input.interactionId,
+        contextId,
+        { type: "agent", id: "corti" },
+        "task.publish_verified",
+        {},
       );
-    }
+    });
     return result;
   }
 }
