@@ -1,6 +1,7 @@
 import { CortiClient, type Corti } from "@corti/sdk";
 
 import type {
+  AmbientFact,
   AmbientSession,
   PipelineEvent,
   ScopedToken,
@@ -12,6 +13,7 @@ import {
   normalizeStreamTranscript,
 } from "../transcript.js";
 import {
+  applyStreamFacts,
   buildSpeechAudioConstraints,
   markTranscriptAudioQuality,
   normalizeAudioQualityEvent,
@@ -68,6 +70,7 @@ export class AmbientCapture {
   #mediaStream: MediaStream | null = null;
   #recorder: MediaRecorder | null = null;
   #segments: TranscriptSegment[] = [];
+  #facts: readonly AmbientFact[] = [];
   #audioQueue: Promise<void> = Promise.resolve();
   #ended: Promise<void> | null = null;
   #resolveEnded: (() => void) | null = null;
@@ -79,6 +82,10 @@ export class AmbientCapture {
 
   get segments(): readonly TranscriptSegment[] {
     return this.#segments;
+  }
+
+  get facts(): readonly AmbientFact[] {
+    return this.#facts;
   }
 
   async start(): Promise<void> {
@@ -278,6 +285,22 @@ export class AmbientCapture {
           payload,
         }),
       );
+      return;
+    }
+
+    if (message.type === "facts") {
+      const next = applyStreamFacts(this.#facts, message.fact);
+      if (next !== this.#facts) {
+        this.#facts = next;
+        this.#options.onEvent(
+          pipelineEvent({
+            type: "facts.updated",
+            correlationId: this.#options.correlationId,
+            interactionId: this.#options.session.interactionId,
+            payload: { facts: [...next] },
+          }),
+        );
+      }
       return;
     }
 

@@ -863,7 +863,10 @@ test("health is public while application and MCP data surfaces require their bea
     headers: { origin: UI_ORIGIN },
   });
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true });
+  assert.deepEqual(await health.json(), {
+    ok: true,
+    agents: { task: false, handover: false, meeting: false },
+  });
   assert.equal(health.headers.get("access-control-allow-origin"), UI_ORIGIN);
 
   const deniedOrigin = await fetch(`${baseUrl}/healthz`, {

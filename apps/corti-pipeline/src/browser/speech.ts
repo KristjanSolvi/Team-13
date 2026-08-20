@@ -1,6 +1,7 @@
 import type { Corti } from "@corti/sdk";
 
 import type {
+  AmbientFact,
   AudioQualityEventPayload,
   TranscriptSegment,
 } from "../contracts.js";
@@ -91,4 +92,49 @@ export function markTranscriptAudioQuality(
       ? segment
       : { ...segment, audioQuality };
   });
+}
+
+/**
+ * Folds one FactsR stream message into the accumulated fact list. Facts are
+ * keyed by id so later updates replace earlier versions, discarded facts are
+ * removed, and the result keeps a stable first-heard order. Returns the same
+ * array instance when nothing changed so React consumers can diff cheaply.
+ */
+export function applyStreamFacts(
+  current: readonly AmbientFact[],
+  incoming: readonly Corti.StreamFact[],
+): readonly AmbientFact[] {
+  if (incoming.length === 0) {
+    return current;
+  }
+  const byId = new Map(current.map((fact) => [fact.factId, fact]));
+  let changed = false;
+  for (const fact of incoming) {
+    const text = fact.text.trim();
+    if (fact.isDiscarded || text.length === 0) {
+      changed = byId.delete(fact.id) || changed;
+      continue;
+    }
+    const normalized: AmbientFact = {
+      factId: fact.id,
+      text,
+      group: fact.group.trim(),
+      source: fact.source,
+      createdAt: new Date(fact.createdAt).toISOString(),
+    };
+    const existing = byId.get(fact.id);
+    if (
+      existing === undefined ||
+      existing.text !== normalized.text ||
+      existing.group !== normalized.group ||
+      existing.source !== normalized.source
+    ) {
+      changed = true;
+    }
+    byId.set(fact.id, normalized);
+  }
+  if (!changed && byId.size === current.length) {
+    return current;
+  }
+  return [...byId.values()];
 }

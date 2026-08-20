@@ -28,7 +28,7 @@ type Props = {
   onDocumentChange: (document: ClinicalDocument) => void;
 };
 
-type BusyAction = "generate" | "save" | "file" | null;
+type BusyAction = "generate" | "save" | "file" | "receipt" | null;
 
 type SelectedCodingSuggestion = {
   group: "supported" | "candidate";
@@ -166,6 +166,12 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
   const [document, setDocument] = useState<ClinicalDocument | null>(null);
   const [history, setHistory] = useState<ClinicalDocumentVersion[]>([]);
   const [busy, setBusy] = useState<BusyAction>(null);
+  const [receipt, setReceipt] = useState<{
+    title: string;
+    content: string;
+    credits: number;
+  } | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [codingError, setCodingError] = useState<string | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
@@ -184,6 +190,8 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setDocument(null);
     setHistory([]);
     setBusy(null);
+    setReceipt(null);
+    setReceiptError(null);
     setGenerationError(null);
     setCodingError(null);
     setRecordError(null);
@@ -255,6 +263,29 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
       setCodingError(messageFor(codingResult.reason));
     }
     setBusy(null);
+  };
+
+  const handlePatientReceipt = async () => {
+    if (source.trim() === "" || !reviewed || busy !== null) return;
+    setBusy("receipt");
+    setReceiptError(null);
+    try {
+      const result = await generateSupportingDocument({
+        approvalId: reviewId ?? `record-review-${crypto.randomUUID()}`,
+        approvedClinicalText: source.trim(),
+        documentType: "patient-receipt",
+        correlationId: crypto.randomUUID(),
+      });
+      setReceipt({
+        title: result.name,
+        content: generatedText(result.sections),
+        credits: result.creditsConsumed,
+      });
+    } catch (error) {
+      setReceiptError(messageFor(error));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleSave = async () => {
@@ -559,6 +590,46 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                 Corti codes and candidates stay in separate review queues. Evidence offsets are
                 validated locally when present; no suggestion is filed automatically.
               </p>
+            </div>
+
+            <div className="border border-ehr-line bg-ehr-panel p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+                  Patient instructions · Corti Text Generation
+                </h4>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void handlePatientReceipt()}
+                  className="inline-flex items-center gap-1.5 border border-ehr-chrome bg-ehr-panel px-2.5 py-1 text-[10px] font-semibold text-ehr-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {busy === "receipt" && (
+                    <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
+                  )}
+                  {receipt === null ? "Draft patient copy" : "Redraft patient copy"}
+                </button>
+              </div>
+              {receiptError !== null ? (
+                <p role="alert" className="mt-1 text-[10px] text-escalated-strong">
+                  {receiptError}
+                </p>
+              ) : receipt === null ? (
+                <p className="mt-1 text-[10px] text-ehr-muted">
+                  Plain-language copy of the plan for the patient and their carers, drafted from the
+                  same clinician-reviewed text as the note.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-1">
+                  <p className="text-[10px] font-semibold text-ehr-foreground">{receipt.title}</p>
+                  <p className="max-h-36 overflow-y-auto whitespace-pre-wrap text-[10px] leading-relaxed text-ehr-foreground">
+                    {receipt.content}
+                  </p>
+                  <p className="text-[9px] text-ehr-muted">
+                    Draft for the clinician to hand over or read aloud · not sent automatically ·{" "}
+                    {creditsLabel(receipt.credits)}
+                  </p>
+                </div>
+              )}
             </div>
 
             {document?.status !== "filed" && (

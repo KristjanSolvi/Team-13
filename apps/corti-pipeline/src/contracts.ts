@@ -130,10 +130,19 @@ export interface AudioQualityEventPayload {
   startSeconds: number;
 }
 
+export interface AmbientFact {
+  factId: string;
+  text: string;
+  group: string;
+  source: string;
+  createdAt: string;
+}
+
 export interface PipelineEventMap {
   "ambient.started": { startedAt: string };
   "transcript.interim": { segments: TranscriptSegment[] };
   "transcript.final": { segments: TranscriptSegment[] };
+  "facts.updated": { facts: AmbientFact[] };
   "ambient.ended": { creditsConsumed?: number };
   "audio.quality_changed": AudioQualityEventPayload;
   "candidate.proposed": { candidate: FollowThroughCandidate };

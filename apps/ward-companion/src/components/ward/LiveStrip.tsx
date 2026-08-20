@@ -6,6 +6,7 @@ import type {
   PipelineEvent,
   TranscriptReviewSuggestion,
   TranscriptSegment,
+  AmbientFact,
 } from "@pipeline/contracts.js";
 import type { Patient } from "@/data/ward";
 import {
@@ -87,6 +88,7 @@ function creditsLabel(credits: number): string {
 export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const [state, setState] = useState<CaptureState>("checking");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [facts, setFacts] = useState<AmbientFact[]>([]);
   const [candidateViews, setCandidateViews] = useState<CandidateView[]>([]);
   const [message, setMessage] = useState("Checking the Corti pipeline…");
   const [audioMessage, setAudioMessage] = useState("Audio not checked");
@@ -169,6 +171,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     captureRef.current = null;
     correlationIdRef.current = crypto.randomUUID();
     setSegments([]);
+    setFacts([]);
     setCandidateViews([]);
     setAmbientCredits(null);
     setGenerationCredits(null);
@@ -211,6 +214,9 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
       case "transcript.final":
         setSegments(event.payload.segments);
         break;
+      case "facts.updated":
+        setFacts(event.payload.facts);
+        break;
       case "audio.quality_changed":
         if (event.payload.product !== "ambient") return;
         if (event.payload.state === "speech-quality-issue") {
@@ -248,6 +254,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     setState("starting");
     setMessage("Creating a scoped Corti interaction…");
     setSegments([]);
+    setFacts([]);
     setCandidateViews([]);
     setAmbientCredits(null);
     setGenerationCredits(null);
@@ -550,6 +557,30 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
           }))
         }
       />
+
+      {facts.length > 0 && (
+        <div className="border-t border-border px-4 py-2.5">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Corti FactsR · structured facts heard live
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {facts.map((fact) => (
+              <li
+                key={fact.factId}
+                className="fade-in-view flex items-center gap-1.5 rounded-full border border-teal/25 bg-teal/5 px-2.5 py-1 text-[11.5px] text-foreground"
+              >
+                <span className="rounded-full bg-teal/10 px-1.5 py-px text-[10px] uppercase tracking-wide text-teal">
+                  {fact.group}
+                </span>
+                {fact.text}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[10.5px] text-muted-foreground">
+            Facts are observations, not actions · only clinician approval creates tracked work.
+          </p>
+        </div>
+      )}
 
       {candidateViews.length > 0 && (
         <div className="space-y-2 border-t border-border px-4 py-3">

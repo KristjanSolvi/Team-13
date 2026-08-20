@@ -58,7 +58,17 @@ export function createApp(dependencies: AppDependencies): Express {
   });
   app.use(express.json({ limit: "256kb" }));
   app.get("/healthz", (_request, response) => {
-    response.json({ ok: true });
+    // Surfaces which Corti agents are provisioned so a pre-demo readiness
+    // check catches missing CORTI_*_AGENT_ID configuration before it degrades
+    // live behavior on stage.
+    response.json({
+      ok: true,
+      agents: {
+        task: dependencies.runner !== undefined,
+        handover: dependencies.handoverRunner !== undefined,
+        meeting: dependencies.meetingRunner !== undefined,
+      },
+    });
   });
   mountMcp(
     app,
