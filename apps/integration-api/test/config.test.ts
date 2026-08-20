@@ -26,4 +26,15 @@ describe("integration API config", () => {
   it("requires the server-only agentic application token", () => {
     expect(() => parseConfig({})).toThrow();
   });
+
+  it("allows both common local Vite hostnames by default", () => {
+    const config = parseConfig({
+      AGENTIC_APP_BEARER_TOKEN: "app-secret",
+    });
+
+    expect(config.allowedOrigins).toEqual([
+      "http://127.0.0.1:5173",
+      "http://localhost:5173",
+    ]);
+  });
 });

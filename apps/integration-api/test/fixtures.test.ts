@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { candidateSchema } from "../src/contracts.js";
+import { projectWardCompanionOverview } from "../src/ward-companion.js";
 
 const fixtures = new URL("../fixtures/", import.meta.url);
 
@@ -40,5 +41,24 @@ describe("published integration fixtures", () => {
     expect(value).toContain("id: 41");
     expect(value).toContain("id: 42");
     expect(value).toContain("event: thread.state_changed");
+  });
+
+  it("derives the Ward Companion fixture from the authoritative overview", async () => {
+    const overview = JSON.parse(
+      await readFile(new URL("patient-overview-karen.json", fixtures), "utf8"),
+    ) as {
+      patientId: string;
+      threads: unknown[];
+      tasks: unknown[];
+      observedAt: string;
+    };
+    const companion = JSON.parse(
+      await readFile(
+        new URL("ward-companion-overview-karen.json", fixtures),
+        "utf8",
+      ),
+    ) as unknown;
+
+    expect(projectWardCompanionOverview(overview)).toEqual(companion);
   });
 });

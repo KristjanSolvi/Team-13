@@ -162,6 +162,35 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/patients/{patientId}/companion": {
+      get: {
+        summary: "Read a Ward Companion-compatible patient projection",
+        description:
+          "Maps authoritative Agentic threads and tasks into the current Ward Companion thread shape. Dismissed records are omitted and completed tasks remain tracking until verified.",
+        parameters: [
+          {
+            name: "patientId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": {
+            description: "Ward Companion patient follow-through projection",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/WardCompanionOverview",
+                },
+              },
+            },
+          },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/events/stream": {
       get: {
         summary: "Proxy the Agentic domain-event stream",
@@ -357,6 +386,147 @@ export const integrationOpenApi = {
           threads: { type: "array", items: { type: "object" } },
           tasks: { type: "array", items: { type: "object" } },
           observedAt: { type: "string", format: "date-time" },
+        },
+      },
+      WardCompanionOverview: {
+        type: "object",
+        additionalProperties: false,
+        required: ["schemaVersion", "patientId", "observedAt", "threads"],
+        properties: {
+          schemaVersion: { const: "1" },
+          patientId: { type: "string" },
+          observedAt: { type: "string", format: "date-time" },
+          threads: {
+            type: "array",
+            items: { $ref: "#/components/schemas/WardCompanionThread" },
+          },
+        },
+      },
+      WardCompanionThread: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "patientId",
+          "title",
+          "status",
+          "heard",
+          "matters",
+          "suggestion",
+          "assignee",
+          "candidates",
+          "due",
+          "activity",
+          "backend",
+        ],
+        properties: {
+          id: { type: "string" },
+          patientId: { type: "string" },
+          title: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["pending", "tracking", "verified", "escalated"],
+          },
+          heard: { type: "string" },
+          matters: { type: "string" },
+          suggestion: { type: "string" },
+          assignee: { type: ["string", "null"] },
+          candidates: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "role", "free"],
+              properties: {
+                name: { type: "string" },
+                role: { type: "string" },
+                free: { type: "boolean" },
+              },
+            },
+          },
+          due: { type: "string" },
+          activity: {
+            type: "array",
+            items: { $ref: "#/components/schemas/WardCompanionActivity" },
+          },
+          backend: {
+            $ref: "#/components/schemas/WardCompanionBackendMetadata",
+          },
+        },
+      },
+      WardCompanionActivity: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "at", "actor", "text", "kind"],
+        properties: {
+          id: { type: "string" },
+          at: { type: "string" },
+          actor: { type: "string" },
+          text: { type: "string" },
+          kind: { type: "string", enum: ["note", "system", "action"] },
+        },
+      },
+      WardCompanionBackendMetadata: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "threadId",
+          "taskId",
+          "threadVersion",
+          "taskVersion",
+          "threadState",
+          "taskState",
+          "targetTeamId",
+          "evidenceRefs",
+          "availableCommands",
+        ],
+        properties: {
+          threadId: { type: "string" },
+          taskId: { type: ["string", "null"] },
+          threadVersion: { type: "integer", minimum: 1 },
+          taskVersion: { type: ["integer", "null"], minimum: 1 },
+          threadState: {
+            type: "string",
+            enum: [
+              "awaiting_review",
+              "tracking",
+              "verified",
+              "escalated",
+              "dismissed",
+            ],
+          },
+          taskState: {
+            type: ["string", "null"],
+            enum: [
+              "draft",
+              "offered_to_team",
+              "assigned_to_member",
+              "accepted",
+              "completed",
+              "verified",
+              "escalated",
+              "dismissed",
+              null,
+            ],
+          },
+          targetTeamId: { type: ["string", "null"] },
+          evidenceRefs: { type: "array", items: { type: "string" } },
+          availableCommands: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "approve",
+                "correct",
+                "dismiss",
+                "reopen",
+                "accept",
+                "decline",
+                "complete",
+                "verify",
+              ],
+            },
+          },
         },
       },
       TaskCommand: {
