@@ -42,6 +42,25 @@ describe("integration API config", () => {
     ).toThrow();
   });
 
+  it.each([
+    ["Agentic", "AGENTIC_APP_BEARER_TOKEN"],
+    ["patient profile", "PATIENT_PROFILE_BEARER_TOKEN"],
+    ["mock EHR", "MOCK_EHR_BEARER_TOKEN"],
+  ] as const)(
+    "rejects reuse of the inbound bearer for the %s trust domain",
+    (_label, reusedVariable) => {
+      const environment = {
+        INTEGRATION_API_BEARER_TOKEN: "integration-secret",
+        AGENTIC_APP_BEARER_TOKEN: "agentic-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      };
+      environment[reusedVariable] = environment.INTEGRATION_API_BEARER_TOKEN;
+
+      expect(() => parseConfig(environment)).toThrow();
+    },
+  );
+
   it("allows both common local Vite hostnames by default", () => {
     const config = parseConfig({
       INTEGRATION_API_BEARER_TOKEN: "public-secret",

@@ -1,29 +1,49 @@
 import { z } from "zod";
 
-const environmentSchema = z.object({
-  PORT: z.coerce.number().int().min(1).max(65_535).optional(),
-  HOST: z.string().min(1).optional(),
-  INTEGRATION_API_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
-  INTEGRATION_API_HOST: z.string().min(1).optional(),
-  AGENTIC_BASE_URL: z.url().default("http://127.0.0.1:3000"),
-  PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
-  PATIENT_PROFILE_BASE_URL: z.url().default("http://127.0.0.1:8791"),
-  MOCK_EHR_BASE_URL: z.url().default("http://127.0.0.1:8793"),
-  INTEGRATION_API_BEARER_TOKEN: z.string().min(8),
-  AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
-  PATIENT_PROFILE_BEARER_TOKEN: z.string().min(8),
-  MOCK_EHR_BEARER_TOKEN: z.string().min(8),
-  UI_ORIGINS: z
-    .string()
-    .default("http://127.0.0.1:5173,http://localhost:5173"),
-  UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(250).max(120_000).default(8_000),
-  HANDOVER_UPSTREAM_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .min(480_000)
-    .max(900_000)
-    .default(600_000),
-});
+const environmentSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+    HOST: z.string().min(1).optional(),
+    INTEGRATION_API_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+    INTEGRATION_API_HOST: z.string().min(1).optional(),
+    AGENTIC_BASE_URL: z.url().default("http://127.0.0.1:3000"),
+    PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
+    PATIENT_PROFILE_BASE_URL: z.url().default("http://127.0.0.1:8791"),
+    MOCK_EHR_BASE_URL: z.url().default("http://127.0.0.1:8793"),
+    INTEGRATION_API_BEARER_TOKEN: z.string().min(8),
+    AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
+    PATIENT_PROFILE_BEARER_TOKEN: z.string().min(8),
+    MOCK_EHR_BEARER_TOKEN: z.string().min(8),
+    UI_ORIGINS: z
+      .string()
+      .default("http://127.0.0.1:5173,http://localhost:5173"),
+    UPSTREAM_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(250)
+      .max(120_000)
+      .default(8_000),
+    HANDOVER_UPSTREAM_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(480_000)
+      .max(900_000)
+      .default(600_000),
+  })
+  .superRefine((value, context) => {
+    const upstreamTokens = [
+      value.AGENTIC_APP_BEARER_TOKEN,
+      value.PATIENT_PROFILE_BEARER_TOKEN,
+      value.MOCK_EHR_BEARER_TOKEN,
+    ];
+    if (upstreamTokens.includes(value.INTEGRATION_API_BEARER_TOKEN)) {
+      context.addIssue({
+        code: "custom",
+        path: ["INTEGRATION_API_BEARER_TOKEN"],
+        message: "Inbound bearer must be unique across service trust domains",
+      });
+    }
+  });
 
 export function parseConfig(environment: NodeJS.ProcessEnv) {
   const value = environmentSchema.parse(environment);
