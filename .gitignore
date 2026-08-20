@@ -1,5 +1,6 @@
 node_modules/
 dist/
+build/
 coverage/
 .DS_Store
 
@@ -8,7 +9,10 @@ coverage/
 .env.*
 !.env.example
 
-# Local logs and editor state
+# Runtime data, logs, and editor state
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 *.log
 .idea/
 .vscode/
