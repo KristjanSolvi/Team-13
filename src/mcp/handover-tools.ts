@@ -3,7 +3,6 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { DomainError } from "../domain/errors.js";
-import { handoverPacketSchema } from "../domain/handover.js";
 import type { HandoverService } from "../services/handover-service.js";
 import type { RecordService } from "../services/record-service.js";
 import { contextIdFromMeta } from "./auth.js";
@@ -48,6 +47,46 @@ function failure(error: unknown): CallToolResult {
     isError: true,
   };
 }
+
+function groundedStatementToolSchema() {
+  return z.object({
+    statement: z.string().trim().min(1).max(1_000),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  });
+}
+
+function handoverTaskItemToolSchema() {
+  return z.object({
+    taskId: z.string().uuid(),
+    threadId: z.string().uuid(),
+    summary: z.string().min(1).max(240),
+    state: z.enum([
+      "draft",
+      "offered_to_team",
+      "assigned_to_member",
+      "accepted",
+      "completed",
+      "escalated",
+    ]),
+    targetTeamId: z.string().min(1).max(160),
+    assignedMemberId: z.string().min(1).max(160).nullable(),
+    clinicalUrgency: z.enum(["high", "medium", "routine"]),
+    acceptBy: z.string().datetime(),
+    dueBy: z.string().datetime(),
+    version: z.number().int().positive(),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  });
+}
+
+const handoverPacketToolSchema = z.object({
+  situation: z.array(groundedStatementToolSchema()).max(20),
+  background: z.array(groundedStatementToolSchema()).max(20),
+  currentConcerns: z.array(groundedStatementToolSchema()).max(20),
+  outstandingTasks: z.array(handoverTaskItemToolSchema()).max(50),
+  awaitingVerification: z.array(handoverTaskItemToolSchema()).max(50),
+  escalations: z.array(handoverTaskItemToolSchema()).max(50),
+  unknowns: z.array(z.string().trim().min(1).max(500)).max(20),
+});
 
 export function createHandoverMcp(
   records: RecordService,
@@ -148,7 +187,7 @@ export function createHandoverMcp(
       inputSchema: {
         handoverId: z.string().uuid(),
         patientId: z.string().min(1).max(160),
-        packet: handoverPacketSchema,
+        packet: handoverPacketToolSchema,
       },
       annotations: {
         readOnlyHint: false,

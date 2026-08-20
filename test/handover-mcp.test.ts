@@ -170,6 +170,11 @@ test("lists exactly the five patient-scoped non-actionable handover tools", asyn
   ]);
   assert.equal(names.includes("create_task_draft"), false);
   assert.equal(names.includes("publish_team_task"), false);
+  const saveDraft = result.tools.find(
+    (tool) => tool.name === "save_handover_draft",
+  );
+  assert.ok(saveDraft);
+  assert.equal(JSON.stringify(saveDraft.inputSchema).includes('"$ref"'), false);
 });
 
 test("denies missing context and a context scoped to another patient", async (t) => {
