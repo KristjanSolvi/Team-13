@@ -61,8 +61,39 @@ export interface PipelineGateway {
   ): Promise<UpstreamJsonResult>;
 }
 
+export interface ProfileGateway {
+  health(): Promise<unknown>;
+  getProfile(patientId: string, meta: RequestMeta): Promise<unknown>;
+  updateProfile(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+}
+
+export interface MockEhrGateway {
+  health(): Promise<unknown>;
+  listDocuments(patientId: string, meta: RequestMeta): Promise<unknown[]>;
+  createDocument(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  reviseDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  fileDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  documentHistory(documentId: string, meta: RequestMeta): Promise<unknown[]>;
+}
+
 interface FetchJsonOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   body?: unknown;
   bearerToken?: string;
   meta?: RequestMeta;
@@ -360,6 +391,124 @@ export class HttpPipelineGateway implements PipelineGateway {
   }
 }
 
+export class HttpProfileGateway implements ProfileGateway {
+  private readonly client: JsonHttpClient;
+
+  constructor(
+    baseUrl: string,
+    timeoutMs: number,
+    private readonly bearerToken: string,
+    fetchImpl: typeof fetch = fetch,
+  ) {
+    this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
+  }
+
+  health(): Promise<unknown> {
+    return this.client.request("/healthz", { authenticate: false });
+  }
+
+  async getProfile(patientId: string, meta: RequestMeta): Promise<unknown> {
+    return requiredObject(await this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/profile`,
+      { bearerToken: this.bearerToken, meta },
+    ));
+  }
+
+  updateProfile(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/profile`,
+      {
+        method: "PATCH",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+}
+
+export class HttpMockEhrGateway implements MockEhrGateway {
+  private readonly client: JsonHttpClient;
+
+  constructor(
+    baseUrl: string,
+    timeoutMs: number,
+    private readonly bearerToken: string,
+    fetchImpl: typeof fetch = fetch,
+  ) {
+    this.client = new JsonHttpClient(baseUrl, timeoutMs, fetchImpl);
+  }
+
+  health(): Promise<unknown> {
+    return this.client.request("/healthz", { authenticate: false });
+  }
+
+  async listDocuments(patientId: string, meta: RequestMeta): Promise<unknown[]> {
+    const payload = await this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/documents`,
+      { bearerToken: this.bearerToken, meta },
+    );
+    return requiredArray(payload, "documents");
+  }
+
+  createDocument(
+    patientId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/documents`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  reviseDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: "PATCH",
+      body,
+      bearerToken: this.bearerToken,
+      meta,
+    });
+  }
+
+  fileDocument(
+    documentId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/documents/${encodeURIComponent(documentId)}/file`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  async documentHistory(documentId: string, meta: RequestMeta): Promise<unknown[]> {
+    const payload = await this.client.request(
+      `/api/documents/${encodeURIComponent(documentId)}/history`,
+      { bearerToken: this.bearerToken, meta },
+    );
+    return requiredArray(payload, "versions");
+  }
+}
+
 function requiredArray(payload: unknown, key: string): unknown[] {
   if (
     typeof payload !== "object" ||
@@ -369,6 +518,13 @@ function requiredArray(payload: unknown, key: string): unknown[] {
     throw invalidUpstreamShape();
   }
   return (payload as Record<string, unknown>)[key] as unknown[];
+}
+
+function requiredObject(payload: unknown): Record<string, unknown> {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    throw invalidUpstreamShape();
+  }
+  return payload as Record<string, unknown>;
 }
 
 function invalidUpstreamShape(): IntegrationError {

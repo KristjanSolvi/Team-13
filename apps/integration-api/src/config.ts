@@ -7,7 +7,11 @@ const environmentSchema = z.object({
   INTEGRATION_API_HOST: z.string().min(1).optional(),
   AGENTIC_BASE_URL: z.url().default("http://127.0.0.1:3000"),
   PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
+  PATIENT_PROFILE_BASE_URL: z.url().default("http://127.0.0.1:8791"),
+  MOCK_EHR_BASE_URL: z.url().default("http://127.0.0.1:8793"),
   AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
+  PATIENT_PROFILE_BEARER_TOKEN: z.string().min(8),
+  MOCK_EHR_BEARER_TOKEN: z.string().min(8),
   UI_ORIGINS: z
     .string()
     .default("http://127.0.0.1:5173,http://localhost:5173"),
@@ -31,7 +35,11 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     host: value.INTEGRATION_API_HOST ?? value.HOST ?? "127.0.0.1",
     agenticBaseUrl: value.AGENTIC_BASE_URL,
     pipelineBaseUrl: value.PIPELINE_BASE_URL,
+    patientProfileBaseUrl: value.PATIENT_PROFILE_BASE_URL,
+    mockEhrBaseUrl: value.MOCK_EHR_BASE_URL,
     agenticBearerToken: value.AGENTIC_APP_BEARER_TOKEN,
+    patientProfileBearerToken: value.PATIENT_PROFILE_BEARER_TOKEN,
+    mockEhrBearerToken: value.MOCK_EHR_BEARER_TOKEN,
     allowedOrigins,
     upstreamTimeoutMs: value.UPSTREAM_TIMEOUT_MS,
   };

@@ -17,6 +17,9 @@ something is added or removed.
   screens/workflows** — names or visual concepts may appear in the demo, but all
   are simulated fixtures. There is no production integration, endorsement, or
   live clinical data exchange.
+- **Synthetic mock EHR service** — a team-owned SQLite document/version store
+  behind the simulated Nervecentre UI. It is not a vendor emulator, FHIR
+  server, or clinical system integration.
 
 ## Organizer-provided datasets
 
@@ -37,6 +40,7 @@ something is added or removed.
 
 The exact dependency and version lists are in `package-lock.json`,
 `apps/corti-pipeline/package-lock.json`, `apps/integration-api/package-lock.json`,
+`apps/mock-ehr/package-lock.json`,
 `apps/ward-companion/package-lock.json`, and the imported
 `apps/ward-companion/bun.lock`. Major components include React, TanStack
 Router/Start, Vite, TypeScript, Express, Zod, the Model Context Protocol SDK,

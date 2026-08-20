@@ -191,6 +191,184 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/ehr/patients/{patientId}": {
+      get: {
+        summary: "Read one composed synthetic EHR record",
+        description:
+          "Combines the current audited patient profile with versioned mock-EHR documents.",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": {
+            description: "Current patient profile and clinical documents",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EhrPatientRecord" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/patients/{patientId}/profile": {
+      patch: {
+        summary: "Apply an attributed patient-profile edit from the EHR surface",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EhrProfileUpdate" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated authoritative profile version",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/patients/{patientId}/documents": {
+      post: {
+        summary: "Create an attributed mock-EHR document draft",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EhrDocumentCreate" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created document draft",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/documents/{documentId}": {
+      patch: {
+        summary: "Create a new version of an unfiled document",
+        parameters: [
+          { $ref: "#/components/parameters/DocumentId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EhrDocumentRevision" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated document draft",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/documents/{documentId}/file": {
+      post: {
+        summary: "File the reviewed document version to the synthetic record",
+        parameters: [
+          { $ref: "#/components/parameters/DocumentId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/EhrDocumentFile" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Immutable filed document version",
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/ehr/documents/{documentId}/history": {
+      get: {
+        summary: "Read immutable mock-EHR document version history",
+        parameters: [
+          { $ref: "#/components/parameters/DocumentId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": {
+            description: "Newest-first document versions",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["versions"],
+                  properties: {
+                    versions: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/events/stream": {
       get: {
         summary: "Proxy the Agentic domain-event stream",
@@ -282,6 +460,24 @@ export const integrationOpenApi = {
   },
   components: {
     parameters: {
+      PatientId: {
+        name: "patientId",
+        in: "path",
+        required: true,
+        schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+      },
+      DocumentId: {
+        name: "documentId",
+        in: "path",
+        required: true,
+        schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+      },
+      ActorId: {
+        name: "x-actor-id",
+        in: "header",
+        required: true,
+        schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,120}$" },
+      },
       CorrelationId: {
         name: "x-correlation-id",
         in: "header",
@@ -300,6 +496,70 @@ export const integrationOpenApi = {
       },
     },
     schemas: {
+      EhrPatientRecord: {
+        type: "object",
+        additionalProperties: false,
+        required: ["schemaVersion", "patientId", "profile", "documents", "observedAt"],
+        properties: {
+          schemaVersion: { const: "1" },
+          patientId: { type: "string" },
+          profile: { type: "object", additionalProperties: true },
+          documents: { type: "array", items: { type: "object" } },
+          observedAt: { type: "string", format: "date-time" },
+        },
+      },
+      EhrProfileUpdate: {
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedVersion", "idempotencyKey", "reason", "changes"],
+        properties: {
+          expectedVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          reason: { type: "string", minLength: 3, maxLength: 500 },
+          changes: { type: "object", minProperties: 1, additionalProperties: true },
+        },
+      },
+      EhrDocumentCreate: {
+        type: "object",
+        additionalProperties: false,
+        required: ["idempotencyKey", "category", "title", "content", "source"],
+        properties: {
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          category: { type: "string", enum: ["medical", "discharge"] },
+          title: { type: "string", minLength: 1, maxLength: 240 },
+          content: { type: "string", minLength: 1, maxLength: 40000 },
+          source: { type: "string", enum: ["clinician", "agent", "scribe"] },
+        },
+      },
+      EhrDocumentRevision: {
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedVersion", "idempotencyKey", "reason", "changes"],
+        properties: {
+          expectedVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          reason: { type: "string", minLength: 3, maxLength: 500 },
+          changes: {
+            type: "object",
+            minProperties: 1,
+            additionalProperties: false,
+            properties: {
+              title: { type: "string", minLength: 1, maxLength: 240 },
+              content: { type: "string", minLength: 1, maxLength: 40000 },
+            },
+          },
+        },
+      },
+      EhrDocumentFile: {
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedVersion", "idempotencyKey", "reason"],
+        properties: {
+          expectedVersion: { type: "integer", minimum: 1 },
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+          reason: { type: "string", minLength: 3, maxLength: 500 },
+        },
+      },
       Evidence: {
         type: "object",
         additionalProperties: false,

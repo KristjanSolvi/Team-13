@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   HttpAgenticGateway,
+  HttpMockEhrGateway,
   HttpPipelineGateway,
+  HttpProfileGateway,
 } from "../src/gateways.js";
 
 describe("HTTP gateways", () => {
@@ -177,5 +179,80 @@ describe("HTTP gateways", () => {
     expect(headers.get("authorization")).toBe("Bearer server-only-token");
     expect(headers.get("last-event-id")).toBe("42");
     expect(headers.get("x-correlation-id")).toBe("corr-stream-1");
+  });
+
+  it("keeps profile credentials server-side and forwards attributed PATCH metadata", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ patientId: "synthetic-karen", version: 3 }), {
+        status: 200,
+      }),
+    );
+    const gateway = new HttpProfileGateway(
+      "http://profile.test",
+      1_000,
+      "profile-private-token",
+      fetchImpl,
+    );
+    const body = {
+      expectedVersion: 2,
+      idempotencyKey: "profile-update-001",
+      reason: "Patient confirmed discharge plan",
+      changes: { flow: { homeTomorrow: true } },
+    };
+
+    await gateway.updateProfile("synthetic-karen", body, {
+      actorId: "clinician:marriott",
+      correlationId: "corr-profile-1",
+    });
+
+    const [url, options] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "http://profile.test/api/patients/synthetic-karen/profile",
+    );
+    expect(options?.method).toBe("PATCH");
+    const headers = new Headers(options?.headers);
+    expect(headers.get("authorization")).toBe("Bearer profile-private-token");
+    expect(headers.get("x-actor-id")).toBe("clinician:marriott");
+    expect(headers.get("x-correlation-id")).toBe("corr-profile-1");
+  });
+
+  it("rejects a malformed profile response", async () => {
+    const gateway = new HttpProfileGateway(
+      "http://profile.test",
+      1_000,
+      "profile-private-token",
+      vi.fn<typeof fetch>(async () =>
+        new Response(JSON.stringify("not-an-object"), { status: 200 }),
+      ),
+    );
+
+    await expect(
+      gateway.getProfile("synthetic-karen", { correlationId: "corr-profile-1" }),
+    ).rejects.toMatchObject({ code: "UPSTREAM_INVALID_RESPONSE", status: 502 });
+  });
+
+  it("validates mock-EHR document lists and keeps its credential private", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ documents: [{ documentId: "document-1" }] }), {
+        status: 200,
+      }),
+    );
+    const gateway = new HttpMockEhrGateway(
+      "http://mock-ehr.test",
+      1_000,
+      "mock-ehr-private-token",
+      fetchImpl,
+    );
+
+    await expect(
+      gateway.listDocuments("synthetic-karen", { correlationId: "corr-ehr-1" }),
+    ).resolves.toEqual([{ documentId: "document-1" }]);
+    const [url, options] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "http://mock-ehr.test/api/patients/synthetic-karen/documents",
+    );
+    expect(new Headers(options?.headers).get("authorization")).toBe(
+      "Bearer mock-ehr-private-token",
+    );
   });
 });
