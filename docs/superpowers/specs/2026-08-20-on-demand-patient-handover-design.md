@@ -123,7 +123,7 @@ same idempotency key replays the exact saved result.
   "reason": "assignment",
   "requestedBy": "clinician:123",
   "generatedAt": "2026-08-20T10:00:00.000Z",
-  "sourceSnapshotHash": "sha256:...",
+  "sourceSnapshotHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
   "packet": {
     "situation": [],
     "background": [],
@@ -333,7 +333,9 @@ Add a `handovers` table containing:
 
 - handover, patient, request interaction, and Corti context identifiers;
 - requester, request reason, optional focus, and correlation identifier;
-- `draft` or `rendered` status and optimistic-lock version;
+- internal `requested`, `draft`, `rendered`, or `failed` status and
+  optimistic-lock version; only `draft` and `rendered` are returnable handover
+  results;
 - canonical packet JSON;
 - rendered sections JSON when available;
 - source snapshot JSON and its canonical SHA-256 hash;
@@ -349,7 +351,7 @@ milestones are retained for the visible activity trail.
 
 At draft creation, `HandoverService` builds a canonical source snapshot from:
 
-- sorted patient record item identifiers and source references;
+- sorted patient record item identifiers, source references, and content hashes;
 - sorted open thread identifiers and versions;
 - sorted non-dismissed task identifiers and versions.
 
@@ -363,10 +365,13 @@ This avoids returning a handover whose task owner, state, or deadline changed
 during generation. It also avoids treating an unrelated event elsewhere in the
 ward as a patient-data conflict.
 
-The same idempotency key, actor, and patient replay the exact saved result after
-finalization. If rendering previously failed, replay resumes from the saved
-canonical packet without another agent call. Reuse of the key with a different
-patient, actor, reason, or focus fails with `409 IDEMPOTENCY_CONFLICT`.
+The request row is persisted before the Corti agent starts, so concurrent reuse
+of the same key cannot start a second agent run. A concurrent replay receives
+retryable `409 HANDOVER_IN_PROGRESS`. The same idempotency key, actor, and
+patient replay the exact saved result after finalization. If rendering
+previously failed, replay resumes from the saved canonical packet without
+another agent call. Reuse of the key with a different patient, actor, reason, or
+focus fails with `409 IDEMPOTENCY_CONFLICT`.
 
 ## Human authority and safety rules
 
