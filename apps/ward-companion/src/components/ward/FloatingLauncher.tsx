@@ -44,7 +44,7 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
       onClick={handleClick}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
-      className="liquid-glass-subtle liquid-press fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full py-2.5 pl-3 pr-4 text-sm font-medium text-foreground hover:-translate-y-0.5"
+      className="liquid-glass-subtle liquid-press fixed right-6 top-8 z-50 flex items-center gap-3 rounded-full py-2.5 pl-3 pr-4 text-sm font-medium text-foreground hover:-translate-y-0.5"
     >
       {open ? (
         <span className="flex items-center gap-2">
@@ -52,7 +52,9 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
             <Sparkles className="size-3.5 text-teal" />
             <span className="absolute -right-0.5 -top-0.5 size-1.5 animate-pulse rounded-full bg-pending" />
           </span>
-          <span className="text-xs">Ward Threads</span>
+          <span className="text-xs underline decoration-teal/40 underline-offset-2">
+            Ward Threads
+          </span>
         </span>
       ) : (
         <>
@@ -60,7 +62,7 @@ export function FloatingLauncher({ open, onToggle }: { open: boolean; onToggle: 
             <Sparkles className="size-4 text-teal" />
             <span className="absolute -right-0.5 -top-0.5 size-2 animate-pulse rounded-full bg-pending" />
           </span>
-          Ward Threads
+          <span className="underline decoration-teal/40 underline-offset-2">Ward Threads</span>
           <kbd className="liquid-glass-track rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
             ⇧ ⇧
           </kbd>

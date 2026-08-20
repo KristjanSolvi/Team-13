@@ -58,12 +58,11 @@ function Index() {
   const [view, setView] = useState<"board" | "activity" | "insights">("board");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [cameFromBoard, setCameFromBoard] = useState(false);
-  const [scopeId, setScopeId] = useState<string | null>(null);
+  const [scopeId, setScopeId] = useState<string>("p1");
   const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
-  const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
+  const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId}` : view);
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
     const patient = patients.find((candidate) => candidate.id === uiPatientId);
@@ -332,8 +331,9 @@ function Index() {
       },
     ]);
     setActiveThreadId(id);
+    setEhrPatientId(patientId);
+    setScopeId(patientId);
     setView("activity");
-    setCameFromBoard(false);
     setOpen(true);
     addNote(patientId, `New thread started: ${title}. Tracking through to completion.`);
     addNote(patientId, `Outstanding before discharge: ${title}.`, "discharge");
@@ -355,6 +355,7 @@ function Index() {
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
+          setScopeId(id);
           setView("activity");
           setOpen(true);
         }}
@@ -371,7 +372,6 @@ function Index() {
                 value={view}
                 onChange={(key) => {
                   setView(key);
-                  if (key === "board") setCameFromBoard(false);
                 }}
               />
 
@@ -404,8 +404,7 @@ function Index() {
                   scopeId={scopeId}
                   onScopeChange={(id) => {
                     setScopeId(id);
-                    if (id) setEhrPatientId(id);
-                    setCameFromBoard(false);
+                    setEhrPatientId(id);
                   }}
                   activeThreadId={activeThreadId}
                   onSelect={setActiveThreadId}
@@ -416,13 +415,10 @@ function Index() {
                   ledgerErrors={ledgerErrors}
                   onAddActivity={handleAddActivity}
                   onAddThread={handleAddThread}
-                  onSelectPatient={setEhrPatientId}
                   onRefreshPatient={refreshPatientThreads}
-                  cameFromBoard={cameFromBoard}
                   onBackToBoard={() => {
                     setView("board");
-                    setCameFromBoard(false);
-                    setScopeId(null);
+                    setScopeId(ehrPatientId);
                   }}
                 />
               </div>
@@ -457,7 +453,6 @@ function Index() {
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
                       setScopeId(pid);
-                      setCameFromBoard(true);
                       setView("activity");
                     }}
                     onOpenThread={(id) => {
@@ -465,7 +460,6 @@ function Index() {
                       setEhrPatientId(pid);
                       setScopeId(pid);
                       setActiveThreadId(id);
-                      setCameFromBoard(true);
                       setView("activity");
                     }}
                   />

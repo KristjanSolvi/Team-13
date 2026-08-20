@@ -22,8 +22,8 @@ import { usePendingAction } from "./useLoading";
 type Props = {
   threads: Thread[];
   patientId: string;
-  scopeId: string | null;
-  onScopeChange: (id: string | null) => void;
+  scopeId: string;
+  onScopeChange: (id: string) => void;
   activeThreadId: string | null;
   onSelect: (id: string | null) => void;
   onStatusChange: (id: string, status: ThreadStatus) => void;
@@ -33,9 +33,7 @@ type Props = {
   ledgerErrors: Record<string, string>;
   onAddActivity: (id: string, text: string) => void;
   onAddThread: (patientId: string, title: string) => void;
-  onSelectPatient: (id: string) => void;
   onRefreshPatient: (id: string) => Promise<void>;
-  cameFromBoard?: boolean;
   onBackToBoard: () => void;
 };
 
@@ -97,24 +95,21 @@ export function PatientActivity({
   ledgerErrors,
   onAddActivity,
   onAddThread,
-  onSelectPatient,
   onRefreshPatient,
-  cameFromBoard,
   onBackToBoard,
 }: Props) {
   const [draft, setDraft] = useState("");
   const [newTask, setNewTask] = useState("");
   const [showNewTask, setShowNewTask] = useState(false);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "mine" | "unowned" | "attention" | "done">("all");
+  const [filter, setFilter] = useState<"all" | "mine" | "attention" | "done">("all");
   const { pending, run } = usePendingAction();
 
   const patient = patients.find((p) => p.id === patientId) ?? patients[0]!;
-  const scoped = scopeId ? threads.filter((t) => t.patientId === scopeId) : threads;
+  const scoped = threads.filter((t) => t.patientId === scopeId);
   const items = scoped
     .filter((t) => {
       if (filter === "mine") return t.assignee === "You" && t.status !== "verified";
-      if (filter === "unowned") return !t.assignee && t.status !== "verified";
       if (filter === "attention") return t.status === "escalated" || t.status === "pending";
       if (filter === "done") return t.status === "verified";
       return true;
@@ -122,7 +117,7 @@ export function PatientActivity({
     .sort((a, b) => {
       const rank = (t: Thread) =>
         t.status === "escalated" ? 0 : t.status === "pending" ? 1 : t.status === "tracking" ? 2 : 3;
-      return rank(a) - rank(b) || a.patientId.localeCompare(b.patientId);
+      return rank(a) - rank(b);
     });
   const openCount = scoped.filter((t) => t.status !== "verified").length;
   const doneCount = scoped.filter((t) => t.status === "verified").length;
@@ -134,11 +129,6 @@ export function PatientActivity({
       key: "mine",
       label: "Mine",
       count: scoped.filter((t) => t.assignee === "You" && t.status !== "verified").length,
-    },
-    {
-      key: "unowned",
-      label: "No owner",
-      count: scoped.filter((t) => !t.assignee && t.status !== "verified").length,
     },
     {
       key: "attention",
@@ -154,35 +144,27 @@ export function PatientActivity({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
-              {scopeId ? (patientOf(scopeId)?.name ?? "Ward activity") : "Ward activity"}
+              {patientOf(scopeId)?.name ?? "Activity"}
             </p>
             <p className="text-[12.5px] text-muted-foreground">
-              {scopeId
-                ? `Bed ${patientOf(scopeId)?.bed} · ${patientOf(scopeId)?.bay}`
-                : "All clinicians"}
+              Bed {patientOf(scopeId)?.bed} · {patientOf(scopeId)?.bay}
               {" · "}
               {openCount} open · {doneCount} done
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {scopeId && (
-              <button
-                onClick={() => {
-                  onScopeChange(null);
-                  if (cameFromBoard) onBackToBoard();
-                }}
-                className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-background"
-              >
-                <ArrowLeft className="size-3.5" /> {cameFromBoard ? "Board" : "Whole ward"}
-              </button>
-            )}
+            <button
+              onClick={onBackToBoard}
+              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-background"
+            >
+              <ArrowLeft className="size-3.5" /> Board
+            </button>
             <select
-              value={scopeId ?? "ward"}
-              onChange={(e) => onScopeChange(e.target.value === "ward" ? null : e.target.value)}
+              value={scopeId}
+              onChange={(e) => onScopeChange(e.target.value)}
               className="shrink-0 rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12.5px] font-medium"
               aria-label="Scope activity"
             >
-              <option value="ward">Whole ward</option>
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
                   Bed {p.bed} — {p.name}
@@ -217,7 +199,7 @@ export function PatientActivity({
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-              {scopeId ? "Activity" : "Ward activity"}
+              Activity
             </h3>
             <button
               onClick={() => setShowNewTask((v) => !v)}
@@ -232,7 +214,7 @@ export function PatientActivity({
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newTask.trim()) return;
-                onAddThread(scopeId ?? patient.id, newTask.trim());
+                onAddThread(scopeId, newTask.trim());
                 setNewTask("");
                 setShowNewTask(false);
               }}
@@ -241,7 +223,7 @@ export function PatientActivity({
               <input
                 value={newTask}
                 onChange={(e) => setNewTask(e.target.value)}
-                placeholder={`Task for ${(scopeId ? patientOf(scopeId)?.name : patient.name) ?? "patient"}…`}
+                placeholder={`Task for ${patientOf(scopeId)?.name ?? "patient"}…`}
                 className="flex-1 rounded-md border border-border bg-panel px-3 py-2 text-sm"
               />
               <button className="rounded-md bg-foreground px-3 text-sm font-medium text-background">
@@ -281,12 +263,6 @@ export function PatientActivity({
                         {thread.title}
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                        {!scopeId && (
-                          <span className="text-foreground/70">
-                            Bed {patientOf(thread.patientId)?.bed} ·{" "}
-                            {patientOf(thread.patientId)?.name.split(" ").slice(-1)[0]} ·{" "}
-                          </span>
-                        )}
                         {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
                         {thread.due} · {thread.backend === undefined ? "local task" : "ledger"}
                       </span>
