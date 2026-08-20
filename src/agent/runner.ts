@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { DomainError } from "../domain/errors.js";
 import type { SqliteStore } from "../infra/store.js";
 
@@ -40,8 +42,6 @@ type PublicationPreflight =
   | { kind: "publish" }
   | { kind: "recover"; contextId: string };
 
-const WARMUP_PROMPT = "Initialize an empty context. Do not call tools.";
-
 export class AgentRunner {
   constructor(
     private readonly gateway: AgentGateway,
@@ -76,39 +76,37 @@ export class AgentRunner {
     patientId: string,
     interactionId: string,
   ): Promise<string> {
-    const existing = this.store.contextForInteraction(interactionId);
-    if (existing) {
-      if (this.store.patientForContext(existing) !== patientId) {
+    return this.store.transaction(() => {
+      const existing = this.store.contextForInteraction(interactionId);
+      if (existing) {
+        if (this.store.patientForContext(existing) !== patientId) {
+          throw new DomainError(
+            "PATIENT_SCOPE_DENIED",
+            "Patient scope is unavailable",
+            false,
+            403,
+          );
+        }
+        return existing;
+      }
+
+      const contextId = randomUUID();
+      if (this.store.patientForContext(contextId) !== null) {
         throw new DomainError(
-          "PATIENT_SCOPE_DENIED",
-          "Patient scope is unavailable",
-          false,
-          403,
+          "AGENT_CONTEXT_INITIALIZATION_FAILED",
+          "Corti context identifier collided with an existing context",
+          true,
+          502,
         );
       }
-      return existing;
-    }
-
-    const submitted = await this.gateway.send({
-      text: WARMUP_PROMPT,
-      data: { mcpToken: this.mcpToken },
-    });
-    const warmup = await this.gateway.waitForCompletion(submitted);
-    if (warmup.state !== "completed" || warmup.contextId.length === 0) {
-      throw new DomainError(
-        "AGENT_CONTEXT_INITIALIZATION_FAILED",
-        "Corti could not initialize an interaction context",
-        true,
-        502,
+      this.store.putContextMapping(
+        contextId,
+        interactionId,
+        patientId,
+        new Date().toISOString(),
       );
-    }
-    this.store.putContextMapping(
-      warmup.contextId,
-      interactionId,
-      patientId,
-      new Date().toISOString(),
-    );
-    return warmup.contextId;
+      return contextId;
+    });
   }
 
   private verificationScope(input: PublishApprovedInput): string {

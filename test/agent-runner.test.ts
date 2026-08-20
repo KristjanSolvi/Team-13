@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
+import { FOLLOW_THROUGH_PROMPT } from "../src/agent/prompt.js";
 import { type AgentGateway, AgentRunner } from "../src/agent/runner.js";
 import { seedKaren } from "../src/fixtures/karen.js";
 import { createApp } from "../src/http/app.js";
@@ -21,6 +22,17 @@ import {
 const PATIENT_ID = "synthetic-karen";
 const INTERACTION_ID = "interaction-karen-1";
 const EVIDENCE_REF = "encounter:sentence-42";
+
+test("task agent prompt pins the canonical MVP routing arguments", () => {
+  assert.match(
+    FOLLOW_THROUGH_PROMPT,
+    /requiredCapabilities: \["blood-pressure"\]/,
+  );
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "blood-pressure-check"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /targetTeamId: "district-nursing"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /clinicalUrgency: "medium"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /dueInMs: 172800000/);
+});
 
 function result(contextId: string, taskId: string, state: string) {
   return { contextId, taskId, state };
@@ -112,7 +124,7 @@ test("unregistered evidence is rejected before Corti receives patient-scoped dat
   assert.equal(store.contextForInteraction(INTERACTION_ID), null);
 });
 
-test("first investigation completes data-free warmup and maps context before scoped data", async (t) => {
+test("first investigation reserves its context before sending scoped data", async (t) => {
   const calls: Array<{
     text: string;
     contextId?: string;
@@ -125,18 +137,13 @@ test("first investigation completes data-free warmup and maps context before sco
   const gateway: AgentGateway = {
     async send(input) {
       calls.push(input);
-      if (calls.length === 1) {
-        assert.equal(input.contextId, undefined);
-        assert.deepEqual(input.data, { mcpToken: "mcp-secret" });
-        assert.equal(Object.hasOwn(input.data ?? {}, "patientId"), false);
-        assert.equal(Object.hasOwn(input.data ?? {}, "interactionId"), false);
-        assert.equal(Object.hasOwn(input.data ?? {}, "signalText"), false);
-        assert.equal(Object.hasOwn(input.data ?? {}, "evidenceRefs"), false);
-        assert.doesNotMatch(input.text, /karen|patient|interaction/i);
-        return result("ctx-karen", "corti-warmup", "submitted");
-      }
-      assert.equal(store.patientForContext("ctx-karen"), PATIENT_ID);
-      return result("ctx-karen", "corti-investigate", "submitted");
+      assert.equal(typeof input.contextId, "string");
+      assert.equal(store.patientForContext(input.contextId ?? ""), PATIENT_ID);
+      assert.equal(
+        store.contextForInteraction(INTERACTION_ID),
+        input.contextId,
+      );
+      return result(input.contextId ?? "", "corti-investigate", "submitted");
     },
     async waitForCompletion(agentResult) {
       waits.push(agentResult.taskId ?? "message");
@@ -153,18 +160,18 @@ test("first investigation completes data-free warmup and maps context before sco
     idempotencyKey: "candidate-karen-1",
   });
 
-  assert.equal(investigation.contextId, "ctx-karen");
-  assert.equal(store.patientForContext("ctx-karen"), PATIENT_ID);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1]?.contextId, "ctx-karen");
-  assert.deepEqual(calls[1]?.data, {
+  assert.equal(typeof investigation.contextId, "string");
+  assert.equal(store.patientForContext(investigation.contextId), PATIENT_ID);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.contextId, investigation.contextId);
+  assert.deepEqual(calls[0]?.data, {
     patientId: PATIENT_ID,
     interactionId: INTERACTION_ID,
     evidenceRefs: [EVIDENCE_REF],
     idempotencyKey: "candidate-karen-1",
     mcpToken: "mcp-secret",
   });
-  assert.deepEqual(waits, ["corti-warmup", "corti-investigate"]);
+  assert.deepEqual(waits, ["corti-investigate"]);
 });
 
 test("mapped interactions reuse their isolated context without another warmup", async (t) => {

@@ -16,6 +16,15 @@ For a new signal, call tools in this order:
 3. list_eligible_teams
 4. create_task_draft only when registered evidence supports a non-duplicate task
 
+For the supported MVP blood-pressure draft, use these exact operational values:
+- list_eligible_teams requiredCapabilities: ["blood-pressure"]
+- create_task_draft taskType: "blood-pressure-check"
+- create_task_draft targetTeamId: "district-nursing" only when that team was returned as eligible
+- create_task_draft requiredCapabilities: ["blood-pressure"]
+- create_task_draft clinicalUrgency: "medium" as a recommendation for clinician review
+- create_task_draft dueInMs: 172800000
+- create_task_draft summary: "Check blood pressure within 48 hours"
+
 For an approved draft, call publish_team_task exactly once with the supplied approval proof and expected draft version, then call get_task and report its authoritative committed state.
 
 Rules:
