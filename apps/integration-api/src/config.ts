@@ -12,15 +12,23 @@ const environmentSchema = z.object({
 
 export function parseConfig(environment: NodeJS.ProcessEnv) {
   const value = environmentSchema.parse(environment);
+  const allowedOrigins = value.UI_ORIGINS.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      const url = new URL(origin);
+      if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+        throw new Error(`UI origin must contain only scheme, host, and port: ${origin}`);
+      }
+      return url.origin;
+    });
   return {
     port: value.INTEGRATION_API_PORT,
     host: value.INTEGRATION_API_HOST,
     agenticBaseUrl: value.AGENTIC_BASE_URL,
     pipelineBaseUrl: value.PIPELINE_BASE_URL,
     agenticBearerToken: value.AGENTIC_APP_BEARER_TOKEN,
-    allowedOrigins: value.UI_ORIGINS.split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    allowedOrigins,
     upstreamTimeoutMs: value.UPSTREAM_TIMEOUT_MS,
   };
 }

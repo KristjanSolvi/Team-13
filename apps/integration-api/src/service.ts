@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import type {
   FollowThroughCandidate,
+  PipelineProxyPath,
   TaskCommand,
 } from "./contracts.js";
 import { IntegrationError } from "./errors.js";
@@ -7,6 +10,7 @@ import type {
   AgenticGateway,
   PipelineGateway,
   RequestMeta,
+  UpstreamJsonResult,
 } from "./gateways.js";
 
 interface ServiceStatus {
@@ -58,14 +62,21 @@ export class IntegrationService {
         "Candidate evidence must belong to the same interaction",
       );
     }
-    const stableId = candidate.candidateId.replace(/[^A-Za-z0-9._-]/g, "-");
+    const stableId = createHash("sha256")
+      .update(candidate.patientId)
+      .update("\0")
+      .update(candidate.interactionId)
+      .update("\0")
+      .update(candidate.candidateId)
+      .digest("hex")
+      .slice(0, 24);
     const handoff = await this.agentic.submitSignal(
       {
         patientId: candidate.patientId,
         interactionId: candidate.interactionId,
         signalText: candidate.summary,
         evidenceRefs: candidate.evidence.map(
-          (_evidence, index) => `encounter:${stableId}.${index + 1}`,
+          (_evidence, index) => `encounter:candidate-${stableId}.${index + 1}`,
         ),
         idempotencyKey: `candidate-${stableId}`,
       },
@@ -98,6 +109,26 @@ export class IntegrationService {
     meta: RequestMeta,
   ): Promise<unknown> {
     return this.agentic.taskCommand(taskId, command, body, meta);
+  }
+
+  eventStream(
+    lastEventId: string | undefined,
+    correlationId: string,
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>> {
+    return this.agentic.eventStream(
+      lastEventId,
+      { correlationId },
+      signal,
+    );
+  }
+
+  pipelineRequest(
+    path: PipelineProxyPath,
+    body: unknown,
+    correlationId: string,
+  ): Promise<UpstreamJsonResult> {
+    return this.pipeline.request(path, body, { correlationId });
   }
 }
 

@@ -1,0 +1,16 @@
+{
+  "candidateId": "candidate-karen-1",
+  "interactionId": "interaction-karen-1",
+  "patientId": "synthetic-karen",
+  "category": "medication-concern",
+  "summary": "Dizziness after a medication change needs follow-through",
+  "evidence": [
+    {
+      "interactionId": "interaction-karen-1",
+      "sourceQuote": "I've been dizzy since the medication changed.",
+      "startSeconds": 42.1,
+      "endSeconds": 46.8
+    }
+  ],
+  "status": "candidate"
+}

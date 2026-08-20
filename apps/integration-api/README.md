@@ -11,18 +11,27 @@ authoritative for Ambient, Dictation, Text Generation, and Medical Coding.
 ## Current endpoints
 
 - `GET /healthz`: process liveness without contacting upstream services.
+- `GET /openapi.json`: machine-readable OpenAPI 3.1 contract for consumers.
 - `GET /readyz`: aggregate Agentic and pipeline reachability and report whether
   live Corti calls are configured.
 - `POST /api/candidates/investigate`: validate a normalized pipeline candidate
   and retain it as one idempotent Agentic signal.
+- `POST /api/corti/...`: explicit allow-listed proxy for the seven existing
+  pipeline endpoints, preserving their request and response contracts.
 - `GET /api/patients/:patientId/overview`: return authoritative threads and
   tasks from the Agentic backend.
+- `GET /api/events/stream`: proxy the Agentic SSE stream while keeping the
+  application bearer token server-side; supports `Last-Event-ID` resume.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
   commands with actor attribution. Supported commands are `approve`, `correct`,
   `dismiss`, `reopen`, `accept`, `decline`, `complete`, and `verify`.
 
 Every response includes `x-correlation-id`. Browser requests are allowed only
 from configured origins. The service binds to loopback by default.
+
+Synthetic consumer examples live in [`fixtures/`](fixtures/). UI work can build
+against those examples and replace only its adapter when the live services are
+available.
 
 ## Local run
 
@@ -38,7 +47,6 @@ Never expose that token to the browser or commit `.env`.
 
 ## Deferred until contracts freeze
 
-- SSE proxying and resume semantics.
 - Post-approval Text Generation and Medical Coding orchestration. The current
   approval response does not expose a stable approval identifier in every
   success mode, so this service must not guess or parse one from proof material.
