@@ -29,6 +29,15 @@ npm test
 npm run build
 ```
 
-The HTTP and event contracts are documented in `docs/api.md`. Browser adapters
-will consume scoped tokens from this service; they must never receive the Corti
-client secret.
+The HTTP and event contracts are documented in [docs/api.md](docs/api.md).
+Browser adapters consume scoped tokens from this service; they never receive the
+Corti client secret.
+
+## Integration boundary
+
+- UI code imports the `./browser` entry or calls the documented HTTP endpoints.
+- The agent/ledger consumes candidate drafts and confirmed revision commands.
+- This service never writes committed thread/task state.
+- `approvalId` is required before supporting document or coding calls.
+- Live Corti verification requires credentials and tenant entitlements; local
+  tests use dependency-injected gateways and make no external AI calls.

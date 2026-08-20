@@ -202,6 +202,7 @@ type PipelineEvent<T> = {
     | "dictation.final"
     | "document.generated"
     | "coding.completed"
+    | "usage.updated"
     | "pipeline.error";
   occurredAt: string;
   correlationId: string;
