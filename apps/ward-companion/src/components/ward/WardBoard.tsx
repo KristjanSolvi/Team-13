@@ -9,11 +9,6 @@ type Props = {
   activePatientId?: string | null;
 };
 
-function isDueTodayOrOverdue(due: string) {
-  const d = due.toLowerCase();
-  return d.startsWith("today") || d.startsWith("yesterday");
-}
-
 function dueStyle(due: string) {
   if (due.toLowerCase().startsWith("yesterday")) {
     return "bg-escalated-soft text-escalated-strong";
@@ -23,9 +18,7 @@ function dueStyle(due: string) {
 
 export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientId }: Props) {
   const openThreadsFor = (p: Patient) =>
-    threads.filter(
-      (t) => t.patientId === p.id && t.status !== "verified" && isDueTodayOrOverdue(t.due),
-    );
+    threads.filter((t) => t.patientId === p.id && t.status !== "verified");
 
   return (
     <div className="space-y-12">
@@ -96,7 +89,7 @@ export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientI
                     </div>
                   ) : (
                     <p className="text-[11px] font-medium italic text-muted-foreground">
-                      No tracked threads
+                      No tracked follow-through blockers
                     </p>
                   )}
                 </article>

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, FileCheck2, LoaderCircle, RotateCcw, ShieldCheck, Sparkles } from "lucide-react";
+import type {
+  CodingSystem,
+  NormalizedCodeSuggestion,
+  NormalizedCodingEvidence,
+} from "@pipeline/contracts.js";
 
 import type { CaseNote, DocId } from "@/data/ward";
 import {
@@ -24,6 +29,102 @@ type Props = {
 };
 
 type BusyAction = "generate" | "save" | "file" | null;
+
+type SelectedCodingSuggestion = {
+  group: "supported" | "candidate";
+  index: number;
+};
+
+const codingSystemLabels: Record<CodingSystem, string> = {
+  "icd10int-outpatient": "ICD-10 International · outpatient",
+  "icd10int-inpatient": "ICD-10 International · inpatient",
+  "icd10cm-outpatient": "ICD-10-CM · outpatient",
+  "icd10cm-inpatient": "ICD-10-CM · inpatient",
+};
+
+function creditsLabel(credits: number): string {
+  return `${credits.toFixed(4)} credits`;
+}
+
+function highlightedSource(source: string, evidence: NormalizedCodingEvidence | undefined) {
+  if (
+    evidence === undefined ||
+    evidence.start < 0 ||
+    evidence.end <= evidence.start ||
+    evidence.end > source.length
+  ) {
+    return source;
+  }
+  return (
+    <>
+      {source.slice(0, evidence.start)}
+      <mark className="bg-pending-soft text-ehr-foreground">
+        {source.slice(evidence.start, evidence.end)}
+      </mark>
+      {source.slice(evidence.end)}
+    </>
+  );
+}
+
+function CodingSuggestionGroup({
+  title,
+  kind,
+  suggestions,
+  selected,
+  onSelect,
+}: {
+  title: string;
+  kind: SelectedCodingSuggestion["group"];
+  suggestions: NormalizedCodeSuggestion[];
+  selected: SelectedCodingSuggestion | null;
+  onSelect: (selection: SelectedCodingSuggestion) => void;
+}) {
+  if (suggestions.length === 0) return null;
+  return (
+    <section>
+      <h5 className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-ehr-muted">
+        {title} · {suggestions.length}
+      </h5>
+      <ul className="space-y-1">
+        {suggestions.map((suggestion, index) => {
+          const isSelected = selected?.group === kind && selected.index === index;
+          return (
+            <li key={`${kind}-${suggestion.code}-${index}`}>
+              <button
+                type="button"
+                onClick={() => onSelect({ group: kind, index })}
+                className={`w-full border px-2 py-1.5 text-left ${
+                  isSelected
+                    ? "border-ehr-accent bg-ehr-accent/[0.07]"
+                    : "border-ehr-line bg-ehr-bg hover:border-ehr-accent/55"
+                }`}
+              >
+                <span className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 text-[10px] leading-snug">
+                    <span className="font-semibold text-ehr-foreground">{suggestion.code}</span>{" "}
+                    {suggestion.display}
+                  </span>
+                  <span
+                    className={`shrink-0 text-[8.5px] font-semibold uppercase tracking-wide ${
+                      kind === "supported" ? "text-verified-strong" : "text-pending-strong"
+                    }`}
+                  >
+                    {kind === "supported" ? "Code" : "Candidate"}
+                  </span>
+                </span>
+                {suggestion.evidences[0] !== undefined && (
+                  <span className="mt-0.5 block truncate text-[9px] text-ehr-muted">
+                    “{suggestion.evidences[0].text}”
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 function clinicalSource(notes: CaseNote[]): string {
   return notes.map((note) => `[${note.at}] ${note.author}: ${note.text}`).join("\n\n");
@@ -57,7 +158,11 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [codingSystem, setCodingSystem] = useState<CodingSystem>("icd10int-outpatient");
   const [codes, setCodes] = useState<Awaited<ReturnType<typeof predictMedicalCodes>> | null>(null);
+  const [selectedCoding, setSelectedCoding] = useState<SelectedCodingSuggestion | null>(null);
+  const [documentCredits, setDocumentCredits] = useState<number | null>(null);
+  const [codingCredits, setCodingCredits] = useState<number | null>(null);
   const [document, setDocument] = useState<ClinicalDocument | null>(null);
   const [history, setHistory] = useState<ClinicalDocumentVersion[]>([]);
   const [busy, setBusy] = useState<BusyAction>(null);
@@ -71,7 +176,11 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setReviewId(null);
     setTitle("");
     setContent("");
+    setCodingSystem("icd10int-outpatient");
     setCodes(null);
+    setSelectedCoding(null);
+    setDocumentCredits(null);
+    setCodingCredits(null);
     setDocument(null);
     setHistory([]);
     setBusy(null);
@@ -86,6 +195,12 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
   const canGenerate = source.trim() !== "" && reviewed && busy === null;
   const canSave = hasGeneratedDraft && document?.status !== "filed" && busy === null;
   const canFile = document?.status === "draft" && !documentIsDirty && busy === null;
+  const selectedCode =
+    selectedCoding?.group === "supported"
+      ? codes?.codes[selectedCoding.index]
+      : selectedCoding?.group === "candidate"
+        ? codes?.candidates[selectedCoding.index]
+        : undefined;
 
   const refreshHistory = async (documentId: string) => {
     const result = await getEhrDocumentHistory(documentId, crypto.randomUUID());
@@ -98,6 +213,9 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setGenerationError(null);
     setCodingError(null);
     setRecordError(null);
+    setDocumentCredits(null);
+    setCodingCredits(null);
+    setSelectedCoding(null);
     const approvalId = `record-review-${crypto.randomUUID()}`;
     const correlationId = crypto.randomUUID();
     const [documentResult, codingResult] = await Promise.allSettled([
@@ -110,6 +228,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
       predictMedicalCodes({
         approvalId,
         approvedClinicalText: source.trim(),
+        system: codingSystem,
         correlationId,
       }),
     ]);
@@ -118,11 +237,20 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
       setReviewId(approvalId);
       setTitle(documentResult.value.name);
       setContent(generatedText(documentResult.value.sections));
+      setDocumentCredits(documentResult.value.creditsConsumed);
     } else {
       setGenerationError(messageFor(documentResult.reason));
     }
     if (codingResult.status === "fulfilled") {
       setCodes(codingResult.value);
+      setCodingCredits(codingResult.value.creditsConsumed);
+      setSelectedCoding(
+        codingResult.value.codes.length > 0
+          ? { group: "supported", index: 0 }
+          : codingResult.value.candidates.length > 0
+            ? { group: "candidate", index: 0 }
+            : null,
+      );
     } else {
       setCodingError(messageFor(codingResult.reason));
     }
@@ -198,6 +326,9 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setTitle("");
     setContent("");
     setCodes(null);
+    setSelectedCoding(null);
+    setDocumentCredits(null);
+    setCodingCredits(null);
     setDocument(null);
     setHistory([]);
     setGenerationError(null);
@@ -260,6 +391,22 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                 suggestions; neither will be filed automatically.
               </span>
             </label>
+            <label className="block max-w-xs">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+                Coding system and setting
+              </span>
+              <select
+                value={codingSystem}
+                onChange={(event) => setCodingSystem(event.target.value as CodingSystem)}
+                className="mt-1 w-full border border-ehr-line bg-ehr-bg px-2 py-1.5 text-[10px] text-ehr-foreground outline-none focus:border-ehr-accent"
+              >
+                {Object.entries(codingSystemLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               disabled={!canGenerate}
@@ -271,15 +418,20 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
               ) : (
                 <Sparkles className="size-3" aria-hidden="true" />
               )}
-              Generate draft and codes
+              Generate Corti draft and coding review
             </button>
           </>
         ) : (
           <>
             <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-verified-strong">
+              <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] font-medium text-verified-strong">
                 <ShieldCheck className="size-3" aria-hidden="true" />
-                Clinician-reviewed source · Corti draft
+                Clinician-reviewed source · Corti Text Generation draft
+                {documentCredits !== null && (
+                  <span className="font-normal text-ehr-muted">
+                    · {creditsLabel(documentCredits)}
+                  </span>
+                )}
               </span>
               {document === null && (
                 <button
@@ -320,10 +472,13 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
             <div className="border border-ehr-line bg-ehr-panel p-2">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
-                  Coding suggestions
+                  Corti Medical Coding review
                 </h4>
                 {codes !== null && (
-                  <span className="text-[9px] text-ehr-muted">{codes.system}</span>
+                  <span className="text-right text-[9px] text-ehr-muted">
+                    {codingSystemLabels[codes.system]}
+                    {codingCredits !== null && <> · {creditsLabel(codingCredits)}</>}
+                  </span>
                 )}
               </div>
               {codingError !== null ? (
@@ -335,34 +490,75 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                   Corti returned no reviewable code suggestions for this source.
                 </p>
               ) : (
-                <ul className="mt-1.5 space-y-1">
-                  {[...codes.codes, ...codes.candidates].slice(0, 5).map((code, index) => (
-                    <li
-                      key={`${code.code}-${index}`}
-                      className="flex items-start justify-between gap-2 border-t border-ehr-line/70 pt-1 first:border-0 first:pt-0"
-                    >
-                      <span className="min-w-0 text-[10px] leading-snug">
-                        <span className="font-semibold text-ehr-foreground">{code.code}</span>{" "}
-                        {code.display}
-                        {code.evidences[0] !== undefined && (
-                          <span className="mt-0.5 block truncate text-[9px] text-ehr-muted">
-                            Evidence: “{code.evidences[0].text}”
+                <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <div className="space-y-2">
+                    <CodingSuggestionGroup
+                      title="Codes returned by Corti"
+                      kind="supported"
+                      suggestions={codes.codes}
+                      selected={selectedCoding}
+                      onSelect={setSelectedCoding}
+                    />
+                    <CodingSuggestionGroup
+                      title="Candidates requiring review"
+                      kind="candidate"
+                      suggestions={codes.candidates}
+                      selected={selectedCoding}
+                      onSelect={setSelectedCoding}
+                    />
+                  </div>
+                  <aside className="border border-ehr-line bg-ehr-bg p-2">
+                    {selectedCode === undefined ? (
+                      <p className="text-[9.5px] text-ehr-muted">
+                        Select a code to inspect its evidence.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-[10px] font-semibold text-ehr-foreground">
+                            {selectedCode.code} · evidence in reviewed source
+                          </p>
+                          <span
+                            className={`shrink-0 text-[8.5px] font-semibold ${
+                              selectedCode.evidenceStatus === "validated"
+                                ? "text-verified-strong"
+                                : "text-pending-strong"
+                            }`}
+                          >
+                            {selectedCode.evidenceStatus === "validated"
+                              ? "Offsets validated"
+                              : "Evidence unavailable"}
                           </span>
+                        </div>
+                        <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-[9.5px] leading-relaxed text-ehr-muted">
+                          {highlightedSource(source.trim(), selectedCode.evidences[0])}
+                        </p>
+                        {selectedCode.evidences.length > 1 && (
+                          <ul className="space-y-0.5 border-t border-ehr-line pt-1 text-[9px] text-ehr-muted">
+                            {selectedCode.evidences.slice(1).map((evidence, index) => (
+                              <li key={`${evidence.start}-${evidence.end}-${index}`}>
+                                Additional evidence: “{evidence.text}”
+                              </li>
+                            ))}
+                          </ul>
                         )}
-                      </span>
-                      <span
-                        className={`shrink-0 text-[9px] ${
-                          code.evidenceStatus === "validated"
-                            ? "text-verified-strong"
-                            : "text-ehr-muted"
-                        }`}
-                      >
-                        {code.evidenceStatus === "validated" ? "Evidence checked" : "Review"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                        {selectedCode.alternatives.length > 0 && (
+                          <p className="border-t border-ehr-line pt-1 text-[9px] text-ehr-muted">
+                            Alternatives for clinician review:{" "}
+                            {selectedCode.alternatives
+                              .map((alternative) => `${alternative.code} ${alternative.display}`)
+                              .join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </aside>
+                </div>
               )}
+              <p className="mt-2 text-[9px] leading-snug text-ehr-muted">
+                Corti codes and candidates stay in separate review queues. Evidence offsets are
+                validated locally when present; no suggestion is filed automatically.
+              </p>
             </div>
 
             {document?.status !== "filed" && (

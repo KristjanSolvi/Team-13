@@ -17,6 +17,7 @@ const store = new SqliteStore(openDatabase(config.databasePath));
 if (!store.getPatient("synthetic-karen")) {
   seedKaren(store, new Date().toISOString());
 }
+store.backfillEvidenceDependencies();
 const clock = new DemoClock(new Date(), config.demoMode);
 const ledger = new LedgerService(store, clock, config.approvalHmacSecret);
 const records = new RecordService(store);

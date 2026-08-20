@@ -10,6 +10,7 @@ import {
   FollowThroughApiError,
   getDictationToken,
 } from "@/lib/follow-through-api";
+import { LiveInterimText } from "./LiveInterimText";
 
 const recipientTeams = [
   { id: "ward-nursing", label: "Ward Nursing Team", aliases: ["ward nursing", "nurses"] },
@@ -61,6 +62,7 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
   const [message, setMessage] = useState("Voice is optional; typing always remains available.");
   const [text, setText] = useState("");
   const [interim, setInterim] = useState("");
+  const [dictationCredits, setDictationCredits] = useState<number | null>(null);
   const [preview, setPreview] = useState<TaskRevisionPreview | null>(null);
   const [building, setBuilding] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -89,6 +91,11 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
             setMessage("Audio unclear · move closer or type the correction.");
           } else if (event.payload.state === "speech-quality-recovered") {
             setMessage("Audio clear again · review the final words before previewing.");
+          }
+          break;
+        case "usage.updated":
+          if (event.payload.product === "dictation") {
+            setDictationCredits(event.payload.creditsConsumed);
           }
           break;
         case "pipeline.error":
@@ -140,6 +147,7 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
     setOpen(false);
     setText("");
     setInterim("");
+    setDictationCredits(null);
     setPreview(null);
     correlationIdRef.current = crypto.randomUUID();
   }, [thread.id]);
@@ -230,9 +238,17 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
     <section className="space-y-3 rounded-lg border border-teal/20 bg-panel p-3">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
-            <Mic2 className="size-3.5 text-teal" /> Corti Dictation correction
-          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
+              <Mic2 className="size-3.5 text-teal" /> Corti Dictation correction
+            </p>
+            <span className="text-[10.5px] text-muted-foreground">
+              Usage:{" "}
+              {dictationCredits === null
+                ? "shown when complete"
+                : `${dictationCredits.toFixed(4)} credits`}
+            </span>
+          </div>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">{message}</p>
         </div>
         <button
@@ -267,12 +283,9 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
           placeholder="For example: Route to district nursing within 48 hours and mark medium because blood pressure needs checking."
           className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-[13px] leading-relaxed text-foreground"
         />
-        {interim.length > 0 && (
-          <span className="mt-1 block text-[11.5px] italic text-muted-foreground">
-            Listening: {interim}
-          </span>
-        )}
       </label>
+
+      {interim.length > 0 && <LiveInterimText text={interim} label="Corti Dictation is hearing" />}
 
       <button
         type="button"

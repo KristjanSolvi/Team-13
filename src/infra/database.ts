@@ -28,6 +28,49 @@ export function openDatabase(databasePath: string): DatabaseSync {
       recorded_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS evidence_dependencies (
+      dependency_id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      source_item_id TEXT NOT NULL,
+      source_ref TEXT NOT NULL,
+      source_hash TEXT NOT NULL,
+      artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('task', 'handover')),
+      artifact_id TEXT NOT NULL,
+      artifact_version INTEGER NOT NULL CHECK (artifact_version > 0),
+      registered_at TEXT NOT NULL,
+      UNIQUE (artifact_kind, artifact_id, source_ref)
+    );
+
+    CREATE TABLE IF NOT EXISTS source_revisions (
+      revision_id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      source_item_id TEXT NOT NULL REFERENCES patient_record_items(item_id),
+      source_ref TEXT NOT NULL,
+      previous_hash TEXT NOT NULL,
+      current_hash TEXT NOT NULL,
+      reason TEXT NOT NULL CHECK (
+        reason IN ('new_result', 'medication_update', 'clinical_note_revision', 'other')
+      ),
+      changed_at TEXT NOT NULL,
+      changed_by TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS change_impacts (
+      impact_id TEXT PRIMARY KEY,
+      revision_id TEXT NOT NULL REFERENCES source_revisions(revision_id),
+      dependency_id TEXT NOT NULL REFERENCES evidence_dependencies(dependency_id),
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      source_item_id TEXT NOT NULL,
+      source_ref TEXT NOT NULL,
+      artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('task', 'handover')),
+      artifact_id TEXT NOT NULL,
+      artifact_version INTEGER NOT NULL CHECK (artifact_version > 0),
+      status TEXT NOT NULL CHECK (status = 'review_required'),
+      summary TEXT NOT NULL,
+      detected_at TEXT NOT NULL,
+      UNIQUE (revision_id, dependency_id)
+    );
+
     CREATE TABLE IF NOT EXISTS context_mappings (
       context_id TEXT PRIMARY KEY,
       interaction_id TEXT NOT NULL UNIQUE,
@@ -275,6 +318,12 @@ export function openDatabase(databasePath: string): DatabaseSync {
       ON demo_assignments(session_id, participant_id, assigned_at);
     CREATE INDEX IF NOT EXISTS idx_events_sequence
       ON audit_events(sequence);
+    CREATE INDEX IF NOT EXISTS idx_evidence_dependencies_source
+      ON evidence_dependencies(patient_id, source_ref);
+    CREATE INDEX IF NOT EXISTS idx_source_revisions_patient
+      ON source_revisions(patient_id, changed_at, revision_id);
+    CREATE INDEX IF NOT EXISTS idx_change_impacts_patient
+      ON change_impacts(patient_id, detected_at, impact_id);
   `);
 
   return database;

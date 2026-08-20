@@ -13,11 +13,43 @@ import type { Thread } from "@/data/ward";
 
 type IntegrationHealth = { status: "ok" };
 
+export type IntegrationReadiness = {
+  status: "ready" | "degraded";
+  liveCortiReady: boolean;
+  services: Record<
+    string,
+    {
+      reachable: boolean;
+      detail?: unknown;
+      error?: unknown;
+    }
+  >;
+};
+
 export type WardCompanionOverview = {
   schemaVersion: "1";
   patientId: string;
   observedAt: string;
   threads: Thread[];
+  changeImpacts: ChangeImpact[];
+};
+
+export type ChangeImpact = {
+  impactId: string;
+  revisionId: string;
+  dependencyId: string;
+  patientId: string;
+  sourceItemId: string;
+  sourceRef: string;
+  artifactKind: "task" | "handover";
+  artifactId: string;
+  artifactVersion: number;
+  status: "review_required";
+  summary: string;
+  detectedAt: string;
+  changedAt: string;
+  changedBy: string;
+  reason: "new_result" | "medication_update" | "clinical_note_revision" | "other";
 };
 
 export type CandidateGenerationResult = {
@@ -85,9 +117,9 @@ function integrationUrl(path: string): URL {
     : new URL(`/follow-through-api${path}`, browserOrigin());
 }
 
-async function responseJson<T>(response: Response): Promise<T> {
+async function responseJson<T>(response: Response, acceptedStatuses: number[] = []): Promise<T> {
   const value = (await response.json().catch(() => null)) as unknown;
-  if (!response.ok) {
+  if (!response.ok && !acceptedStatuses.includes(response.status)) {
     const error =
       typeof value === "object" && value !== null && "error" in value
         ? (value as { error?: Record<string, unknown> }).error
@@ -122,6 +154,15 @@ function attributedJsonHeaders(correlationId: string, actorId: string): Record<s
 
 export async function getIntegrationHealth(): Promise<IntegrationHealth> {
   return responseJson<IntegrationHealth>(await fetch(integrationUrl("/healthz")));
+}
+
+export async function getIntegrationReadiness(): Promise<IntegrationReadiness> {
+  return responseJson<IntegrationReadiness>(
+    await fetch(integrationUrl("/readyz")),
+    // The integration API deliberately returns 503 when an optional downstream
+    // service is degraded. Its body still tells us whether live Corti capture is ready.
+    [503],
+  );
 }
 
 export async function createAmbientSession(
@@ -250,6 +291,24 @@ export async function getWardCompanionOverview(
     await fetch(integrationUrl(`/api/patients/${encodeURIComponent(patientId)}/companion`), {
       headers: { "x-correlation-id": correlationId },
     }),
+  );
+}
+
+export async function simulateSyntheticSourceRevision(input: {
+  patientId: string;
+  actorId: string;
+  correlationId: string;
+  idempotencyKey: string;
+}): Promise<unknown> {
+  return responseJson<unknown>(
+    await fetch(
+      integrationUrl(`/api/demo/patients/${encodeURIComponent(input.patientId)}/source-revisions`),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
+      },
+    ),
   );
 }
 

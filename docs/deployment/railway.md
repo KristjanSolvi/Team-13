@@ -14,11 +14,36 @@ the Agentic ledger retain its SQLite ownership model for the hackathon.
 | `patient-profile` | `/apps/patient-profile` | `/apps/patient-profile/railway.toml` | No                   | `8791` |
 | `downstream-gateway` | `/apps/downstream-gateway` | `/apps/downstream-gateway/railway.toml` | No | `8792` |
 | `mock-ehr`        | `/apps/mock-ehr`        | `/apps/mock-ehr/railway.toml`       | No                   | `8793` |
-| `ward-ui`         | `/apps/ward-companion`  | `/apps/ward-companion/railway.toml`  | Yes                  | `8080` |
+| `ward-ui`         | `/`                     | `/railway.ui.toml`                   | Yes                  | `8080` |
 
 Create all seven services from the `KristjanSolvi/Team-13` repository and use
 the root directories above. The checked-in `railway.toml` files define each
 service's immutable build, start, health-check, and restart settings.
+
+The UI intentionally builds from `/`, because it imports the browser adapters
+from `apps/corti-pipeline`. Select `/railway.ui.toml` as its custom config file;
+do not use the root `/railway.toml`, which belongs to `agentic`.
+
+## Continuous deployment from `main`
+
+For each of the six services, open **Settings → Source** and connect
+`KristjanSolvi/Team-13` with `main` as the deployment branch. Enable automatic
+deployments. A successful push to `main` will then replace the running version
+behind the same Railway domain; a new domain is not created for every deploy.
+
+The repository's `.github/workflows/ci.yml` checks every deployable service on
+pushes and pull requests. In each Railway service, enable **Wait for CI** so a
+failed GitHub check is skipped instead of being promoted. No Railway token is
+needed in GitHub because Railway receives the push through its GitHub App.
+
+The checked-in watch patterns limit automatic builds to the services affected
+by a commit. Railway evaluates these patterns from the repository root even
+when a service has a different root directory.
+
+This setup requires one project member to connect a GitHub account with write
+access to the repository and to grant the Railway GitHub App access to it. If
+automatic deploy is unavailable, refresh or reconnect the repository after
+accepting any pending GitHub App permission update.
 
 ## Networking
 

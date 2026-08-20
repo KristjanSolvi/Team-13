@@ -100,6 +100,12 @@ describe("real HTTP service boundaries", () => {
         ],
       });
     });
+    agentic.get(
+      "/api/patients/:patientId/change-impacts",
+      (_request, response) => {
+        response.json({ impacts: [] });
+      },
+    );
     agentic.post("/api/tasks/:taskId/approve", (request, response) => {
       captured.approve = capture(request);
       response.json({ taskId: request.params.taskId, state: "offered_to_team", version: 2 });

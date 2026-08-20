@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, statusDotClass, statusLabels } from "@/data/ward";
-import type { WardTaskCommand } from "@/lib/follow-through-api";
+import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
+import { ChangeRadar } from "./ChangeRadar";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
@@ -21,6 +22,7 @@ import { usePendingAction } from "./useLoading";
 
 type Props = {
   threads: Thread[];
+  changeImpacts: ChangeImpact[] | null;
   patientId: string;
   scopeId: string;
   onScopeChange: (id: string) => void;
@@ -83,6 +85,7 @@ const ledgerCommandMeta: Record<
 
 export function PatientActivity({
   threads,
+  changeImpacts,
   patientId,
   scopeId,
   onScopeChange,
@@ -154,6 +157,13 @@ export function PatientActivity({
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+
+        <ChangeRadar
+          patient={patient}
+          threads={scoped}
+          impacts={changeImpacts}
+          onRefresh={() => onRefreshPatient(patient.id)}
+        />
 
         <div>
           <div className="mb-3 flex items-center justify-between">

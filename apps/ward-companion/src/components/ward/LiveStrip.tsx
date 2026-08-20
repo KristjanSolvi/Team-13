@@ -10,10 +10,11 @@ import type { Patient } from "@/data/ward";
 import {
   createAmbientSession,
   generateCandidates,
-  getIntegrationHealth,
+  getIntegrationReadiness,
   investigateCandidate,
   refreshAmbientToken,
 } from "@/lib/follow-through-api";
+import { LiveInterimText } from "./LiveInterimText";
 
 type CaptureState =
   | "checking"
@@ -32,6 +33,7 @@ type CandidateView = {
   candidate: FollowThroughCandidate;
   state: InvestigationState;
   message: string;
+  agentCredits: number | null;
 };
 
 type Props = {
@@ -57,16 +59,43 @@ function microphoneMessage(error: unknown): string {
     : "Ambient capture could not start. Check the pipeline service and retry.";
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function agentHandoffSummary(handoff: unknown): {
+  completed: boolean;
+  retained: boolean;
+  credits: number | null;
+} {
+  const value = asRecord(handoff);
+  return {
+    completed: value?.["agentState"] === "completed",
+    retained: value?.["status"] === "retained",
+    credits: typeof value?.["credits"] === "number" ? value["credits"] : null,
+  };
+}
+
+function creditsLabel(credits: number): string {
+  return `${credits.toFixed(4)} credits`;
+}
+
 export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const [state, setState] = useState<CaptureState>("checking");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [candidateViews, setCandidateViews] = useState<CandidateView[]>([]);
   const [message, setMessage] = useState("Checking the Corti pipeline…");
   const [audioMessage, setAudioMessage] = useState("Audio not checked");
+  const [ambientCredits, setAmbientCredits] = useState<number | null>(null);
+  const [generationCredits, setGenerationCredits] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState("");
   const captureRef = useRef<AmbientCapture | null>(null);
   const correlationIdRef = useRef(crypto.randomUUID());
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const liveCortiReadyRef = useRef<boolean | null>(null);
+  const readyMessageRef = useRef("Checking the Corti pipeline…");
 
   const refreshDevices = useCallback(async () => {
     if (navigator.mediaDevices === undefined) return;
@@ -85,16 +114,31 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
 
   useEffect(() => {
     let active = true;
-    void getIntegrationHealth()
-      .then(() => {
+    void getIntegrationReadiness()
+      .then((readiness) => {
         if (!active) return;
-        setState("idle");
-        setMessage("Integration ready · Corti is checked when capture starts");
+        liveCortiReadyRef.current = readiness.liveCortiReady;
+        if (readiness.liveCortiReady) {
+          const readyMessage =
+            readiness.status === "ready"
+              ? "Live Corti capture ready"
+              : "Live Corti capture ready · another service is degraded";
+          readyMessageRef.current = readyMessage;
+          setState("idle");
+          setMessage(readyMessage);
+        } else {
+          readyMessageRef.current =
+            "Live Corti unavailable · check the pipeline credentials and services";
+          setState("unavailable");
+          setMessage(readyMessageRef.current);
+        }
       })
       .catch(() => {
         if (!active) return;
+        liveCortiReadyRef.current = false;
+        readyMessageRef.current = "Integration service unavailable · start it on port 8790";
         setState("unavailable");
-        setMessage("Integration service unavailable · start it on port 8790");
+        setMessage(readyMessageRef.current);
       });
     void refreshDevices();
     const onDeviceChange = () => void refreshDevices();
@@ -116,16 +160,38 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     correlationIdRef.current = crypto.randomUUID();
     setSegments([]);
     setCandidateViews([]);
+    setAmbientCredits(null);
+    setGenerationCredits(null);
+    setElapsedSeconds(0);
+    recordingStartedAtRef.current = null;
     setAudioMessage("Audio not checked");
-    setState((current) => (current === "unavailable" ? current : "idle"));
-    setMessage("Integration ready · Corti is checked when capture starts");
+    setState(
+      liveCortiReadyRef.current === null
+        ? "checking"
+        : liveCortiReadyRef.current
+          ? "idle"
+          : "unavailable",
+    );
+    setMessage(readyMessageRef.current);
   }, [patient.id]);
+
+  useEffect(() => {
+    if (state !== "recording" || recordingStartedAtRef.current === null) return;
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.floor((Date.now() - recordingStartedAtRef.current!) / 1_000));
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1_000);
+    return () => window.clearInterval(timer);
+  }, [state]);
 
   const onPipelineEvent = (event: PipelineEvent) => {
     switch (event.type) {
       case "ambient.started":
+        recordingStartedAtRef.current = Date.now();
+        setElapsedSeconds(0);
         setState("recording");
-        setMessage("Listening · transcript remains evidence, not authorization");
+        setMessage("Listening live · shadow words are provisional until Corti finalises them");
         break;
       case "transcript.interim":
       case "transcript.final":
@@ -141,6 +207,16 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
           setAudioMessage("No speech detected");
         } else {
           setAudioMessage("Listening");
+        }
+        break;
+      case "usage.updated":
+        if (event.payload.product === "ambient") {
+          setAmbientCredits(event.payload.creditsConsumed);
+        }
+        break;
+      case "ambient.ended":
+        if (event.payload.creditsConsumed !== undefined) {
+          setAmbientCredits(event.payload.creditsConsumed);
         }
         break;
       case "pipeline.error":
@@ -159,6 +235,9 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     setMessage("Creating a scoped Corti interaction…");
     setSegments([]);
     setCandidateViews([]);
+    setAmbientCredits(null);
+    setGenerationCredits(null);
+    setElapsedSeconds(0);
     setAudioMessage("Checking audio…");
     try {
       const session = await createAmbientSession(
@@ -186,7 +265,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
 
   const updateCandidate = (
     candidateId: string,
-    update: Pick<CandidateView, "state" | "message">,
+    update: Pick<CandidateView, "state" | "message"> & { agentCredits?: number | null },
   ) => {
     setCandidateViews((current) =>
       current.map((view) =>
@@ -217,11 +296,14 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
         correlationId: correlationIdRef.current,
         segments: finalSegments,
       });
+      setGenerationCredits(generated.creditsConsumed);
       setCandidateViews(
         generated.candidates.map((candidate) => ({
           candidate,
           state: "checking" as const,
-          message: "Checking the record and open work…",
+          message:
+            "Corti Agentic is checking the patient record, open threads, and eligible teams…",
+          agentCredits: null,
         })),
       );
       setState("complete");
@@ -240,11 +322,17 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
       await Promise.allSettled(
         generated.candidates.map(async (candidate) => {
           try {
-            await investigateCandidate(candidate);
+            const result = await investigateCandidate(candidate);
+            const handoff = agentHandoffSummary(result.handoff);
             investigationAccepted = true;
             updateCandidate(candidate.candidateId, {
               state: "sent",
-              message: "Context check requested · no task has been created yet",
+              message: handoff.completed
+                ? "Corti Agentic completed the context check · any proposed work remains clinician-controlled"
+                : handoff.retained
+                  ? "Signal retained with its evidence · no autonomous task was created"
+                  : "Context check accepted · no autonomous task was created",
+              agentCredits: handoff.credits,
             });
           } catch {
             updateCandidate(candidate.candidateId, {
@@ -268,6 +356,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
 
   const busy = ["starting", "stopping", "analysing"].includes(state);
   const finalSegments = segments.filter((segment) => segment.isFinal);
+  const latestInterim = segments.filter((segment) => !segment.isFinal).at(-1);
 
   return (
     <section className="rounded-xl border border-border bg-panel">
@@ -279,7 +368,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
             {state === "recording" && (
               <span className="flex items-center gap-1 text-[12px] font-normal text-muted-foreground">
                 <span className="size-1.5 animate-pulse rounded-full bg-teal" />
-                recording
+                recording · {timeLabel(elapsedSeconds)}
               </span>
             )}
           </span>
@@ -334,19 +423,33 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
         </span>
         <span className="px-2">·</span>
         <span>{finalSegments.length} final transcript segments</span>
+        {(state === "recording" || ambientCredits !== null) && (
+          <>
+            <span className="px-2">·</span>
+            <span>
+              Ambient usage: {ambientCredits === null ? "pending" : creditsLabel(ambientCredits)}
+            </span>
+          </>
+        )}
+        {generationCredits !== null && (
+          <>
+            <span className="px-2">·</span>
+            <span>Text Generation · candidate extraction: {creditsLabel(generationCredits)}</span>
+          </>
+        )}
       </div>
 
-      {segments.length > 0 && (
-        <div className="max-h-40 space-y-1.5 overflow-y-auto px-4 py-3">
-          {segments.map((segment) => (
-            <p key={segment.segmentKey} className="text-[13px] leading-snug text-foreground">
+      {(state === "recording" || segments.length > 0) && (
+        <div className="max-h-52 space-y-2 overflow-y-auto px-4 py-3">
+          {finalSegments.map((segment) => (
+            <p
+              key={segment.segmentKey}
+              className="fade-in-view text-[13px] leading-snug text-foreground"
+            >
               <span className="mr-2 text-[11.5px] tabular-nums text-muted-foreground">
                 {timeLabel(segment.startSeconds)}
               </span>
               {segment.text}
-              {!segment.isFinal && (
-                <span className="ml-2 text-[11px] text-muted-foreground">listening…</span>
-              )}
               {segment.audioQuality === "uncertain" && (
                 <span className="ml-2 text-[11px] font-medium text-escalated-strong">
                   audio uncertain
@@ -354,12 +457,32 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
               )}
             </p>
           ))}
+          {latestInterim !== undefined ? (
+            <LiveInterimText
+              text={latestInterim.text}
+              timestamp={timeLabel(latestInterim.startSeconds)}
+            />
+          ) : state === "recording" ? (
+            <div
+              role="status"
+              className="rounded-lg border border-dashed border-teal/20 px-3 py-2.5"
+            >
+              <span className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+                <span className="flex gap-1" aria-hidden="true">
+                  <span className="size-1.5 animate-pulse rounded-full bg-teal/35" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-teal/55 [animation-delay:150ms]" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-teal/75 [animation-delay:300ms]" />
+                </span>
+                Listening for speech…
+              </span>
+            </div>
+          ) : null}
         </div>
       )}
 
       {candidateViews.length > 0 && (
         <div className="space-y-2 border-t border-border px-4 py-3">
-          {candidateViews.map(({ candidate, state: candidateState, message }) => (
+          {candidateViews.map(({ candidate, state: candidateState, message, agentCredits }) => (
             <article key={candidate.candidateId} className="rounded-lg bg-background p-3">
               <div className="flex items-start gap-2.5">
                 {candidateState === "checking" ? (
@@ -375,6 +498,11 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
                     “{candidate.evidence[0]?.sourceQuote}”
                   </blockquote>
                   <p className="mt-1.5 text-[11.5px] text-muted-foreground">{message}</p>
+                  {agentCredits !== null && (
+                    <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+                      Agentic usage: {creditsLabel(agentCredits)}
+                    </p>
+                  )}
                 </div>
               </div>
             </article>

@@ -589,14 +589,16 @@ export class IntegrationService {
 
   async patientOverview(patientId: string, correlationId: string) {
     const meta = { correlationId };
-    const [threads, tasks] = await Promise.all([
+    const [threads, tasks, changeImpacts] = await Promise.all([
       this.agentic.listThreads(patientId, meta),
       this.agentic.listTasks(patientId, meta),
+      this.agentic.listChangeImpacts?.(patientId, meta) ?? Promise.resolve([]),
     ]);
     return {
       patientId,
       threads,
       tasks,
+      changeImpacts,
       observedAt: this.now().toISOString(),
     };
   }
@@ -604,6 +606,40 @@ export class IntegrationService {
   async wardCompanionOverview(patientId: string, correlationId: string) {
     return projectWardCompanionOverview(
       await this.patientOverview(patientId, correlationId),
+    );
+  }
+
+  async simulateSyntheticSourceRevision(
+    patientId: string,
+    idempotencyKey: string,
+    meta: RequestMeta,
+  ) {
+    if (patientId !== "synthetic-karen") {
+      throw new IntegrationError(
+        "DEMO_PATIENT_REQUIRED",
+        "Source revision simulation is only available for the synthetic demo patient",
+        403,
+      );
+    }
+    if (!this.agentic.recordSourceRevision) {
+      throw new IntegrationError(
+        "CHANGE_RADAR_UNAVAILABLE",
+        "Change Radar source ingestion is unavailable",
+        503,
+        true,
+      );
+    }
+    return this.agentic.recordSourceRevision(
+      patientId,
+      {
+        sourceItemId: "karen-dizziness-signal",
+        expectedSourceRef: "encounter:sentence-42",
+        newText:
+          "Dizziness now also occurs at rest following the medication change",
+        reason: "clinical_note_revision",
+        idempotencyKey,
+      },
+      meta,
     );
   }
 

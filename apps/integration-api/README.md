@@ -22,11 +22,14 @@ pipeline owns Ambient, Dictation, Text Generation, and Medical Coding.
   optional speaker ID so the Agentic backend can register grounded evidence.
 - `POST /api/corti/...`: explicit allow-listed proxy for the seven existing
   pipeline endpoints, preserving their request and response contracts.
-- `GET /api/patients/:patientId/overview`: return authoritative threads and
-  tasks from the Agentic backend.
+- `GET /api/patients/:patientId/overview`: return authoritative threads, tasks,
+  and review-required source-change impacts from the Agentic backend.
 - `GET /api/patients/:patientId/companion`: map those authoritative records
   into the current Ward Companion `Thread` read model without coupling the
   backend to the UI component tree.
+- `POST /api/demo/patients/:patientId/source-revisions`: inject the predefined
+  synthetic Karen note revision so Change Radar can demonstrate its persisted
+  source → dependency → impact chain without accepting arbitrary browser text.
 - `POST /api/patients/:patientId/handovers`: generate or replay one grounded,
   attributable patient handover by coordinating the Agentic draft, dedicated
   Corti renderer, and snapshot-checked finalization.

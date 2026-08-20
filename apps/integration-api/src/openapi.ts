@@ -553,6 +553,50 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/demo/patients/{patientId}/source-revisions": {
+      post: {
+        summary: "Inject the predefined synthetic source revision",
+        description:
+          "Demo-only trigger for synthetic Karen. The authoritative backend records a source revision and review-required impacts without mutating tracked work.",
+        parameters: [
+          { $ref: "#/components/parameters/PatientId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["idempotencyKey"],
+                properties: {
+                  idempotencyKey: { type: "string", minLength: 8 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Synthetic source revision recorded",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/SourceRevisionResult",
+                },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "403": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+          "503": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/ehr/patients/{patientId}": {
       get: {
         summary: "Read one composed synthetic EHR record",
@@ -1802,18 +1846,34 @@ export const integrationOpenApi = {
       },
       PatientOverview: {
         type: "object",
-        required: ["patientId", "threads", "tasks", "observedAt"],
+        required: [
+          "patientId",
+          "threads",
+          "tasks",
+          "changeImpacts",
+          "observedAt",
+        ],
         properties: {
           patientId: { type: "string" },
           threads: { type: "array", items: { type: "object" } },
           tasks: { type: "array", items: { type: "object" } },
+          changeImpacts: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ChangeImpact" },
+          },
           observedAt: { type: "string", format: "date-time" },
         },
       },
       WardCompanionOverview: {
         type: "object",
         additionalProperties: false,
-        required: ["schemaVersion", "patientId", "observedAt", "threads"],
+        required: [
+          "schemaVersion",
+          "patientId",
+          "observedAt",
+          "threads",
+          "changeImpacts",
+        ],
         properties: {
           schemaVersion: { const: "1" },
           patientId: { type: "string" },
@@ -1822,6 +1882,75 @@ export const integrationOpenApi = {
             type: "array",
             items: { $ref: "#/components/schemas/WardCompanionThread" },
           },
+          changeImpacts: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ChangeImpact" },
+          },
+        },
+      },
+      ChangeImpact: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "impactId",
+          "revisionId",
+          "dependencyId",
+          "patientId",
+          "sourceItemId",
+          "sourceRef",
+          "artifactKind",
+          "artifactId",
+          "artifactVersion",
+          "status",
+          "summary",
+          "detectedAt",
+          "changedAt",
+          "changedBy",
+          "reason",
+        ],
+        properties: {
+          impactId: { type: "string", format: "uuid" },
+          revisionId: { type: "string", format: "uuid" },
+          dependencyId: { type: "string", format: "uuid" },
+          patientId: { type: "string" },
+          sourceItemId: { type: "string" },
+          sourceRef: { type: "string" },
+          artifactKind: { type: "string", enum: ["task", "handover"] },
+          artifactId: { type: "string" },
+          artifactVersion: { type: "integer", minimum: 1 },
+          status: { const: "review_required" },
+          summary: { type: "string" },
+          detectedAt: { type: "string", format: "date-time" },
+          changedAt: { type: "string", format: "date-time" },
+          changedBy: { type: "string" },
+          reason: {
+            type: "string",
+            enum: [
+              "new_result",
+              "medication_update",
+              "clinical_note_revision",
+              "other",
+            ],
+          },
+        },
+      },
+      SourceRevisionResult: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "revision",
+          "impacts",
+          "reviewRequiredCount",
+          "replayed",
+        ],
+        properties: {
+          revision: { type: "object" },
+          impacts: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ChangeImpact" },
+          },
+          reviewRequiredCount: { type: "integer", minimum: 0 },
+          replayed: { type: "boolean" },
         },
       },
       WardCompanionThread: {

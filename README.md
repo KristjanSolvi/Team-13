@@ -150,7 +150,12 @@ pipeline, patient-profile, downstream-gateway, and mock-EHR services on Railway'
 only the Agentic `/mcp` service required by Corti. Attach separate persistent
 volumes to the Agentic, patient-profile, downstream-gateway, and mock-EHR services for their SQLite databases.
 
+Railway services connected to this repository's `main` branch deploy
+automatically after the GitHub checks pass, while retaining their existing
+domains. The per-service watch patterns avoid rebuilding unaffected services.
+
 Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
-service roots, variables, bring-up order, and health checks. Do not add
+service roots, one-time GitHub connection, variables, bring-up order, and
+health checks. Do not add
 Supabase during the hackathon: the Agentic service owns task/thread state and
 the patient-profile service owns its version/audit and referral snapshots.

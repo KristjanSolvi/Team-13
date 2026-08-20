@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: agentic
+            directory: .
+            lockfile: package-lock.json
+            install: npm ci
+            command: npm test && npm run lint
+          - name: corti-pipeline
+            directory: apps/corti-pipeline
+            lockfile: apps/corti-pipeline/package-lock.json
+            install: npm ci
+            command: npm test && npm run typecheck && npm run build
+          - name: integration-api
+            directory: apps/integration-api
+            lockfile: apps/integration-api/package-lock.json
+            install: npm ci
+            command: npm test && npm run typecheck && npm run build
+          - name: patient-profile
+            directory: apps/patient-profile
+            lockfile: apps/patient-profile/package-lock.json
+            install: npm ci
+            command: npm test && npm run typecheck && npm run build
+          - name: mock-ehr
+            directory: apps/mock-ehr
+            lockfile: apps/mock-ehr/package-lock.json
+            install: npm ci
+            command: npm test && npm run typecheck && npm run build
+          - name: ward-ui
+            directory: .
+            lockfile: apps/ward-companion/package-lock.json
+            install: npm ci --prefix apps/corti-pipeline && npm ci --prefix apps/ward-companion
+            command: npm run typecheck --prefix apps/ward-companion && npm run lint --prefix apps/ward-companion && npm run build:railway --prefix apps/ward-companion
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.lockfile }}
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.install }}
+
+      - name: Run checks
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.command }}

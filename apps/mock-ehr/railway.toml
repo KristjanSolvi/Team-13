@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/apps/mock-ehr/**"]
 buildCommand = "npm ci && npm run build"
 
 [deploy]

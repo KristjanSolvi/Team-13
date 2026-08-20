@@ -199,6 +199,34 @@ Both writes use stable idempotency. Completed but unacknowledged deliveries stay
 pending, so a process failure between the two steps safely retries instead of
 losing the completion or fabricating it.
 
+## Change Radar
+
+Every persisted task evidence reference and generated handover source snapshot
+creates an immutable evidence dependency containing the source reference and
+content hash observed at creation time. Existing databases backfill these
+dependencies at startup.
+
+The internal, application-bearer-protected endpoint
+`POST /api/patients/:patientId/source-revisions` accepts a registered source
+item, its expected source reference, revised content, a revision reason, and an
+idempotency key. It atomically:
+
+1. records the source revision and before/after hashes;
+2. finds dependencies whose observed hash is now stale;
+3. persists one `review_required` impact per affected task or handover; and
+4. emits `record.source_revised` and `change_radar.impact_detected` audit
+   events without including the source text.
+
+Source revision detection never changes task, thread, handover, ownership, or
+completion state. Consumers must present the impact as requiring clinician
+review, not as an automated clinical decision.
+
+`GET /api/patients/:patientId/change-impacts` returns the patient-scoped impact
+chain. The integration overview and Ward Companion projection expose the same
+records as `changeImpacts`. The browser-facing
+`POST /api/demo/patients/:patientId/source-revisions` is intentionally limited
+to the predefined `synthetic-karen` revision and accepts no clinical text.
+
 ## Audience demo sessions
 
 The authoritative backend persists audience sessions, participants, groups,

@@ -1162,6 +1162,53 @@ test("external readback verification requires a downstream actor and replays exa
   );
 });
 
+test("source revisions expose review-only Change Radar impacts", async (t) => {
+  const harness = createAppHarness();
+  const draft = harness.ledger.createKarenDraft(
+    "ctx-karen",
+    "change-radar-http-draft",
+  );
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+
+  const revision = await fetch(
+    `${baseUrl}/api/patients/synthetic-karen/source-revisions`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify({
+        sourceItemId: "karen-dizziness-signal",
+        expectedSourceRef: "encounter:sentence-42",
+        newText:
+          "Dizziness now also occurs at rest after the medication change",
+        reason: "clinical_note_revision",
+        idempotencyKey: "change-radar-http-001",
+      }),
+    },
+  );
+  assert.equal(revision.status, 201);
+  const result = (await revision.json()) as {
+    reviewRequiredCount: number;
+    impacts: Array<{ artifactId: string; status: string }>;
+  };
+  assert.equal(result.reviewRequiredCount, 1);
+  assert.equal(result.impacts.length, 1);
+  assert.equal(result.impacts[0]?.artifactId, draft.taskId);
+  assert.equal(result.impacts[0]?.status, "review_required");
+
+  const response = await fetch(
+    `${baseUrl}/api/patients/synthetic-karen/change-impacts`,
+    { headers: appHeaders() },
+  );
+  assert.equal(response.status, 200);
+  const listed = (await response.json()) as { impacts: unknown[] };
+  assert.equal(listed.impacts.length, 1);
+  assert.equal(harness.ledger.getTask(draft.taskId).state, "draft");
+});
+
 test("SSE replays audit events after Last-Event-ID without credentials in the stream", async (t) => {
   const harness = createAppHarness();
   const startingSequence = harness.store.listEvents(0).at(-1)?.sequence ?? 0;
