@@ -17,6 +17,7 @@ function harness() {
     listThreads: vi.fn(async () => []),
     listTasks: vi.fn(async () => []),
     taskCommand: vi.fn(async () => ({})),
+    verifyExternal: vi.fn(async () => ({})),
     createDemoSession: vi.fn(async () => ({})),
     getDemoSession: vi.fn(async () => ({})),
     joinDemoSession: vi.fn(async () => ({})),
@@ -53,6 +54,22 @@ function harness() {
         flow: { homeTomorrow: true },
       },
       version: (body.expectedVersion as number) + 1,
+    })),
+    createReferralSnapshot: vi.fn(async (patientId, body) => ({
+      schemaVersion: "1",
+      referralId: "referral-1",
+      patientId,
+      ...body,
+      profileVersion: 2,
+    })),
+    listReferralSnapshots: vi.fn(async () => []),
+    getReferralSnapshot: vi.fn(async (referralId) => ({
+      schemaVersion: "1",
+      referralId,
+      patientId: "synthetic-karen",
+      profileVersion: 2,
+      currentProfileVersion: 2,
+      profileChanged: false,
     })),
   };
   const mockEhr: MockEhrGateway = {

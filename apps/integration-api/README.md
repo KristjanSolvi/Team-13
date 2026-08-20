@@ -4,17 +4,17 @@ Stateless backend-for-frontend and cross-service handoff layer. It gives the UI
 one safe HTTP surface while keeping all private service bearer tokens on the
 server.
 
-It owns no patient, document, thread, task, approval, or transcript state. The
+It owns no patient, document, thread, task, approval, delivery, or transcript state. The
 patient-profile service owns the mutable audited profile, the synthetic
 mock-EHR service owns document versions, the Agentic/MCP backend owns the
-ledger, and the Corti pipeline owns Ambient, Dictation, Text Generation, and
-Medical Coding.
+ledger, the downstream gateway owns delivery/readback state, and the Corti
+pipeline owns Ambient, Dictation, Text Generation, and Medical Coding.
 
 ## Current endpoints
 
 - `GET /healthz`: process liveness without contacting upstream services.
 - `GET /openapi.json`: machine-readable OpenAPI 3.1 contract for consumers.
-- `GET /readyz`: aggregate Agentic, pipeline, patient-profile, and mock-EHR
+- `GET /readyz`: aggregate Agentic, pipeline, patient-profile, downstream, and mock-EHR
   reachability and report whether live Corti calls are configured.
 - `POST /api/candidates/investigate`: validate a normalized pipeline candidate
   and retain it as one idempotent Agentic signal. Each validated evidence item
@@ -52,6 +52,13 @@ Medical Coding.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
   commands with actor attribution. Supported commands are `approve`, `correct`,
   `dismiss`, `reopen`, `accept`, `decline`, `complete`, and `verify`.
+  Approval also creates one idempotent downstream delivery. Referral approvals
+  can include `referralSnapshotId` to bind the delivery to the exact profile
+  version sent.
+- `GET /api/tasks/:taskId/deliveries`: read submission, provider, and readback
+  status without exposing the private downstream bearer.
+- `POST /api/demo/downstream/deliveries/:deliveryId/status`: authenticated demo
+  host control for the disclosed simulated provider.
 - `POST /api/demo/sessions`: create a meeting, discharge-coordination, or ward
   consultation audience session for solo or duo groups.
 - `GET /api/demo/sessions/:sessionId`: refresh the host's current audience
@@ -72,6 +79,10 @@ Medical Coding.
 - `POST /api/ehr/documents/:documentId/file`: explicitly file the reviewed
   version.
 - `GET /api/ehr/documents/:documentId/history`: read immutable version history.
+- `POST` and `GET /api/ehr/patients/:patientId/referral-snapshots`: create and
+  list immutable referral/profile snapshots.
+- `GET /api/ehr/referral-snapshots/:referralId`: read a snapshot and whether the
+  patient's live profile has changed since it was taken.
 
 Every response includes `x-correlation-id`. Browser requests are allowed only
 from configured origins. The participant credential returned by the join route
@@ -154,14 +165,15 @@ npm run dev
 Generate a dedicated `INTEGRATION_API_BEARER_TOKEN` for inbound handover
 requests. Do not reuse it as `AGENTIC_APP_BEARER_TOKEN`, which must match the
 Agentic/MCP backend's private application token. Set
-`PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
-private-service values. Never commit `.env`.
+`PATIENT_PROFILE_BEARER_TOKEN`, `MOCK_EHR_BEARER_TOKEN`, and
+`DOWNSTREAM_BEARER_TOKEN` to the matching private-service values. Never commit
+`.env`.
 
 Keep ordinary upstream calls on `UPSTREAM_TIMEOUT_MS=8000`. Use
-`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover generation, Corti rendering,
-and meeting reconciliation. Agent work can allow up to 60 seconds to send and
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for task approval, handover generation,
+Corti rendering, and meeting reconciliation. Agent work can allow up to 60 seconds to send and
 180 seconds to poll, so the dedicated value cannot be lower than 480000 and may
-be raised to at most 900000. Local ledger-only operations remain on the
+be raised to at most 900000. Local ledger-only task operations remain on the
 ordinary timeout.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
@@ -169,13 +181,19 @@ port `5173` are accepted by the example configuration. Add the deployed or
 Lovable preview origin explicitly to `UI_ORIGINS`; wildcard origins are
 intentionally unsupported.
 
+## Downstream verification loop
+
+The Integration API polls only pending delivery readbacks. A provider completion
+must contain an outcome reference before the reconciler asks the Agentic ledger
+to verify the exact source task. It acknowledges the delivery only after that
+ledger write succeeds. Stable idempotency keys make a crash between those two
+writes safe to retry; submission or acceptance alone never becomes verified.
+
 ## Next integration slice
 
-- Post-approval Text Generation and Medical Coding orchestration. Agentic now
-  returns a stable `taskId`, signed `approvalProof`, and expiry. The BFF must
-  still retrieve the exact approved task/version, validate that boundary, call
-  the pipeline, and retain the resulting draft artifacts. Approval alone must
-  never be presented as publication or downstream action.
+- Post-approval Text Generation and Medical Coding orchestration. The delivery
+  path is now durable, but generated clinical artifacts still need their own
+  reviewed-draft ownership and retention contract.
 - Mutations for manually created tasks and free-form operational activity.
   Their Agentic ownership and audit contracts must be defined before the UI
   sends them to a backend.

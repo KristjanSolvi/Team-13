@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   HttpAgenticGateway,
+  HttpDownstreamGateway,
   HttpMockEhrGateway,
   HttpPipelineGateway,
   HttpProfileGateway,
 } from "../src/gateways.js";
 
 describe("HTTP gateways", () => {
-  it("uses the handover timeout only for agent draft generation", async () => {
+  it("uses the long agent timeout for task approval and handover generation", async () => {
     vi.useFakeTimers();
     try {
       const signals: AbortSignal[] = [];
@@ -52,6 +53,24 @@ describe("HTTP gateways", () => {
         code: "UPSTREAM_TIMEOUT",
       });
 
+      const approvalOutcome = gateway
+        .taskCommand(
+          "11111111-1111-4111-8111-111111111111",
+          "approve",
+          {
+            expectedVersion: 1,
+            idempotencyKey: "approve-timeout-1",
+          },
+          meta,
+        )
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(499);
+      expect(signals[1]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(approvalOutcome).resolves.toMatchObject({
+        code: "UPSTREAM_TIMEOUT",
+      });
+
       const draftOutcome = gateway
         .createHandoverDraft(
           "synthetic-karen",
@@ -64,7 +83,7 @@ describe("HTTP gateways", () => {
         )
         .catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(499);
-      expect(signals[1]?.aborted).toBe(false);
+      expect(signals[2]?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       await expect(draftOutcome).resolves.toMatchObject({
         code: "UPSTREAM_TIMEOUT",
@@ -667,6 +686,75 @@ describe("HTTP gateways", () => {
     expect(headers.get("authorization")).toBe("Bearer profile-private-token");
     expect(headers.get("x-actor-id")).toBe("clinician:marriott");
     expect(headers.get("x-correlation-id")).toBe("corr-profile-1");
+  });
+
+  it("forwards referral snapshots through the private profile boundary", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          referralId: "referral-1",
+          patientId: "synthetic-karen",
+        }),
+        { status: 201 },
+      ),
+    );
+    const gateway = new HttpProfileGateway(
+      "http://profile.test",
+      1_000,
+      "profile-private-token",
+      fetchImpl,
+    );
+
+    await gateway.createReferralSnapshot(
+      "synthetic-karen",
+      {
+        idempotencyKey: "referral-create-001",
+        referralType: "Community care",
+      },
+      { actorId: "clinician:evelyn", correlationId: "corr-referral-1" },
+    );
+
+    const [url, options] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "http://profile.test/api/patients/synthetic-karen/referral-snapshots",
+    );
+    expect(options?.method).toBe("POST");
+    expect(new Headers(options?.headers).get("authorization")).toBe(
+      "Bearer profile-private-token",
+    );
+  });
+
+  it("keeps downstream credentials private for delivery calls", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ deliveryId: "delivery-1" }), {
+        status: 201,
+      }),
+    );
+    const gateway = new HttpDownstreamGateway(
+      "http://downstream.test",
+      1_000,
+      "downstream-private-token",
+      fetchImpl,
+    );
+    const meta = {
+      actorId: "system:integration-delivery",
+      correlationId: "corr-delivery-1",
+    };
+
+    await gateway.createDelivery(
+      {
+        idempotencyKey: "delivery:task-1",
+        sourceTaskId: "task-1",
+      },
+      meta,
+    );
+
+    const [url, options] = fetchImpl.mock.calls[0] ?? [];
+    expect(String(url)).toBe("http://downstream.test/api/deliveries");
+    expect(options?.method).toBe("POST");
+    const headers = new Headers(options?.headers);
+    expect(headers.get("authorization")).toBe("Bearer downstream-private-token");
+    expect(headers.get("x-actor-id")).toBe("system:integration-delivery");
   });
 
   it("rejects a malformed profile response", async () => {

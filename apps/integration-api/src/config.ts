@@ -10,10 +10,12 @@ const environmentSchema = z
     PIPELINE_BASE_URL: z.url().default("http://127.0.0.1:8787"),
     PATIENT_PROFILE_BASE_URL: z.url().default("http://127.0.0.1:8791"),
     MOCK_EHR_BASE_URL: z.url().default("http://127.0.0.1:8793"),
+    DOWNSTREAM_BASE_URL: z.url().default("http://127.0.0.1:8792"),
     INTEGRATION_API_BEARER_TOKEN: z.string().min(8),
     AGENTIC_APP_BEARER_TOKEN: z.string().min(8),
     PATIENT_PROFILE_BEARER_TOKEN: z.string().min(8),
     MOCK_EHR_BEARER_TOKEN: z.string().min(8),
+    DOWNSTREAM_BEARER_TOKEN: z.string().min(8),
     UI_ORIGINS: z
       .string()
       .default("http://127.0.0.1:5173,http://localhost:5173"),
@@ -29,18 +31,32 @@ const environmentSchema = z
       .min(480_000)
       .max(900_000)
       .default(600_000),
+    DOWNSTREAM_RECONCILE_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(60_000)
+      .default(5_000),
   })
   .superRefine((value, context) => {
     const upstreamTokens = [
       value.AGENTIC_APP_BEARER_TOKEN,
       value.PATIENT_PROFILE_BEARER_TOKEN,
       value.MOCK_EHR_BEARER_TOKEN,
+      value.DOWNSTREAM_BEARER_TOKEN,
     ];
     if (upstreamTokens.includes(value.INTEGRATION_API_BEARER_TOKEN)) {
       context.addIssue({
         code: "custom",
         path: ["INTEGRATION_API_BEARER_TOKEN"],
         message: "Inbound bearer must be unique across service trust domains",
+      });
+    }
+    if (new Set(upstreamTokens).size !== upstreamTokens.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["AGENTIC_APP_BEARER_TOKEN"],
+        message: "Each upstream service must use a unique bearer token",
       });
     }
   });
@@ -64,12 +80,15 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     pipelineBaseUrl: value.PIPELINE_BASE_URL,
     patientProfileBaseUrl: value.PATIENT_PROFILE_BASE_URL,
     mockEhrBaseUrl: value.MOCK_EHR_BASE_URL,
+    downstreamBaseUrl: value.DOWNSTREAM_BASE_URL,
     integrationApiBearerToken: value.INTEGRATION_API_BEARER_TOKEN,
     agenticBearerToken: value.AGENTIC_APP_BEARER_TOKEN,
     patientProfileBearerToken: value.PATIENT_PROFILE_BEARER_TOKEN,
     mockEhrBearerToken: value.MOCK_EHR_BEARER_TOKEN,
+    downstreamBearerToken: value.DOWNSTREAM_BEARER_TOKEN,
     allowedOrigins,
     upstreamTimeoutMs: value.UPSTREAM_TIMEOUT_MS,
     handoverUpstreamTimeoutMs: value.HANDOVER_UPSTREAM_TIMEOUT_MS,
+    downstreamReconcileIntervalMs: value.DOWNSTREAM_RECONCILE_INTERVAL_MS,
   };
 }

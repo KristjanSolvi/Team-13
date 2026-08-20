@@ -1,7 +1,8 @@
 # Follow-Through integration contract v1
 
 This is the MVP contract between the Corti pipeline, integration API, Ward
-Companion, and Agentic/MCP backend. All examples use synthetic data.
+Companion, Agentic/MCP backend, patient profile, mock EHR, and downstream
+gateway. All examples use synthetic data.
 
 ## Authentication and attribution
 
@@ -150,7 +151,7 @@ All task commands use `POST /api/tasks/:taskId/:command`:
 
 | Command | Required fields beyond `expectedVersion` and `idempotencyKey` | Result |
 | --- | --- | --- |
-| `approve` | optional `approvalChannel` | Exact short-lived proof, `approved_not_published`; approval alone does not publish |
+| `approve` | optional `approvalChannel`; Integration API also accepts optional `referralSnapshotId` | Published authoritative task plus idempotent downstream delivery when the Corti runner is configured |
 | `correct` | at least one supported correction | Updated draft; prior approval is invalid |
 | `dismiss` | `reason` | Dismissed draft and thread |
 | `reopen` | `dueInMs` | Escalated task re-offered to its team |
@@ -169,7 +170,8 @@ Example approval request:
 }
 ```
 
-The response is intentionally not a published task:
+Without a configured Corti runner, the direct Agentic service returns an
+explicit recovery state and does not pretend publication occurred:
 
 ```json
 {
@@ -180,8 +182,44 @@ The response is intentionally not a published task:
 }
 ```
 
-The Corti agent publishes that exact approved draft with the MCP
-`publish_team_task` tool, then verifies authoritative state with `get_task`.
+With the configured runner, the Corti agent publishes that exact approved draft
+with the MCP `publish_team_task` tool, verifies authoritative state with
+`get_task`, and the Integration API submits the returned task to the private
+downstream gateway before returning success.
+
+## Referral snapshots and downstream delivery
+
+The patient profile service is the single mutable profile owner. The Integration
+API exposes it through:
+
+- `PATCH /api/ehr/patients/:patientId/profile` with optimistic versioning;
+- `POST` and `GET /api/ehr/patients/:patientId/referral-snapshots`;
+- `GET /api/ehr/referral-snapshots/:referralId`.
+
+A referral snapshot is immutable. It contains the exact profile version used
+for that referral; reading it later reports `profileChanged: true` when the live
+profile has moved on. The caller creates the snapshot first and supplies its
+`referralSnapshotId` in the approval request. The Integration API rejects a
+snapshot attached to a non-referral task or a different patient.
+
+After authoritative publication, the Integration API submits one delivery with
+the stable key `delivery:<taskId>`. A request failure is retryable: replaying the
+same approval reuses both the Agentic publication and downstream intent rather
+than sending duplicate work. The UI reads provider state through
+`GET /api/tasks/:taskId/deliveries`; it never calls the private gateway.
+
+Provider submission and acceptance do not verify a task. The background
+reconciler reads pending provider work and acts only on `completed` readback
+with a non-empty outcome reference. It then:
+
+1. calls the Agentic `verify-external` command with the exact delivery and task
+   version, using an attributed `downstream:` verifier;
+2. acknowledges the readback with a `system:` actor only after the ledger write
+   succeeds.
+
+Both writes use stable idempotency. Completed but unacknowledged deliveries stay
+pending, so a process failure between the two steps safely retries instead of
+losing the completion or fabricating it.
 
 ## Change Radar
 

@@ -28,6 +28,7 @@ export function openDownstreamDatabase(databasePath: string): DatabaseSync {
       status TEXT NOT NULL,
       external_reference TEXT UNIQUE,
       outcome_reference TEXT,
+      source_acknowledged_at TEXT,
       status_reason TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -71,5 +72,13 @@ export function openDownstreamDatabase(databasePath: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery
       ON downstream_delivery_events(delivery_id, sequence);
   `);
+  const deliveryColumns = database
+    .prepare("PRAGMA table_info(downstream_deliveries)")
+    .all() as Array<{ name?: unknown }>;
+  if (!deliveryColumns.some((column) => column.name === "source_acknowledged_at")) {
+    database.exec(
+      "ALTER TABLE downstream_deliveries ADD COLUMN source_acknowledged_at TEXT",
+    );
+  }
   return database;
 }

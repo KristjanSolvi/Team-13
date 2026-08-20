@@ -7,7 +7,10 @@ import {
 
 import { DomainError } from "../domain/errors.js";
 import { calculatePriority } from "../domain/priority.js";
-import { requireTransition } from "../domain/state-machine.js";
+import {
+  requireExternalVerificationTransition,
+  requireTransition,
+} from "../domain/state-machine.js";
 import type {
   Actor,
   ClinicalUrgency,
@@ -694,6 +697,49 @@ export class LedgerService {
         { type: "system", id: verifierId },
         "task.completion_verified",
         { outcomeRef },
+      );
+      const thread = this.store.requireThread(updated.threadId);
+      this.store.setThreadState(
+        thread.threadId,
+        thread.version,
+        "verified",
+        updated.updatedAt,
+      );
+      return updated;
+    });
+  }
+
+  verifyTaskFromExternalReadback(
+    taskId: string,
+    expectedVersion: number,
+    outcomeRef: string,
+    deliveryId: string,
+    verifierId: string,
+  ): Task {
+    if (!verifierId.startsWith("downstream:")) {
+      throw new DomainError(
+        "DOWNSTREAM_VERIFIER_REQUIRED",
+        "Independent downstream verification is required",
+        false,
+        403,
+      );
+    }
+    return this.store.transaction(() => {
+      const updated = this.store.updateTask(
+        taskId,
+        expectedVersion,
+        (task) => {
+          requireExternalVerificationTransition(task.state);
+          return {
+            ...task,
+            state: "verified",
+            version: task.version + 1,
+            updatedAt: this.clock.now().toISOString(),
+          };
+        },
+        { type: "system", id: verifierId },
+        "task.completion_verified",
+        { deliveryId, outcomeRef },
       );
       const thread = this.store.requireThread(updated.threadId);
       this.store.setThreadState(

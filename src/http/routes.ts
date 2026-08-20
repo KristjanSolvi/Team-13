@@ -551,6 +551,44 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
   );
 
   router.post(
+    "/tasks/:taskId/verify-external",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({
+          ...commandBase,
+          outcomeRef: z.string().min(1).max(240),
+          deliveryId: z.string().min(1).max(160),
+        })
+        .parse(request.body);
+      const verifierId = requireActor(request);
+      if (!verifierId.startsWith("downstream:")) {
+        throw new DomainError(
+          "DOWNSTREAM_VERIFIER_REQUIRED",
+          "Independent downstream verification is required",
+          false,
+          403,
+        );
+      }
+      const taskId = pathParam(request, "taskId");
+      response.json(
+        dependencies.store.runTaskCommand(
+          `http-verify-external:${taskId}:${verifierId}`,
+          body.idempotencyKey,
+          dependencies.clock.now().toISOString(),
+          () =>
+            dependencies.ledger.verifyTaskFromExternalReadback(
+              taskId,
+              body.expectedVersion,
+              body.outcomeRef,
+              body.deliveryId,
+              verifierId,
+            ),
+        ),
+      );
+    }),
+  );
+
+  router.post(
     "/demo/sessions",
     asyncRoute((request, response) => {
       const body = z

@@ -9,6 +9,7 @@ import express, {
 import { ZodError } from "zod";
 
 import {
+  acknowledgeReadbackSchema,
   createDeliverySchema,
   deliveryIdSchema,
   simulateProviderStatusSchema,
@@ -107,6 +108,20 @@ export function createDownstreamApp(options: CreateAppOptions) {
       response.json(
         await options.service.readback(
           deliveryIdSchema.parse(pathParam(request, "deliveryId")),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/deliveries/:deliveryId/acknowledge",
+    route((request, response) => {
+      const input = acknowledgeReadbackSchema.parse(request.body);
+      response.json(
+        options.service.acknowledgeReadback(
+          deliveryIdSchema.parse(pathParam(request, "deliveryId")),
+          input.outcomeReference,
+          actorId(request),
         ),
       );
     }),
