@@ -1477,7 +1477,7 @@ git commit -m "docs: add grounded handover runbook"
 
 **Files:** No planned product changes.
 
-- [ ] **Step 1: Fetch and compare with current main**
+- [x] **Step 1: Fetch and compare with current main**
 
 ```bash
 git fetch origin --prune
@@ -1488,7 +1488,7 @@ git diff --stat origin/main...HEAD
 Expected: only this feature's commits appear on the left. If main advanced,
 rebase now and rerun every command from Task 9 Step 5.
 
-- [ ] **Step 2: Review the feature boundary**
+- [x] **Step 2: Review the feature boundary**
 
 Inspect:
 
@@ -1502,7 +1502,7 @@ Expected: no whole-meeting capture, no UI implementation, no real credentials,
 no generated SQLite/build files, and no changes from unfinished feature
 branches.
 
-- [ ] **Step 3: Verify the no-mutation guarantee**
+- [x] **Step 3: Verify the no-mutation guarantee**
 
 Run the dedicated MCP and scenario tests again and inspect the registered tool
 names:
