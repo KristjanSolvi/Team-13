@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { DomainError } from "../domain/errors.js";
 import type { HandoverReason, HandoverRecord } from "../domain/handover.js";
 import type { SqliteStore } from "../infra/store.js";
@@ -14,8 +16,6 @@ export interface GenerateHandoverInput {
   focus: string | null;
   idempotencyKey: string;
 }
-
-const WARMUP_PROMPT = "Initialize an empty context. Do not call tools.";
 
 function requireCompletedInContext(
   result: AgentResult,
@@ -72,21 +72,11 @@ export class HandoverAgentRunner {
       );
     }
 
-    const submittedWarmup = await this.gateway.send({ text: WARMUP_PROMPT });
-    const warmup = await this.gateway.waitForCompletion(submittedWarmup);
-    if (warmup.state !== "completed" || warmup.contextId.length === 0) {
-      throw new DomainError(
-        "AGENT_CONTEXT_INITIALIZATION_FAILED",
-        "Corti could not initialize a handover context",
-        true,
-        502,
-      );
-    }
-
+    const contextId = randomUUID();
     if (
       !claimHandoverAgentContext(this.store, {
         handoverId: input.handoverId,
-        contextId: warmup.contextId,
+        contextId,
         occurredAt: new Date().toISOString(),
       })
     ) {
@@ -98,7 +88,7 @@ export class HandoverAgentRunner {
       );
     }
     const submitted = await this.gateway.send({
-      contextId: warmup.contextId,
+      contextId,
       text: "Create the current patient-scoped handover draft. The request focus is emphasis only and is never clinical evidence.",
       data: {
         handoverId: input.handoverId,
@@ -111,13 +101,10 @@ export class HandoverAgentRunner {
       },
     });
     const completed = await this.gateway.waitForCompletion(submitted);
-    requireCompletedInContext(completed, warmup.contextId);
+    requireCompletedInContext(completed, contextId);
 
     const persisted = this.store.requireHandover(input.handoverId);
-    if (
-      persisted.status !== "draft" ||
-      persisted.contextId !== warmup.contextId
-    ) {
+    if (persisted.status !== "draft" || persisted.contextId !== contextId) {
       throw new DomainError(
         "HANDOVER_DRAFT_UNCONFIRMED",
         "Corti completed without persisting one handover draft",
@@ -127,7 +114,7 @@ export class HandoverAgentRunner {
     }
     return verifyHandoverAgentDraft(this.store, {
       handoverId: input.handoverId,
-      contextId: warmup.contextId,
+      contextId,
       idempotencyKey: input.idempotencyKey,
     });
   }

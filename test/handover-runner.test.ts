@@ -361,31 +361,26 @@ test("handover context initialization audit is atomic and the fresh claim is ide
   });
 });
 
-test("a handover always uses a fresh data-free context and verifies one persisted draft", async (t) => {
+test("a handover reserves a fresh context before one scoped agent call", async (t) => {
   const { store, handovers, handover } = harness(t);
   store.putContextMapping("ctx-stale", handover.interactionId, PATIENT_ID, NOW);
   const calls: AgentSendInput[] = [];
   const gateway: AgentGateway = {
     async send(input) {
       calls.push(input);
-      if (calls.length === 1) {
-        assert.equal(input.contextId, undefined);
-        assert.equal(input.data, undefined);
-        assert.doesNotMatch(input.text, /patient|karen|handover/i);
-        return { contextId: "ctx-fresh", taskId: "warmup", state: "submitted" };
-      }
+      assert.equal(typeof input.contextId, "string");
       assert.equal(
         store.contextForInteraction(handover.interactionId),
-        "ctx-fresh",
+        input.contextId,
       );
       handovers.saveDraft({
         handoverId: handover.handoverId,
         patientId: PATIENT_ID,
-        contextId: "ctx-fresh",
+        contextId: input.contextId ?? "",
         packet: PACKET,
       });
       return {
-        contextId: "ctx-fresh",
+        contextId: input.contextId ?? "",
         taskId: "generate",
         state: "submitted",
       };
@@ -408,11 +403,11 @@ test("a handover always uses a fresh data-free context and verifies one persiste
   });
 
   assert.equal(generated.status, "draft");
-  assert.equal(generated.contextId, "ctx-fresh");
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1]?.contextId, "ctx-fresh");
-  assert.match(calls[1]?.text ?? "", /emphasis.*never.*evidence/i);
-  assert.deepEqual(calls[1]?.data, {
+  assert.equal(typeof generated.contextId, "string");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.contextId, generated.contextId);
+  assert.match(calls[0]?.text ?? "", /emphasis.*never.*evidence/i);
+  assert.deepEqual(calls[0]?.data, {
     handoverId: handover.handoverId,
     patientId: PATIENT_ID,
     interactionId: `handover:${handover.handoverId}`,
@@ -421,8 +416,8 @@ test("a handover always uses a fresh data-free context and verifies one persiste
     idempotencyKey: "handover-request-1",
     mcpToken: MCP_TOKEN,
   });
-  assert.equal(Object.hasOwn(calls[1]?.data ?? {}, "focus"), false);
-  assert.equal(store.patientForContext("ctx-fresh"), PATIENT_ID);
+  assert.equal(Object.hasOwn(calls[0]?.data ?? {}, "focus"), false);
+  assert.equal(store.patientForContext(generated.contextId ?? ""), PATIENT_ID);
   assert.equal(store.patientForContext("ctx-stale"), null);
   assert.equal(
     store.listEvents(0).some((event) => event.eventType.startsWith("task.")),
@@ -443,7 +438,7 @@ test("a handover always uses a fresh data-free context and verifies one persiste
   const verificationScope = handoverAgentVerificationScope(handover.handoverId);
   const expectedMarker = {
     handoverId: handover.handoverId,
-    contextId: "ctx-fresh",
+    contextId: generated.contextId,
     version: generated.version,
   };
   assert.deepEqual(
@@ -453,7 +448,7 @@ test("a handover always uses a fresh data-free context and verifies one persiste
   assert.deepEqual(
     verifyHandoverAgentDraft(store, {
       handoverId: handover.handoverId,
-      contextId: "ctx-fresh",
+      contextId: generated.contextId ?? "",
       idempotencyKey: "handover-request-1",
     }),
     generated,
@@ -467,18 +462,16 @@ test("a handover always uses a fresh data-free context and verifies one persiste
 test("handover verification marker writes fail atomically and retry idempotently", async (t) => {
   const store = new VerificationMarkerFailureStore(openDatabase(":memory:"));
   const { handovers, handover } = harness(t, store);
-  let calls = 0;
   const gateway: AgentGateway = {
-    async send() {
-      calls += 1;
-      if (calls === 1) return completed("ctx-marker", "warmup");
+    async send(input) {
+      const contextId = input.contextId ?? "";
       handovers.saveDraft({
         handoverId: handover.handoverId,
         patientId: PATIENT_ID,
-        contextId: "ctx-marker",
+        contextId,
         packet: PACKET,
       });
-      return completed("ctx-marker", "generate");
+      return completed(contextId, "generate");
     },
     async waitForCompletion(result) {
       return result;
@@ -508,12 +501,12 @@ test("handover verification marker writes fail atomically and retry idempotently
   store.failMarker = false;
   const first = verifyHandoverAgentDraft(store, {
     handoverId: handover.handoverId,
-    contextId: "ctx-marker",
+    contextId: draft.contextId ?? "",
     idempotencyKey: "handover-request-1",
   });
   const replay = verifyHandoverAgentDraft(store, {
     handoverId: handover.handoverId,
-    contextId: "ctx-marker",
+    contextId: draft.contextId ?? "",
     idempotencyKey: "handover-request-1",
   });
   assert.deepEqual(first, draft);
@@ -525,7 +518,7 @@ test("handover verification marker writes fail atomically and retry idempotently
     ),
     {
       handoverId: handover.handoverId,
-      contextId: "ctx-marker",
+      contextId: draft.contextId,
       version: draft.version,
     },
   );
@@ -549,13 +542,15 @@ for (const scenario of [
 ] as const) {
   test(`rejects ${scenario.name}`, async (t) => {
     const { store, handover } = harness(t);
-    let callCount = 0;
     const gateway: AgentGateway = {
-      async send() {
-        callCount += 1;
-        return callCount === 1
-          ? completed("ctx-fresh", "warmup")
-          : scenario.scopedResult;
+      async send(input) {
+        return {
+          ...scenario.scopedResult,
+          contextId:
+            scenario.code === "AGENT_CONTEXT_MISMATCH"
+              ? "ctx-other"
+              : (input.contextId ?? ""),
+        };
       },
       async waitForCompletion(result) {
         return result;
@@ -581,11 +576,9 @@ for (const scenario of [
 
 test("rejects a completed Corti result when no draft was persisted", async (t) => {
   const { store, handover } = harness(t);
-  let callCount = 0;
   const gateway: AgentGateway = {
-    async send() {
-      callCount += 1;
-      return completed("ctx-fresh", callCount === 1 ? "warmup" : "generate");
+    async send(input) {
+      return completed(input.contextId ?? "", "generate");
     },
     async waitForCompletion(result) {
       return result;
@@ -602,33 +595,6 @@ test("rejects a completed Corti result when no draft was persisted", async (t) =
     }),
     (error) => assertDomainError(error, "HANDOVER_DRAFT_UNCONFIRMED", true),
   );
-});
-
-test("rejects a warmup context that is already mapped", async (t) => {
-  const { store, handover } = harness(t);
-  store.putContextMapping("ctx-reused", "interaction-other", PATIENT_ID, NOW);
-  const gateway: AgentGateway = {
-    async send() {
-      return completed("ctx-reused", "warmup");
-    },
-    async waitForCompletion(result) {
-      return result;
-    },
-  };
-
-  await assert.rejects(
-    new HandoverAgentRunner(gateway, store, MCP_TOKEN).generate({
-      handoverId: handover.handoverId,
-      patientId: PATIENT_ID,
-      reason: "on_demand",
-      focus: "Medication safety",
-      idempotencyKey: "handover-request-1",
-    }),
-    (error) =>
-      assertDomainError(error, "AGENT_CONTEXT_INITIALIZATION_FAILED", true),
-  );
-  assert.equal(store.contextForInteraction("interaction-other"), "ctx-reused");
-  assert.equal(store.contextForInteraction(handover.interactionId), null);
 });
 
 test("rejects a second agent run after a draft has already been saved", async (t) => {
