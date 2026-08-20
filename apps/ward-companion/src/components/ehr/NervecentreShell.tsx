@@ -83,6 +83,12 @@ export function NervecentreShell({
   useEffect(() => {
     let currentRequest = true;
     setEhrDocuments([]);
+    if (current.backendLinked !== true) {
+      setEhrConnected(false);
+      return () => {
+        currentRequest = false;
+      };
+    }
     setEhrConnected(null);
     void getEhrPatientRecord(current.pipelinePatientId, crypto.randomUUID())
       .then((record) => {
@@ -96,7 +102,7 @@ export function NervecentreShell({
     return () => {
       currentRequest = false;
     };
-  }, [current.pipelinePatientId]);
+  }, [current.backendLinked, current.pipelinePatientId]);
 
   const handleDocumentChange = (document: ClinicalDocument) => {
     setEhrConnected(true);

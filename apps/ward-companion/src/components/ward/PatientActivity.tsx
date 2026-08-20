@@ -5,14 +5,18 @@ import {
   CheckCheck,
   ChevronDown,
   CircleSlash,
+  Pencil,
   Plus,
   RotateCcw,
   Send,
+  Trash2,
   TriangleAlert,
+  Users,
   UserPlus,
 } from "lucide-react";
-import type { Thread, ThreadStatus } from "@/data/ward";
-import { patients, statusDotClass, statusLabels } from "@/data/ward";
+import type { NewTaskOptions, Thread, ThreadStatus, Urgency } from "@/data/ward";
+import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
+import type { WardStaffOption } from "@/data/demo-staff";
 import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
 import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
@@ -35,7 +39,12 @@ type Props = {
   ledgerBusy: string | null;
   ledgerErrors: Record<string, string>;
   onAddActivity: (id: string, text: string) => void;
-  onAddThread: (patientId: string, title: string) => void;
+  onAddThread: (patientId: string, title: string, options?: NewTaskOptions) => void;
+  onOfferToTeam: (id: string, team: string) => void;
+  onEditThread: (id: string, patch: Partial<Thread>) => void;
+  onRemoveThread: (id: string, reason: string) => void;
+  staff: WardStaffOption[];
+  teams: string[];
   onRefreshPatient: (id: string) => Promise<void>;
   onBackToBoard: () => void;
 };
@@ -99,6 +108,11 @@ export function PatientActivity({
   ledgerErrors,
   onAddActivity,
   onAddThread,
+  onOfferToTeam,
+  onEditThread,
+  onRemoveThread,
+  staff,
+  teams,
   onRefreshPatient,
   onBackToBoard,
 }: Props) {
@@ -106,6 +120,11 @@ export function PatientActivity({
   const [newTask, setNewTask] = useState("");
   const [showNewTask, setShowNewTask] = useState(false);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [taskTeam, setTaskTeam] = useState("");
+  const [taskUrgency, setTaskUrgency] = useState<Urgency>("routine");
+  const [taskDue, setTaskDue] = useState("");
   const { pending, run } = usePendingAction();
 
   const patient = patients.find((p) => p.id === patientId) ?? patients[0]!;
@@ -186,21 +205,72 @@ export function PatientActivity({
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newTask.trim()) return;
-                onAddThread(scopeId, newTask.trim());
+                onAddThread(scopeId, newTask.trim(), {
+                  team: taskTeam || null,
+                  urgency: taskUrgency,
+                  due: taskDue,
+                  source: "manual",
+                });
                 setNewTask("");
+                setTaskTeam("");
+                setTaskUrgency("routine");
+                setTaskDue("");
                 setShowNewTask(false);
               }}
-              className="mb-4 flex gap-2"
+              className="mb-4 space-y-2 rounded-lg border border-border bg-background p-3"
             >
               <input
                 value={newTask}
                 onChange={(e) => setNewTask(e.target.value)}
                 placeholder={`Task for ${patientOf(scopeId)?.name ?? "patient"}…`}
-                className="flex-1 rounded-md border border-border bg-panel px-3 py-2 text-sm"
+                className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm"
               />
-              <button className="rounded-md bg-foreground px-3 text-sm font-medium text-background">
-                Add
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={taskTeam}
+                  onChange={(e) => setTaskTeam(e.target.value)}
+                  aria-label="Team"
+                  className="rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12.5px]"
+                >
+                  <option value="">No team yet</option>
+                  {teams.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={taskUrgency}
+                  onChange={(e) => setTaskUrgency(e.target.value as Urgency)}
+                  aria-label="Urgency"
+                  className="rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12.5px]"
+                >
+                  {(["routine", "soon", "urgent"] as Urgency[]).map((urgency) => (
+                    <option key={urgency} value={urgency}>
+                      {urgencyLabels[urgency]}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={taskDue}
+                  onChange={(e) => setTaskDue(e.target.value)}
+                  placeholder="Due — e.g. Today 16:00"
+                  aria-label="Due"
+                  className="flex-1 rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12.5px]"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewTask(false)}
+                  className="rounded-md border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
+                >
+                  Cancel
+                </button>
+                <button className="rounded-md bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background">
+                  Add task
+                </button>
+              </div>
             </form>
           )}
 
@@ -218,6 +288,7 @@ export function PatientActivity({
               const expanded = thread.id === activeThreadId;
               const done = thread.status === "verified";
               const suggested = thread.candidates.find((c) => c.free) ?? thread.candidates[0];
+              const assignmentCandidates = thread.candidates.length > 0 ? thread.candidates : staff;
               const last = thread.activity[thread.activity.length - 1];
               return (
                 <li key={thread.id} className="relative pl-6">
@@ -236,7 +307,12 @@ export function PatientActivity({
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
                         {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due} · {thread.backend === undefined ? "local task" : "ledger"}
+                        {thread.due} ·{" "}
+                        {thread.backend !== undefined
+                          ? "ledger"
+                          : thread.fixture === "demo"
+                            ? "demo task"
+                            : "local task"}
                       </span>
                     </span>
                     <ChevronDown
@@ -255,6 +331,38 @@ export function PatientActivity({
                       <p className="border-l-2 border-teal/40 pl-3 text-[13.5px] leading-relaxed italic text-foreground">
                         {thread.heard}
                       </p>
+
+                      {(thread.team !== undefined ||
+                        thread.urgency !== undefined ||
+                        thread.detail != null) && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                          {thread.team != null && (
+                            <span className="flex items-center gap-1 rounded-full border border-border bg-panel px-2 py-0.5 text-muted-foreground">
+                              <Users className="size-3" /> {thread.team}
+                            </span>
+                          )}
+                          {thread.urgency !== undefined && thread.urgency !== "routine" && (
+                            <span className="rounded-full bg-pending-soft px-2 py-0.5 font-medium text-pending-strong">
+                              {urgencyLabels[thread.urgency]}
+                            </span>
+                          )}
+                          {thread.detail != null && (
+                            <span className="w-full pt-1 text-[12.5px] leading-snug text-muted-foreground">
+                              Agent brief: {thread.detail}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {!done &&
+                        thread.backend === undefined &&
+                        thread.offerState === "offered" &&
+                        thread.assignee === null && (
+                          <p className="flex items-center gap-2 rounded-md bg-pending-soft px-3 py-2 text-[13px] font-medium text-pending-strong">
+                            <Spinner className="size-3" />
+                            Waiting for a member of {thread.offeredTo} to accept…
+                          </p>
+                        )}
 
                       {!done &&
                         (thread.backend === undefined ||
@@ -333,7 +441,32 @@ export function PatientActivity({
                               Assign to {suggested.name.split(" ")[0]}
                             </button>
                           )}
-                          {thread.candidates.length > 0 && (
+                          <select
+                            value=""
+                            aria-label="Offer to a team"
+                            onChange={(event) => {
+                              const team = event.target.value;
+                              if (team.length === 0) return;
+                              run(`offer-${thread.id}`, () => onOfferToTeam(thread.id, team));
+                            }}
+                            className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-foreground"
+                          >
+                            <option value="">Offer to a team…</option>
+                            {teams.map((team) => (
+                              <option key={team} value={team}>
+                                {team}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setEditFor(editFor === thread.id ? null : thread.id)}
+                            className="rounded-md border border-border bg-panel px-2.5 py-2 text-muted-foreground hover:bg-background"
+                            aria-label="Edit task"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          {assignmentCandidates.length > 0 && (
                             <button
                               onClick={() =>
                                 setPickerFor(pickerFor === thread.id ? null : thread.id)
@@ -347,9 +480,109 @@ export function PatientActivity({
                         </div>
                       )}
 
+                      {thread.backend === undefined && editFor === thread.id && (
+                        <form
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const data = new FormData(event.currentTarget);
+                            onEditThread(thread.id, {
+                              title:
+                                String(data.get("title") ?? thread.title).trim() || thread.title,
+                              due: String(data.get("due") ?? thread.due).trim() || thread.due,
+                              team: String(data.get("team") ?? "") || null,
+                              urgency: String(data.get("urgency") ?? "routine") as Urgency,
+                              detail: String(data.get("detail") ?? "").trim() || null,
+                            });
+                            setEditFor(null);
+                            setConfirmRemove(null);
+                          }}
+                          className="space-y-2 rounded-md border border-border bg-panel p-3"
+                        >
+                          <input
+                            name="title"
+                            defaultValue={thread.title}
+                            aria-label="Task title"
+                            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[13.5px]"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <select
+                              name="team"
+                              defaultValue={thread.team ?? ""}
+                              aria-label="Team"
+                              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-[12.5px]"
+                            >
+                              <option value="">No team</option>
+                              {teams.map((team) => (
+                                <option key={team} value={team}>
+                                  {team}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              name="urgency"
+                              defaultValue={thread.urgency ?? "routine"}
+                              aria-label="Urgency"
+                              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-[12.5px]"
+                            >
+                              {(["routine", "soon", "urgent"] as Urgency[]).map((urgency) => (
+                                <option key={urgency} value={urgency}>
+                                  {urgencyLabels[urgency]}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              name="due"
+                              defaultValue={thread.due}
+                              aria-label="Due"
+                              className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-[12.5px]"
+                            />
+                          </div>
+                          <textarea
+                            name="detail"
+                            defaultValue={thread.detail ?? ""}
+                            aria-label="Agent brief"
+                            placeholder="Add context the agent missed…"
+                            rows={2}
+                            className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-[12.5px]"
+                          />
+                          <div className="flex items-center justify-between gap-3">
+                            {confirmRemove === thread.id ? (
+                              <span className="flex flex-wrap items-center gap-2 text-[12.5px] text-escalated-strong">
+                                Remove this task?
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveThread(thread.id, "not needed")}
+                                  className="rounded-md bg-escalated-soft px-2 py-1 font-medium text-escalated-strong"
+                                >
+                                  Yes, remove
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmRemove(null)}
+                                  className="text-muted-foreground"
+                                >
+                                  Keep
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmRemove(thread.id)}
+                                className="flex items-center gap-1.5 text-[12.5px] font-medium text-escalated-strong"
+                              >
+                                <Trash2 className="size-3.5" /> Remove task
+                              </button>
+                            )}
+                            <button className="rounded-md bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background">
+                              Save
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
                       {pickerFor === thread.id && (
                         <div className="flex flex-wrap gap-1.5">
-                          {thread.candidates.map((candidate) => (
+                          {assignmentCandidates.map((candidate) => (
                             <button
                               key={candidate.name}
                               onClick={() => {

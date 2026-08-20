@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
+import type { CaseNote, DocId, NewTaskOptions, Thread, ThreadStatus } from "@/data/ward";
 import { initialNotes, initialThreads, patients, statusLabels } from "@/data/ward";
+import { demoStaff, demoTeams } from "@/data/demo-staff";
 import {
   demoActors,
   executeTaskCommand,
@@ -64,7 +65,7 @@ export function useWardRuntime() {
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
     const patient = patients.find((candidate) => candidate.id === uiPatientId);
-    if (patient === undefined) return;
+    if (patient === undefined || patient.backendLinked !== true) return;
     try {
       const overview = await getWardCompanionOverview(
         patient.pipelinePatientId,
@@ -224,6 +225,11 @@ export function useWardRuntime() {
       updateThread(id, (current) => ({
         ...current,
         assignee,
+        ...(current.backend === undefined && assignee !== null
+          ? { offerState: "accepted" as const }
+          : current.backend === undefined && current.offerState === "accepted"
+            ? { offerState: "none" as const }
+            : {}),
         activity: [
           ...current.activity,
           {
@@ -261,8 +267,13 @@ export function useWardRuntime() {
   );
 
   const createThread = useCallback(
-    (patientId: string, title: string) => {
+    (patientId: string, title: string, options: NewTaskOptions = {}) => {
       const id = `t-${Date.now()}`;
+      const team = options.team ?? null;
+      const candidates = demoStaff
+        .filter((member) => team === null || member.team === team)
+        .slice(0, 4)
+        .map(({ name, role, free }) => ({ name, role, free }));
       setThreads((current) => [
         ...current,
         {
@@ -270,12 +281,18 @@ export function useWardRuntime() {
           patientId,
           title,
           status: "pending",
-          heard: "Added by hand on the ward.",
+          heard: options.source === "scribe" ? "Heard on the round." : "Added by hand on the ward.",
           matters: "Flagged as worth following through to completion.",
-          suggestion: "Awaiting assignment.",
+          suggestion: team === null ? "Awaiting assignment." : `Offer this to ${team}.`,
           assignee: null,
-          candidates: [],
-          due: "Today",
+          candidates,
+          due: options.due?.trim() || "Today",
+          team,
+          urgency: options.urgency ?? "routine",
+          detail: options.detail?.trim() || null,
+          source: options.source ?? "manual",
+          offerState: "none",
+          offeredTo: null,
           activity: [
             { id: `${id}-1`, at: stamp(), actor: "You", text: "Thread created.", kind: "system" },
           ],
@@ -286,6 +303,75 @@ export function useWardRuntime() {
       return id;
     },
     [addNote],
+  );
+
+  const offerThreadToTeam = useCallback(
+    (id: string, team: string) => {
+      updateThread(id, (thread) => {
+        if (thread.backend !== undefined) return thread;
+        const candidates = demoStaff
+          .filter((member) => member.team === team)
+          .map(({ name, role, free }) => ({ name, role, free }));
+        return {
+          ...thread,
+          team,
+          offeredTo: team,
+          offerState: "offered",
+          assignee: null,
+          status: "pending",
+          candidates: candidates.length > 0 ? candidates : thread.candidates,
+          activity: [
+            ...thread.activity,
+            {
+              id: `${thread.id}-${thread.activity.length + 1}`,
+              at: stamp(),
+              actor: "You",
+              text: `Offered to ${team} — waiting for a member to accept.`,
+              kind: "action",
+            },
+          ],
+        };
+      });
+      const thread = threads.find((candidate) => candidate.id === id);
+      if (thread !== undefined && thread.backend === undefined) {
+        addNote(thread.patientId, `${thread.title} — offered to ${team}.`);
+      }
+    },
+    [addNote, threads, updateThread],
+  );
+
+  const editThread = useCallback(
+    (id: string, patch: Partial<Thread>) => {
+      updateThread(id, (thread) => {
+        if (thread.backend !== undefined) return thread;
+        return {
+          ...thread,
+          ...patch,
+          activity: [
+            ...thread.activity,
+            {
+              id: `${thread.id}-${thread.activity.length + 1}`,
+              at: stamp(),
+              actor: "You",
+              text: "Task details edited.",
+              kind: "action",
+            },
+          ],
+        };
+      });
+    },
+    [updateThread],
+  );
+
+  const removeThread = useCallback(
+    (id: string, reason: string) => {
+      const thread = threads.find((candidate) => candidate.id === id);
+      if (thread === undefined || thread.backend !== undefined) return false;
+      setThreads((current) => current.filter((candidate) => candidate.id !== id));
+      addNote(thread.patientId, `${thread.title} — removed (${reason}). No longer tracked.`);
+      return true;
+    },
+    [addNote, threads],
   );
 
   return {
@@ -301,5 +387,10 @@ export function useWardRuntime() {
     assignThread,
     addActivity,
     createThread,
+    offerThreadToTeam,
+    editThread,
+    removeThread,
+    staff: demoStaff,
+    teams: demoTeams,
   };
 }

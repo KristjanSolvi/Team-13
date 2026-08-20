@@ -8,7 +8,7 @@ import { ViewTabs } from "@/components/ward/ViewTabs";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
-import type { ThreadStatus } from "@/data/ward";
+import type { NewTaskOptions, ThreadStatus } from "@/data/ward";
 import { patients } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
@@ -46,6 +46,11 @@ function Index() {
     assignThread,
     addActivity,
     createThread,
+    offerThreadToTeam,
+    editThread,
+    removeThread,
+    staff,
+    teams,
   } = runtime;
   const [open, setOpen] = useState(true);
   const [maximized, setMaximized] = useState(false);
@@ -120,8 +125,8 @@ function Index() {
     return base;
   }, [threads]);
 
-  const handleAddThread = (patientId: string, title: string) => {
-    const id = createThread(patientId, title);
+  const handleAddThread = (patientId: string, title: string, options?: NewTaskOptions) => {
+    const id = createThread(patientId, title, options);
     setActiveThreadId(id);
     setEhrPatientId(patientId);
     setScopeId(patientId);
@@ -194,6 +199,15 @@ function Index() {
                   ledgerErrors={ledgerErrors}
                   onAddActivity={addActivity}
                   onAddThread={handleAddThread}
+                  onOfferToTeam={offerThreadToTeam}
+                  onEditThread={editThread}
+                  onRemoveThread={(id, reason) => {
+                    if (removeThread(id, reason)) {
+                      setActiveThreadId((current) => (current === id ? null : current));
+                    }
+                  }}
+                  staff={staff}
+                  teams={teams}
                   onRefreshPatient={refreshPatientThreads}
                   onBackToBoard={() => {
                     setView("board");

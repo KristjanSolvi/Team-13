@@ -1,6 +1,16 @@
 import { demoThreads } from "./demo-threads";
 
 export type ThreadStatus = "pending" | "tracking" | "verified" | "escalated";
+export type Urgency = "routine" | "soon" | "urgent";
+export type OfferState = "none" | "offered" | "accepted";
+
+export type NewTaskOptions = {
+  team?: string | null;
+  urgency?: Urgency;
+  due?: string;
+  detail?: string;
+  source?: "scribe" | "manual" | "agent";
+};
 
 export type ActivityEntry = {
   id: string;
@@ -22,6 +32,12 @@ export type Thread = {
   candidates: { name: string; role: string; free: boolean }[];
   due: string;
   activity: ActivityEntry[];
+  team?: string | null;
+  urgency?: Urgency;
+  detail?: string | null;
+  offerState?: OfferState;
+  offeredTo?: string | null;
+  source?: "scribe" | "manual" | "agent";
   fixture?: "demo";
   backend?: {
     threadId: string;
@@ -50,6 +66,7 @@ export type Thread = {
 export type Patient = {
   id: string;
   pipelinePatientId: string;
+  backendLinked?: boolean;
   name: string;
   bed: string;
   bay: string;
@@ -75,7 +92,7 @@ export const bays: Bay[] = [
     name: "Bay B",
     beds: [
       { bed: "07", patientId: "p4" },
-      { bed: "08", patientId: null },
+      { bed: "08", patientId: "p9" },
       { bed: "09", patientId: "p5" },
     ],
   },
@@ -93,7 +110,7 @@ export const bays: Bay[] = [
 export const patients: Patient[] = [
   {
     id: "p1",
-    pipelinePatientId: "synthetic-karen",
+    pipelinePatientId: "demo-arthur",
     name: "Arthur M. Pender",
     bed: "04",
     bay: "Bay A",
@@ -130,6 +147,17 @@ export const patients: Patient[] = [
     todaySchedule: "Wound dressing — 11:30",
     waitingFor: "Surgical review",
     homeTomorrow: false,
+  },
+  {
+    id: "p9",
+    pipelinePatientId: "synthetic-karen",
+    backendLinked: true,
+    name: "Karen Jensen",
+    bed: "08",
+    bay: "Bay B",
+    todaySchedule: "Discharge planning — 14:00",
+    waitingFor: "Medication and blood pressure review",
+    homeTomorrow: true,
   },
   {
     id: "p5",
@@ -201,6 +229,12 @@ export const statusBorderClass: Record<ThreadStatus, string> = {
   tracking: "border-tracking",
   verified: "border-verified",
   escalated: "border-escalated",
+};
+
+export const urgencyLabels: Record<Urgency, string> = {
+  routine: "Routine",
+  soon: "Soon",
+  urgent: "Urgent",
 };
 export type DocId = "medical" | "discharge";
 
@@ -275,6 +309,16 @@ initialNotes["p4"] = [
     author: "Surgical SHO",
     source: "scribe",
     text: "Plan: dressing change at 11:30, surgical wound review this afternoon before any discharge planning.",
+  },
+];
+initialNotes["p9"] = [
+  {
+    id: "n9",
+    doc: "medical",
+    at: "09:32",
+    author: "Ambient scribe",
+    source: "scribe",
+    text: "Discharge planning discussed. Karen reports dizziness since her medication changed; ownership of the blood pressure follow-up is not yet clear.",
   },
 ];
 initialNotes["p5"] = [
