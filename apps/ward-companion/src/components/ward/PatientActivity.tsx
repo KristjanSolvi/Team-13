@@ -102,41 +102,18 @@ export function PatientActivity({
   const [newTask, setNewTask] = useState("");
   const [showNewTask, setShowNewTask] = useState(false);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "mine" | "attention" | "done">("all");
   const { pending, run } = usePendingAction();
 
   const patient = patients.find((p) => p.id === patientId) ?? patients[0]!;
   const scoped = threads.filter((t) => t.patientId === scopeId);
-  const items = scoped
-    .filter((t) => {
-      if (filter === "mine") return t.assignee === "You" && t.status !== "verified";
-      if (filter === "attention") return t.status === "escalated" || t.status === "pending";
-      if (filter === "done") return t.status === "verified";
-      return true;
-    })
-    .sort((a, b) => {
-      const rank = (t: Thread) =>
-        t.status === "escalated" ? 0 : t.status === "pending" ? 1 : t.status === "tracking" ? 2 : 3;
-      return rank(a) - rank(b);
-    });
+  const items = scoped.sort((a, b) => {
+    const rank = (t: Thread) =>
+      t.status === "escalated" ? 0 : t.status === "pending" ? 1 : t.status === "tracking" ? 2 : 3;
+    return rank(a) - rank(b);
+  });
   const openCount = scoped.filter((t) => t.status !== "verified").length;
   const doneCount = scoped.filter((t) => t.status === "verified").length;
   const patientOf = (id: string) => patients.find((p) => p.id === id);
-
-  const filters: { key: typeof filter; label: string; count: number }[] = [
-    { key: "all", label: "All", count: scoped.length },
-    {
-      key: "mine",
-      label: "Mine",
-      count: scoped.filter((t) => t.assignee === "You" && t.status !== "verified").length,
-    },
-    {
-      key: "attention",
-      label: "Needs attention",
-      count: scoped.filter((t) => t.status === "escalated" || t.status === "pending").length,
-    },
-    { key: "done", label: "Done", count: doneCount },
-  ];
 
   return (
     <div className="flex h-full flex-col">
@@ -167,29 +144,11 @@ export function PatientActivity({
             >
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
-                  Bed {p.bed} — {p.name}
+                  {p.name}
                 </option>
               ))}
             </select>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {filters.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`rounded-full border px-2.5 py-1 text-[12.5px] font-medium transition-colors ${
-                filter === f.key
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-panel text-muted-foreground hover:bg-background"
-              }`}
-            >
-              {f.label}
-              <span className={filter === f.key ? "ml-1 opacity-70" : "ml-1 text-muted-foreground"}>
-                {f.count}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
 
