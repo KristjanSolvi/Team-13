@@ -5,11 +5,12 @@ import { createApp } from "./http/app.js";
 import { DemoClock } from "./infra/clock.js";
 import { openDatabase } from "./infra/database.js";
 import { SqliteStore } from "./infra/store.js";
+import { DemoAudienceService } from "./services/demo-audience-service.js";
 import { HandoverService } from "./services/handover-service.js";
 import { LedgerService } from "./services/ledger-service.js";
+import { MeetingService } from "./services/meeting-service.js";
 import { RecordService } from "./services/record-service.js";
 import { SchedulerService } from "./services/scheduler-service.js";
-import { DemoAudienceService } from "./services/demo-audience-service.js";
 
 const config = parseConfig(process.env);
 const store = new SqliteStore(openDatabase(config.databasePath));
@@ -20,6 +21,7 @@ const clock = new DemoClock(new Date(), config.demoMode);
 const ledger = new LedgerService(store, clock, config.approvalHmacSecret);
 const records = new RecordService(store);
 const handovers = new HandoverService(store, clock);
+const meetings = new MeetingService(store, clock, ledger);
 const scheduler = new SchedulerService(store, clock);
 const demoAudience = new DemoAudienceService(store, clock);
 scheduler.tick();
@@ -31,6 +33,7 @@ createApp({
   clock,
   ledger,
   handovers,
+  meetings,
   records,
   scheduler,
   demoAudience,
@@ -39,6 +42,7 @@ createApp({
   uiOrigin: config.uiOrigin,
   ...(runners.task ? { runner: runners.task } : {}),
   ...(runners.handover ? { handoverRunner: runners.handover } : {}),
+  ...(runners.meeting ? { meetingRunner: runners.meeting } : {}),
 }).listen(config.port, config.host, () => {
   console.error(
     `Follow-Through listening on http://${config.host}:${config.port}`,

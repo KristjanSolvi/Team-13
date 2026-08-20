@@ -1,17 +1,20 @@
 import express, { type Express } from "express";
 
 import type { HandoverAgentRunner } from "../agent/handover-runner.js";
+import type { MeetingAgentRunner } from "../agent/meeting-runner.js";
 import type { AgentRunner } from "../agent/runner.js";
 import type { DemoClock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
 import { createHandoverMcp } from "../mcp/handover-tools.js";
+import { createMeetingReconciliationMcp } from "../mcp/meeting-tools.js";
 import { createFollowThroughMcp } from "../mcp/tools.js";
 import { mountMcp } from "../mcp/transport.js";
+import type { DemoAudienceService } from "../services/demo-audience-service.js";
 import type { HandoverService } from "../services/handover-service.js";
 import type { LedgerService } from "../services/ledger-service.js";
+import type { MeetingService } from "../services/meeting-service.js";
 import type { RecordService } from "../services/record-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
-import type { DemoAudienceService } from "../services/demo-audience-service.js";
 import { mountRoutes } from "./routes.js";
 
 export interface AppDependencies {
@@ -19,6 +22,7 @@ export interface AppDependencies {
   clock: DemoClock;
   ledger: LedgerService;
   handovers: HandoverService;
+  meetings: MeetingService;
   records: RecordService;
   scheduler: SchedulerService;
   demoAudience: DemoAudienceService;
@@ -27,6 +31,7 @@ export interface AppDependencies {
   mcpBearerToken: string;
   runner?: AgentRunner;
   handoverRunner?: Pick<HandoverAgentRunner, "generate">;
+  meetingRunner?: Pick<MeetingAgentRunner, "generate">;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -70,6 +75,16 @@ export function createApp(dependencies: AppDependencies): Express {
     () => createHandoverMcp(dependencies.records, dependencies.handovers),
     dependencies.mcpBearerToken,
     "/mcp/handover",
+  );
+  mountMcp(
+    app,
+    () =>
+      createMeetingReconciliationMcp(
+        dependencies.records,
+        dependencies.meetings,
+      ),
+    dependencies.mcpBearerToken,
+    "/mcp/meeting",
   );
   mountRoutes(app, dependencies);
   return app;

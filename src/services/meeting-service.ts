@@ -1009,6 +1009,42 @@ export class MeetingService {
     };
   }
 
+  getMeetingResponse(meetingId: string) {
+    const meeting = this.store.requireMeeting(meetingId);
+    return {
+      meeting,
+      segments: this.store
+        .listMeetingPatientSegments(meetingId)
+        .map((segment) => {
+          const reconciliation = this.store.getMeetingReconciliationForSegment(
+            segment.segmentId,
+          );
+          return {
+            segment,
+            evidenceCount: this.store.listPatientMeetingEvidence(
+              segment.segmentId,
+            ).length,
+            eligibleEvidenceCount: this.store
+              .listPatientMeetingEvidence(segment.segmentId)
+              .filter((item) => item.eligible).length,
+            reconciliation,
+            newDraftTasks:
+              reconciliation?.newDraftTaskIds.map((taskId) =>
+                this.store.requireTask(taskId),
+              ) ?? [],
+            carryForwards: reconciliation
+              ? this.store.listMeetingCarryForwards(
+                  reconciliation.reconciliationId,
+                )
+              : [],
+          };
+        }),
+      unscopedTranscriptCount: this.store
+        .listMeetingTranscript(meetingId)
+        .filter((item) => item.patientSegmentId === null).length,
+    };
+  }
+
   completeMeeting(input: CompleteMeetingInput): MeetingResult {
     const scope = `meeting:complete:${input.meetingId}`;
     const requestHash = commandHash({
