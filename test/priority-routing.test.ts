@@ -337,6 +337,15 @@ test("routing prioritizes tie-break keys before member IDs", () => {
   assert.equal(chooseMember(createTask(), members)?.memberId, "nurse-z");
 });
 
+test("routing compares mixed-case tie-break keys by UTF-16 code units", () => {
+  const members = [
+    createMember({ memberId: "lowercase-key", tieBreakKey: "a" }),
+    createMember({ memberId: "uppercase-key", tieBreakKey: "Z" }),
+  ];
+
+  assert.equal(chooseMember(createTask(), members)?.memberId, "uppercase-key");
+});
+
 test("routing uses member ID after workload and tie-break key are equal", () => {
   const members = [
     createMember({ memberId: "nurse-b", tieBreakKey: "shared" }),
@@ -344,6 +353,15 @@ test("routing uses member ID after workload and tie-break key are equal", () => 
   ];
 
   assert.equal(chooseMember(createTask(), members)?.memberId, "nurse-a");
+});
+
+test("routing compares non-ASCII member IDs by UTF-16 code units", () => {
+  const members = [
+    createMember({ memberId: "nurse-ä", tieBreakKey: "shared" }),
+    createMember({ memberId: "nurse-z", tieBreakKey: "shared" }),
+  ];
+
+  assert.equal(chooseMember(createTask(), members)?.memberId, "nurse-z");
 });
 
 test("routing returns null when no member is eligible", () => {
@@ -378,6 +396,15 @@ test("DemoClock returns defensive Date copies", () => {
   assert.equal(clock.now().toISOString(), "2026-08-20T10:00:00.000Z");
 });
 
+test("DemoClock defensively copies its constructor Date", () => {
+  const current = new Date("2026-08-20T10:00:00.000Z");
+  const clock = new DemoClock(current, true);
+
+  current.setUTCFullYear(2040);
+
+  assert.equal(clock.now().toISOString(), "2026-08-20T10:00:00.000Z");
+});
+
 test("DemoClock advances by positive milliseconds and returns a defensive copy", () => {
   const clock = new DemoClock(new Date("2026-08-20T10:00:00.000Z"), true);
 
@@ -386,6 +413,36 @@ test("DemoClock advances by positive milliseconds and returns a defensive copy",
 
   advanced.setUTCFullYear(2040);
   assert.equal(clock.now().toISOString(), "2026-08-20T11:00:00.000Z");
+});
+
+test("DemoClock rejects fractional positive advances without changing time", () => {
+  const clock = new DemoClock(new Date("2026-08-20T10:00:00.000Z"), true);
+
+  assertDomainError(() => clock.advance(0.1), {
+    code: "INVALID_CLOCK_ADVANCE",
+    message: "milliseconds must be positive",
+    retryable: false,
+    status: 400,
+  });
+  assert.equal(clock.now().toISOString(), "2026-08-20T10:00:00.000Z");
+});
+
+test("DemoClock rejects unsafe and overflowing advances without poisoning time", () => {
+  for (const milliseconds of [
+    Number.MAX_SAFE_INTEGER + 1,
+    Number.MAX_SAFE_INTEGER,
+  ]) {
+    const clock = new DemoClock(new Date("2026-08-20T10:00:00.000Z"), true);
+
+    assertDomainError(() => clock.advance(milliseconds), {
+      code: "INVALID_CLOCK_ADVANCE",
+      message: "milliseconds must be positive",
+      retryable: false,
+      status: 400,
+    });
+    assert.equal(clock.now().toISOString(), "2026-08-20T10:00:00.000Z");
+    assert.equal(clock.advance(1).toISOString(), "2026-08-20T10:00:00.001Z");
+  }
 });
 
 test("disabled DemoClock reads real time and rejects advance with a forbidden error", () => {

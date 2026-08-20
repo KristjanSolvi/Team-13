@@ -6,6 +6,12 @@ function hasCapabilities(member: Member, required: string[]): boolean {
   );
 }
 
+function compareCodeUnits(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 export function chooseMember(task: Task, members: Member[]): Member | null {
   return (
     members
@@ -16,8 +22,8 @@ export function chooseMember(task: Task, members: Member[]): Member | null {
       .toSorted(
         (left, right) =>
           left.openTaskCount - right.openTaskCount ||
-          left.tieBreakKey.localeCompare(right.tieBreakKey) ||
-          left.memberId.localeCompare(right.memberId),
+          compareCodeUnits(left.tieBreakKey, right.tieBreakKey) ||
+          compareCodeUnits(left.memberId, right.memberId),
       )[0] ?? null
   );
 }

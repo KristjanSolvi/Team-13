@@ -11,10 +11,14 @@ export class SystemClock implements Clock {
 }
 
 export class DemoClock implements Clock {
+  private current: Date;
+
   constructor(
-    private current: Date,
+    current: Date,
     private readonly enabled: boolean,
-  ) {}
+  ) {
+    this.current = new Date(current);
+  }
 
   now(): Date {
     return this.enabled ? new Date(this.current) : new Date();
@@ -29,13 +33,21 @@ export class DemoClock implements Clock {
         403,
       );
     }
-    if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    if (!Number.isSafeInteger(milliseconds) || milliseconds <= 0) {
       throw new DomainError(
         "INVALID_CLOCK_ADVANCE",
         "milliseconds must be positive",
       );
     }
-    this.current = new Date(this.current.getTime() + milliseconds);
+    const nextTime = this.current.getTime() + milliseconds;
+    const candidate = new Date(nextTime);
+    if (!Number.isFinite(candidate.getTime())) {
+      throw new DomainError(
+        "INVALID_CLOCK_ADVANCE",
+        "milliseconds must be positive",
+      );
+    }
+    this.current = candidate;
     return this.now();
   }
 }
