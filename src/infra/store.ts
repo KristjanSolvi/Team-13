@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 
 import { DomainError } from "../domain/errors.js";
+import { calculatePriority } from "../domain/priority.js";
+import { requireTransition } from "../domain/state-machine.js";
 import type {
   Actor,
   DomainEvent,
@@ -1023,5 +1025,280 @@ export class SqliteStore {
       );
     }
     return member;
+  }
+
+  listNonTerminalTasks(): Task[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM tasks
+        WHERE state NOT IN ('verified', 'dismissed')
+        ORDER BY task_id
+      `)
+      .all();
+    return rows.map(mapTask);
+  }
+
+  refreshPriority(
+    taskId: string,
+    expectedVersion: number,
+    breakdown: PriorityBreakdown,
+    updatedAt: string,
+  ): Task {
+    const current = this.requireTask(taskId);
+    if (current.version !== expectedVersion) {
+      return current;
+    }
+    if (
+      current.operationalPriorityScore === breakdown.total &&
+      JSON.stringify(current.priorityBreakdown) === JSON.stringify(breakdown)
+    ) {
+      return current;
+    }
+    return this.updateTask(
+      taskId,
+      expectedVersion,
+      (task) => ({
+        ...task,
+        operationalPriorityScore: breakdown.total,
+        priorityBreakdown: breakdown,
+        version: task.version + 1,
+        updatedAt,
+      }),
+      { type: "router", id: "priority-policy" },
+      "task.operational_priority_recalculated",
+      { breakdown },
+    );
+  }
+
+  assignMember(
+    taskId: string,
+    expectedVersion: number,
+    memberId: string,
+    updatedAt: string,
+  ): Task {
+    return this.transaction(() => {
+      const current = this.requireTask(taskId);
+      if (
+        current.version !== expectedVersion ||
+        current.state !== "offered_to_team"
+      ) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Task changed before timeout assignment",
+          false,
+          409,
+        );
+      }
+      requireTransition(current.state, "assigned_to_member");
+      const member = this.requireEligibleMember(memberId, current);
+      const candidate: Task = {
+        ...current,
+        state: "assigned_to_member",
+        assignedMemberId: member.memberId,
+        failedOffers: current.failedOffers + 1,
+        version: current.version + 1,
+        updatedAt,
+      };
+      const priorityBreakdown = calculatePriority(
+        candidate,
+        new Date(updatedAt),
+      );
+      const next: Task = {
+        ...candidate,
+        operationalPriorityScore: priorityBreakdown.total,
+        priorityBreakdown,
+      };
+      this.replaceTask(current, next);
+      const thread = this.requireThread(next.threadId);
+      const actor: Actor = { type: "router", id: "timeout-router" };
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        actor,
+        "task.team_acceptance_timed_out",
+        { acceptBy: current.acceptBy },
+      );
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        actor,
+        "task.member_assigned",
+        { memberId },
+      );
+      return next;
+    });
+  }
+
+  escalate(
+    taskId: string,
+    expectedVersion: number,
+    reason: string,
+    updatedAt: string,
+  ): Task {
+    return this.transaction(() => {
+      const current = this.requireTask(taskId);
+      if (current.version !== expectedVersion) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Task changed before escalation",
+          false,
+          409,
+        );
+      }
+      if (current.state === "escalated") {
+        return current;
+      }
+      requireTransition(current.state, "escalated");
+      const candidate: Task = {
+        ...current,
+        state: "escalated",
+        version: current.version + 1,
+        updatedAt,
+      };
+      const priorityBreakdown = calculatePriority(
+        candidate,
+        new Date(updatedAt),
+      );
+      const next: Task = {
+        ...candidate,
+        operationalPriorityScore: priorityBreakdown.total,
+        priorityBreakdown,
+      };
+      this.replaceTask(current, next);
+      const thread = this.requireThread(next.threadId);
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        { type: "router", id: "deadline-policy" },
+        "task.escalated",
+        { reason },
+      );
+      if (thread.state !== "escalated") {
+        this.setThreadState(
+          thread.threadId,
+          thread.version,
+          "escalated",
+          updatedAt,
+        );
+      }
+      return next;
+    });
+  }
+
+  listDeclinedMemberIds(taskId: string): string[] {
+    const rows = this.database
+      .prepare(`
+        SELECT member_id
+        FROM task_declines
+        WHERE task_id = ?
+        ORDER BY declined_at, member_id
+      `)
+      .all(taskId);
+    return rows.map((row) => rowText(row, "member_id"));
+  }
+
+  recordDecline(
+    taskId: string,
+    expectedVersion: number,
+    memberId: string,
+    declinedAt: string,
+  ): Task {
+    return this.transaction(() => {
+      const current = this.requireTask(taskId);
+      if (
+        current.version !== expectedVersion ||
+        current.state !== "assigned_to_member" ||
+        current.assignedMemberId !== memberId
+      ) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Assignment changed before decline",
+          false,
+          409,
+        );
+      }
+      const inserted = this.database
+        .prepare(`
+          INSERT OR IGNORE INTO task_declines
+            (task_id, member_id, declined_at)
+          VALUES (?, ?, ?)
+        `)
+        .run(taskId, memberId, declinedAt);
+      if (inserted.changes !== 1) {
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Member already declined this task",
+          false,
+          409,
+        );
+      }
+      const candidate: Task = {
+        ...current,
+        assignedMemberId: null,
+        failedOffers: current.failedOffers + 1,
+        version: current.version + 1,
+        updatedAt: declinedAt,
+      };
+      const priorityBreakdown = calculatePriority(
+        candidate,
+        new Date(declinedAt),
+      );
+      const next: Task = {
+        ...candidate,
+        operationalPriorityScore: priorityBreakdown.total,
+        priorityBreakdown,
+      };
+      this.replaceTask(current, next);
+      const thread = this.requireThread(next.threadId);
+      this.appendTaskEvent(
+        next,
+        thread.interactionId,
+        thread.contextId,
+        { type: "team_member", id: memberId },
+        "task.member_declined",
+        { memberId },
+      );
+      return next;
+    });
+  }
+
+  reassignMember(
+    taskId: string,
+    expectedVersion: number,
+    memberId: string,
+    assignedAt: string,
+  ): Task {
+    return this.updateTask(
+      taskId,
+      expectedVersion,
+      (task) => {
+        if (
+          task.state !== "assigned_to_member" ||
+          task.assignedMemberId !== null
+        ) {
+          throw new DomainError(
+            "VERSION_CONFLICT",
+            "Task changed before reassignment",
+            false,
+            409,
+          );
+        }
+        requireTransition(task.state, "assigned_to_member");
+        const member = this.requireEligibleMember(memberId, task);
+        return {
+          ...task,
+          assignedMemberId: member.memberId,
+          version: task.version + 1,
+          updatedAt: assignedAt,
+        };
+      },
+      { type: "router", id: "decline-router" },
+      "task.member_assigned",
+      { memberId },
+    );
   }
 }
