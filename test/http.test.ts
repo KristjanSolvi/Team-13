@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { GenerateHandoverInput } from "../src/agent/handover-runner.js";
+import { DomainError } from "../src/domain/errors.js";
 import type {
   HandoverPacket,
   HandoverRecord,
@@ -87,7 +88,9 @@ function handoverRequest(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function createSavingHandoverHarness() {
+function createSavingHandoverHarness(
+  afterSave?: (input: GenerateHandoverInput) => Promise<void> | void,
+) {
   let implementation:
     | ((input: GenerateHandoverInput) => Promise<HandoverRecord>)
     | undefined;
@@ -108,12 +111,14 @@ function createSavingHandoverHarness() {
       input.patientId,
       harness.clock.now().toISOString(),
     );
-    return harness.handovers.saveDraft({
+    const saved = harness.handovers.saveDraft({
       handoverId: input.handoverId,
       patientId: input.patientId,
       contextId,
       packet: HANDOVER_PACKET,
     });
+    await afterSave?.(input);
+    return saved;
   };
   return { ...harness, runnerCalls: () => calls };
 }
@@ -571,6 +576,122 @@ test("handover agent failures persist only a safe failed state and audit milesto
     JSON.stringify(event),
     /mcp-secret|sensitive Corti detail/,
   );
+});
+
+test("typed Corti failures reject a saved draft and require a new idempotency key", async (t) => {
+  const cases = [
+    {
+      code: "AGENT_TASK_INCOMPLETE",
+      message: "Corti did not complete the requested handover",
+    },
+    {
+      code: "AGENT_CONTEXT_MISMATCH",
+      message: "Corti returned a different handover context",
+    },
+  ];
+
+  for (const [index, current] of cases.entries()) {
+    const harness = createSavingHandoverHarness(() => {
+      throw new DomainError(current.code, current.message, true, 502);
+    });
+    const { server, baseUrl } = await listen(harness.app);
+    t.after(async () => {
+      await close(server);
+      harness.store.close();
+    });
+    const idempotencyKey = `handover-semantic-failure-${index}`;
+    const url = `${baseUrl}/api/patients/synthetic-karen/handover-drafts`;
+    const request = {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify(handoverRequest({ idempotencyKey })),
+    };
+
+    const failedResponse = await fetch(url, request);
+    assert.equal(failedResponse.status, 502);
+    const failedBody = await failedResponse.json();
+    assert.deepEqual(failedBody, {
+      error: {
+        code: "CORTI_HANDOVER_AGENT_FAILED",
+        message:
+          "Corti handover generation failed; retry with a new idempotency key",
+        retryable: true,
+      },
+    });
+    assert.doesNotMatch(
+      JSON.stringify(failedBody),
+      /Medication safety|Karen has|mcp-secret/,
+    );
+
+    const [failed] = harness.store.listPatientHandovers("synthetic-karen");
+    assert.ok(failed);
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.version, 3);
+    assert.deepEqual(failed.packet, HANDOVER_PACKET);
+    assert.ok(failed.sourceSnapshot);
+    assert.ok(failed.sourceSnapshotHash);
+    const handoverEvents = harness.store
+      .listEvents(0)
+      .filter(({ payload }) => payload.handoverId === failed.handoverId);
+    assert.equal(
+      handoverEvents.some(
+        ({ eventType }) => eventType === "handover.render_requested",
+      ),
+      false,
+    );
+    const failedEvent = handoverEvents.find(
+      ({ eventType }) => eventType === "handover.failed",
+    );
+    assert.ok(failedEvent);
+    assert.equal(failedEvent.payload.code, current.code);
+    assert.doesNotMatch(
+      JSON.stringify(failedEvent),
+      /Medication safety|Karen has|mcp-secret/,
+    );
+
+    const replay = await fetch(url, request);
+    assert.equal(replay.status, 409);
+    assert.equal(
+      ((await replay.json()) as { error: { code: string } }).error.code,
+      "HANDOVER_RETRY_REQUIRES_NEW_KEY",
+    );
+    assert.equal(harness.runnerCalls(), 1);
+  }
+});
+
+test("an ambiguous transport loss after durable draft save recovers the draft", async (t) => {
+  const harness = createSavingHandoverHarness(() => {
+    throw new Error("socket reset after save: mcp-secret");
+  });
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+
+  const response = await fetch(
+    `${baseUrl}/api/patients/synthetic-karen/handover-drafts`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify(
+        handoverRequest({ idempotencyKey: "handover-lost-response" }),
+      ),
+    },
+  );
+  assert.equal(response.status, 201);
+  const body = (await response.json()) as HandoverEnvelope;
+  assert.equal(body.replayed, false);
+  assert.equal(body.lifecycleStatus, "draft");
+  assert.equal(body.handover.renderingStatus, "pending");
+  assert.equal(harness.runnerCalls(), 1);
+  assert.equal(
+    body.handover.activity.some(
+      ({ eventType }) => eventType === "handover.render_requested",
+    ),
+    true,
+  );
+  assert.doesNotMatch(JSON.stringify(body.handover.activity), /mcp-secret/);
 });
 
 test("health is public while application and MCP data surfaces require their bearer", async (t) => {

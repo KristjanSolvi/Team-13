@@ -550,6 +550,52 @@ export class HandoverService {
     });
   }
 
+  rejectDraft(
+    handoverId: string,
+    code: string,
+    retryable: boolean,
+  ): HandoverRecord {
+    return this.store.transaction(() => {
+      const handover = this.store.requireHandover(handoverId);
+      if (handover.status === "failed") return handover;
+      if (handover.status !== "draft") {
+        throw new DomainError(
+          "HANDOVER_FAILURE_CONFLICT",
+          "Only a saved draft can be rejected",
+          false,
+          409,
+        );
+      }
+      const updatedAt = this.clock.now().toISOString();
+      const saved = this.store.updateHandover(
+        {
+          ...handover,
+          status: "failed",
+          version: handover.version + 1,
+          updatedAt,
+        },
+        handover.version,
+      );
+      this.store.appendEvent({
+        eventType: "handover.failed",
+        occurredAt: updatedAt,
+        correlationId: handover.correlationId,
+        patientId: handover.patientId,
+        interactionId: handover.interactionId,
+        contextId: handover.contextId,
+        actor: { type: "agent", id: "corti" },
+        payload: {
+          handoverId,
+          code,
+          retryable,
+          status: saved.status,
+          version: saved.version,
+        },
+      });
+      return saved;
+    });
+  }
+
   response(handover: HandoverRecord): Record<string, unknown> {
     if (
       (handover.status !== "draft" && handover.status !== "rendered") ||

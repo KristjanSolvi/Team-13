@@ -1571,6 +1571,63 @@ test("markFailed is idempotent for requested work and never erases draft or rend
   assert.deepEqual(draft.store.requireHandover(rendered.handoverId), rendered);
 });
 
+test("rejectDraft retains grounded evidence, records a safe failure, and never erases rendered output", (t) => {
+  const setup = savePreparedDraft(t);
+  const failed = setup.service.rejectDraft(
+    setup.draft.handoverId,
+    "AGENT_TASK_INCOMPLETE",
+    true,
+  );
+
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.version, setup.draft.version + 1);
+  assert.deepEqual(failed.packet, setup.draft.packet);
+  assert.deepEqual(failed.sourceSnapshot, setup.draft.sourceSnapshot);
+  assert.equal(failed.sourceSnapshotHash, setup.draft.sourceSnapshotHash);
+  const failedEvent = setup.store.listEvents(0).at(-1);
+  assert.equal(failedEvent?.eventType, "handover.failed");
+  assert.deepEqual(failedEvent?.payload, {
+    handoverId: failed.handoverId,
+    code: "AGENT_TASK_INCOMPLETE",
+    retryable: true,
+    status: "failed",
+    version: failed.version,
+  });
+  assert.equal(
+    JSON.stringify(failedEvent).includes(
+      setup.packet.situation[0]?.statement ?? "unreachable",
+    ),
+    false,
+  );
+  assertDomainError(
+    () => begin(setup.service),
+    "HANDOVER_RETRY_REQUIRES_NEW_KEY",
+    409,
+  );
+
+  const renderedSetup = savePreparedDraft(t);
+  const rendered = renderedSetup.service.finalize(
+    renderedSetup.draft.handoverId,
+    renderedSetup.draft.version,
+    renderedSetup.draft.sourceSnapshotHash as string,
+    renderedFor(renderedSetup.packet),
+  );
+  assertDomainError(
+    () =>
+      renderedSetup.service.rejectDraft(
+        rendered.handoverId,
+        "AGENT_CONTEXT_MISMATCH",
+        true,
+      ),
+    "HANDOVER_FAILURE_CONFLICT",
+    409,
+  );
+  assert.deepEqual(
+    renderedSetup.store.requireHandover(rendered.handoverId),
+    rendered,
+  );
+});
+
 test("response exposes only the safe public projection and handover activity", (t) => {
   const setup = savePreparedDraft(t);
   setup.service.markRenderRequested(setup.draft.handoverId);

@@ -89,10 +89,26 @@ export function mountHandoverRoutes(
             idempotencyKey: body.idempotencyKey,
           });
           handover = dependencies.store.requireHandover(handover.handoverId);
-        } catch {
+        } catch (error) {
           const persisted = dependencies.store.requireHandover(
             handover.handoverId,
           );
+          if (error instanceof DomainError) {
+            if (persisted.status === "draft") {
+              dependencies.handovers.rejectDraft(
+                handover.handoverId,
+                error.code,
+                error.retryable,
+              );
+            } else if (persisted.status === "requested") {
+              dependencies.handovers.markFailed(
+                handover.handoverId,
+                error.code,
+                error.retryable,
+              );
+            }
+            throw agentFailure();
+          }
           if (persisted.status === "draft" || persisted.status === "rendered") {
             handover = persisted;
           } else {
@@ -101,12 +117,7 @@ export function mountHandoverRoutes(
               "CORTI_HANDOVER_AGENT_FAILED",
               true,
             );
-            throw new DomainError(
-              "CORTI_HANDOVER_AGENT_FAILED",
-              "Corti handover generation failed; retry with a new idempotency key",
-              true,
-              502,
-            );
+            throw agentFailure();
           }
         }
       }
@@ -192,4 +203,13 @@ function correlationId(request: Request): string {
   return supplied !== undefined && SAFE_CORRELATION_ID.test(supplied)
     ? supplied
     : `handover:${randomUUID()}`;
+}
+
+function agentFailure(): DomainError {
+  return new DomainError(
+    "CORTI_HANDOVER_AGENT_FAILED",
+    "Corti handover generation failed; retry with a new idempotency key",
+    true,
+    502,
+  );
 }
