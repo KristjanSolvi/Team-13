@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { RecordClosure } from "@/components/ehr/RecordClosure";
 import type { ActivityEntry, CaseNote, DocId, Patient } from "@/data/ward";
 import { documents, patients } from "@/data/ward";
+import { getEhrPatientRecord, type ClinicalDocument } from "@/lib/follow-through-api";
 
 const tabs = ["Summary", "Notes", "Investigations", "Procedures", "Discharge"];
 
@@ -75,6 +77,34 @@ export function NervecentreShell({
 }: ShellProps) {
   const current = patient ?? patients[0]!;
   const [activeTab, setActiveTab] = useState("Summary");
+  const [ehrDocuments, setEhrDocuments] = useState<ClinicalDocument[]>([]);
+  const [ehrConnected, setEhrConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let currentRequest = true;
+    setEhrDocuments([]);
+    setEhrConnected(null);
+    void getEhrPatientRecord(current.pipelinePatientId, crypto.randomUUID())
+      .then((record) => {
+        if (!currentRequest || record.patientId !== current.pipelinePatientId) return;
+        setEhrDocuments(record.documents);
+        setEhrConnected(true);
+      })
+      .catch(() => {
+        if (currentRequest) setEhrConnected(false);
+      });
+    return () => {
+      currentRequest = false;
+    };
+  }, [current.pipelinePatientId]);
+
+  const handleDocumentChange = (document: ClinicalDocument) => {
+    setEhrConnected(true);
+    setEhrDocuments((existing) => [
+      document,
+      ...existing.filter((candidate) => candidate.documentId !== document.documentId),
+    ]);
+  };
   return (
     <div className="min-h-screen bg-ehr-bg text-ehr-foreground">
       <div className="flex items-center justify-between bg-ehr-chrome px-3 py-1.5">
@@ -139,10 +169,14 @@ export function NervecentreShell({
 
       {activeTab === "Notes" ? (
         <NotesWorkspace
+          patientId={current.pipelinePatientId}
           patientName={current.name}
           notes={notes}
+          ehrDocuments={ehrDocuments}
+          ehrConnected={ehrConnected}
           activity={activity}
           onAddNote={onAddNote}
+          onDocumentChange={handleDocumentChange}
         />
       ) : (
         <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_1.6fr_1fr]">
@@ -159,8 +193,28 @@ export function NervecentreShell({
                 <Row
                   key={d.id}
                   left={d.title}
-                  right={`${notes.filter((n) => n.doc === d.id).length} entries`}
+                  right={`${
+                    notes.filter((n) => n.doc === d.id).length +
+                    ehrDocuments.filter((document) => document.category === d.id).length
+                  } items`}
                 />
+              ))}
+              {ehrDocuments.slice(0, 3).map((document) => (
+                <button
+                  key={document.documentId}
+                  type="button"
+                  onClick={() => setActiveTab("Notes")}
+                  className="mt-1 flex w-full items-center justify-between gap-2 border border-ehr-line bg-ehr-bg px-2 py-1 text-left text-[10px] hover:border-ehr-accent"
+                >
+                  <span className="truncate">{document.title}</span>
+                  <span
+                    className={
+                      document.status === "filed" ? "text-verified-strong" : "text-pending-strong"
+                    }
+                  >
+                    {document.status} · v{document.version}
+                  </span>
+                </button>
               ))}
               <div className="mt-2 space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
@@ -302,20 +356,29 @@ function splitEntry(text: string) {
 }
 
 function NotesWorkspace({
+  patientId,
   patientName,
   notes,
+  ehrDocuments,
+  ehrConnected,
   activity,
   onAddNote,
+  onDocumentChange,
 }: {
+  patientId: string;
   patientName: string;
   notes: CaseNote[];
+  ehrDocuments: ClinicalDocument[];
+  ehrConnected: boolean | null;
   activity: ActivityEntry[];
   onAddNote?: ((doc: DocId, text: string) => void) | undefined;
+  onDocumentChange: (document: ClinicalDocument) => void;
 }) {
   const [activeDoc, setActiveDoc] = useState<DocId>("medical");
   const [draft, setDraft] = useState("");
   const doc = documents.find((d) => d.id === activeDoc)!;
   const docNotes = notes.filter((n) => n.doc === activeDoc);
+  const storedDocuments = ehrDocuments.filter((document) => document.category === activeDoc);
   const plans = docNotes.map((n) => ({ note: n, ...splitEntry(n.text) })).filter((e) => e.plan);
   const latestPlan = plans[plans.length - 1] ?? null;
   const fallback = docNotes[docNotes.length - 1];
@@ -329,7 +392,9 @@ function NotesWorkspace({
           Documents
         </p>
         {documents.map((d) => {
-          const count = notes.filter((n) => n.doc === d.id).length;
+          const count =
+            notes.filter((n) => n.doc === d.id).length +
+            ehrDocuments.filter((document) => document.category === d.id).length;
           const active = d.id === activeDoc;
           return (
             <button
@@ -356,7 +421,8 @@ function NotesWorkspace({
         <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ehr-line bg-ehr-chrome px-3 py-2">
           <span className="text-[12px] font-semibold text-ehr-chrome-foreground">{doc.title}</span>
           <span className="text-[10px] text-ehr-chrome-foreground/70">
-            {patientName} · {docNotes.length} entries · updated live by Ward Threads
+            {patientName} · {docNotes.length + storedDocuments.length} items ·{" "}
+            {ehrConnected === false ? "demo notes available" : "versioned record connected"}
           </span>
         </header>
 
@@ -412,6 +478,34 @@ function NotesWorkspace({
             )}
           </div>
 
+          {storedDocuments.length > 0 && (
+            <div className="space-y-1.5">
+              <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
+                Versioned EHR documents
+              </h3>
+              {storedDocuments.map((stored) => (
+                <article key={stored.documentId} className="border border-ehr-line bg-ehr-bg p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                    <span className="font-semibold text-ehr-foreground">{stored.title}</span>
+                    <span
+                      className={
+                        stored.status === "filed" ? "text-verified-strong" : "text-pending-strong"
+                      }
+                    >
+                      {stored.status} · v{stored.version}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-4 whitespace-pre-line text-[10px] leading-snug text-ehr-muted">
+                    {stored.content}
+                  </p>
+                  <p className="mt-1 text-[9px] text-ehr-muted">
+                    {stored.updatedBy} · {new Date(stored.updatedAt).toLocaleString()}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+
           <form
             className="flex gap-1"
             onSubmit={(e) => {
@@ -435,6 +529,13 @@ function NotesWorkspace({
               Save entry
             </button>
           </form>
+
+          <RecordClosure
+            patientId={patientId}
+            category={activeDoc}
+            notes={docNotes}
+            onDocumentChange={onDocumentChange}
+          />
 
           <div className="border-t border-ehr-line pt-2">
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ehr-muted">
