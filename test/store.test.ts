@@ -825,6 +825,79 @@ test("context remapping still enforces the patient foreign key", (t) => {
   assert.equal(store.contextForInteraction("interaction-orphan"), null);
 });
 
+test("fresh context claims reject collisions without deleting either mapping", (t) => {
+  const store = createStore(t);
+  store.putPatient("patient-1", "Patient One", { synthetic: true });
+  store.putPatient("patient-2", "Patient Two", { synthetic: true });
+  store.putContextMapping("ctx-owned", "interaction-owned", "patient-1", now);
+  store.putContextMapping("ctx-stale", "handover:one", "patient-2", now);
+
+  assert.equal(
+    store.claimFreshContext("ctx-owned", "handover:one", "patient-2", now),
+    false,
+  );
+  assert.equal(store.contextForInteraction("interaction-owned"), "ctx-owned");
+  assert.equal(store.contextForInteraction("handover:one"), "ctx-stale");
+  assert.equal(store.patientForContext("ctx-owned"), "patient-1");
+
+  assert.equal(
+    store.claimFreshContext("ctx-new", "handover:one", "patient-2", now),
+    true,
+  );
+  assert.equal(store.patientForContext("ctx-stale"), null);
+  assert.equal(store.contextForInteraction("handover:one"), "ctx-new");
+  assert.equal(store.patientForContext("ctx-new"), "patient-2");
+});
+
+test("fresh context claim holds the write lock across collision check and insert", () => {
+  class ClaimHookStore extends SqliteStore {
+    beforeContextRead: (() => void) | null = null;
+
+    override patientForContext(contextId: string): string | null {
+      const hook = this.beforeContextRead;
+      this.beforeContextRead = null;
+      hook?.();
+      return super.patientForContext(contextId);
+    }
+  }
+
+  const directory = mkdtempSync(path.join(tmpdir(), "context-claim-"));
+  const databasePath = path.join(directory, "test.sqlite");
+  const primary = new ClaimHookStore(openDatabase(databasePath));
+  const competitorDatabase = openDatabase(databasePath);
+  competitorDatabase.exec("PRAGMA busy_timeout = 0");
+  const competitor = new SqliteStore(competitorDatabase);
+  try {
+    primary.putPatient("patient-1", "Patient One", { synthetic: true });
+    primary.putPatient("patient-2", "Patient Two", { synthetic: true });
+    primary.putContextMapping("ctx-old-1", "handover:one", "patient-1", now);
+    primary.putContextMapping("ctx-old-2", "handover:two", "patient-2", now);
+    primary.beforeContextRead = () => {
+      assert.throws(
+        () =>
+          competitor.claimFreshContext(
+            "ctx-fresh",
+            "handover:two",
+            "patient-2",
+            now,
+          ),
+        /database is locked/,
+      );
+    };
+
+    assert.equal(
+      primary.claimFreshContext("ctx-fresh", "handover:one", "patient-1", now),
+      true,
+    );
+    assert.equal(competitor.contextForInteraction("handover:one"), "ctx-fresh");
+    assert.equal(competitor.contextForInteraction("handover:two"), "ctx-old-2");
+  } finally {
+    primary.close();
+    competitor.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("events map actors, payloads, nullable contexts, and sequence cursors", (t) => {
   const store = createStore(t);
   const first = store.appendEvent({

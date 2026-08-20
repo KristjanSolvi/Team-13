@@ -5,6 +5,7 @@ import { parseConfig } from "../src/config.js";
 describe("integration API config", () => {
   it("parses defaults and multiple UI origins", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
@@ -24,15 +25,45 @@ describe("integration API config", () => {
         "https://ui-preview.example.test",
       ],
       upstreamTimeoutMs: 8_000,
+      handoverUpstreamTimeoutMs: 600_000,
+      integrationApiBearerToken: "public-secret",
     });
   });
 
-  it("requires the server-only agentic application token", () => {
+  it("requires the dedicated inbound and server-only upstream tokens", () => {
     expect(() => parseConfig({})).toThrow();
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "short",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      }),
+    ).toThrow();
   });
+
+  it.each([
+    ["Agentic", "AGENTIC_APP_BEARER_TOKEN"],
+    ["patient profile", "PATIENT_PROFILE_BEARER_TOKEN"],
+    ["mock EHR", "MOCK_EHR_BEARER_TOKEN"],
+  ] as const)(
+    "rejects reuse of the inbound bearer for the %s trust domain",
+    (_label, reusedVariable) => {
+      const environment = {
+        INTEGRATION_API_BEARER_TOKEN: "integration-secret",
+        AGENTIC_APP_BEARER_TOKEN: "agentic-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      };
+      environment[reusedVariable] = environment.INTEGRATION_API_BEARER_TOKEN;
+
+      expect(() => parseConfig(environment)).toThrow();
+    },
+  );
 
   it("allows both common local Vite hostnames by default", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
@@ -46,6 +77,7 @@ describe("integration API config", () => {
 
   it("accepts generic platform host and port variables", () => {
     const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
@@ -55,5 +87,35 @@ describe("integration API config", () => {
 
     expect(config.host).toBe("0.0.0.0");
     expect(config.port).toBe(8080);
+  });
+
+  it("accepts a dedicated live handover timeout up to fifteen minutes", () => {
+    const config = parseConfig({
+      INTEGRATION_API_BEARER_TOKEN: "public-secret",
+      AGENTIC_APP_BEARER_TOKEN: "app-secret",
+      PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+      MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      HANDOVER_UPSTREAM_TIMEOUT_MS: "900000",
+    });
+
+    expect(config.handoverUpstreamTimeoutMs).toBe(900_000);
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "public-secret",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        HANDOVER_UPSTREAM_TIMEOUT_MS: "479999",
+      }),
+    ).toThrow();
+    expect(() =>
+      parseConfig({
+        INTEGRATION_API_BEARER_TOKEN: "public-secret",
+        AGENTIC_APP_BEARER_TOKEN: "app-secret",
+        PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
+        MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        HANDOVER_UPSTREAM_TIMEOUT_MS: "900001",
+      }),
+    ).toThrow();
   });
 });

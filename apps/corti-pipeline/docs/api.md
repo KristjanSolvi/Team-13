@@ -186,6 +186,125 @@ explicit `approvalId`, approved text, document type, and end-to-end correlation
 ID. The developer evaluator uses a visibly synthetic approval ID; the integrated
 product must use the stable identifier returned by the Agentic approval record.
 
+## Grounded patient handover renderer
+
+`POST /api/corti/handovers/render`
+
+This internal integration boundary accepts only the canonical packet already
+validated by the Agentic service. The handover ID must be a UUID and the
+snapshot hash must use `sha256:<64 lowercase hex characters>`.
+
+```json
+{
+  "handoverId": "33333333-3333-4333-8333-333333333333",
+  "patientId": "synthetic-karen",
+  "sourceSnapshotHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "packet": {
+    "situation": [
+      {
+        "statement": "Karen reports dizziness after the medication change.",
+        "sourceRefs": ["encounter:sentence-42"]
+      }
+    ],
+    "background": [
+      {
+        "statement": "The medication was changed yesterday.",
+        "sourceRefs": ["record:medication-1"]
+      }
+    ],
+    "currentConcerns": [],
+    "outstandingTasks": [
+      {
+        "taskId": "11111111-1111-4111-8111-111111111111",
+        "threadId": "22222222-2222-4222-8222-222222222222",
+        "summary": "Check blood pressure",
+        "state": "accepted",
+        "targetTeamId": "district-nursing",
+        "assignedMemberId": "nurse-7",
+        "clinicalUrgency": "medium",
+        "acceptBy": "2026-08-20T12:00:00.000Z",
+        "dueBy": "2026-08-22T10:00:00.000Z",
+        "version": 7,
+        "sourceRefs": [
+          "task:11111111-1111-4111-8111-111111111111@7",
+          "thread:22222222-2222-4222-8222-222222222222@3"
+        ]
+      }
+    ],
+    "awaitingVerification": [],
+    "escalations": [],
+    "unknowns": ["The current medication list is unavailable."]
+  }
+}
+```
+
+Text Generation receives only the three narrative sections and their source
+references. Narrative rendering is extractive: generated text must exactly
+match one complete statement in the same section, and that statement must
+contain every cited reference. The pipeline rejects references from a different
+narrative section, operational task/version refs used as clinical evidence,
+unsupported clinical or lifecycle claims, and malformed or empty generated
+output. Task state, team, owner, urgency, acceptance deadline, and due deadline
+are appended locally from the packet with no model involvement. Unknowns are
+also copied locally and exactly; their empty `sourceRefs` explicitly mean
+unavailable input, not evidence for a clinical conclusion.
+
+```json
+{
+  "title": "Current patient handover",
+  "sections": [
+    {
+      "sectionId": "situation",
+      "heading": "Situation",
+      "statements": [
+        {
+          "statement": "Karen reports dizziness after the medication change.",
+          "sourceRefs": ["encounter:sentence-42"]
+        }
+      ]
+    },
+    {
+      "sectionId": "background",
+      "heading": "Background",
+      "statements": [
+        {
+          "statement": "The medication was changed yesterday.",
+          "sourceRefs": ["record:medication-1"]
+        }
+      ]
+    },
+    {
+      "sectionId": "outstanding-tasks",
+      "heading": "Outstanding tasks",
+      "statements": [
+        {
+          "statement": "Check blood pressure — state: accepted; team: district-nursing; owner: nurse-7; urgency: medium; accept by: 2026-08-20T12:00:00.000Z; due by: 2026-08-22T10:00:00.000Z.",
+          "sourceRefs": [
+            "task:11111111-1111-4111-8111-111111111111@7",
+            "thread:22222222-2222-4222-8222-222222222222@3"
+          ]
+        }
+      ]
+    },
+    {
+      "sectionId": "unknowns",
+      "heading": "Unknowns",
+      "statements": [
+        {
+          "statement": "The current medication list is unavailable.",
+          "sourceRefs": []
+        }
+      ]
+    }
+  ],
+  "creditsConsumed": 0.04
+}
+```
+
+When all three narrative sections are empty, the pipeline does not invoke Text
+Generation. It returns only deterministic task and unknown sections and reports
+`creditsConsumed: 0`.
+
 ## Medical coding
 
 `POST /api/corti/coding/predict`

@@ -38,13 +38,6 @@ function resultFromTask(task: Corti.AgentsTask): AgentResult {
   };
 }
 
-function requireCompleted(result: AgentResult): AgentResult {
-  if (result.state !== "completed") {
-    throw new Error(`Corti agent ended in ${result.state}`);
-  }
-  return result;
-}
-
 export class CortiSdkGateway implements AgentGateway {
   private readonly client: CortiClient;
   private readonly mcpName: string;
@@ -52,8 +45,9 @@ export class CortiSdkGateway implements AgentGateway {
   constructor(
     private readonly agentId: string,
     config: AppConfig,
+    mcpName = config.mcpName,
   ) {
-    this.mcpName = config.mcpName;
+    this.mcpName = mcpName;
     this.client = new CortiClient({
       environment: config.corti.environment,
       tenantName: config.corti.tenantName,
@@ -111,8 +105,7 @@ export class CortiSdkGateway implements AgentGateway {
   }
 
   async waitForCompletion(result: AgentResult): Promise<AgentResult> {
-    if (!result.taskId) return requireCompleted(result);
-    if (TERMINAL_STATES.has(result.state)) return requireCompleted(result);
+    if (!result.taskId || TERMINAL_STATES.has(result.state)) return result;
 
     const deadline = Date.now() + POLL_TIMEOUT_MS;
     while (Date.now() < deadline) {
@@ -122,7 +115,7 @@ export class CortiSdkGateway implements AgentGateway {
         result.taskId,
       );
       if (TERMINAL_STATES.has(task.status.state)) {
-        return requireCompleted(resultFromTask(task));
+        return resultFromTask(task);
       }
     }
     throw new Error("Corti agent stalled for 180 seconds");

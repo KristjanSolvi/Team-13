@@ -28,8 +28,14 @@ test("applies defaults to a minimal required environment", () => {
   assert.equal(config.uiOrigin, "http://127.0.0.1:5173");
   assert.equal(config.databasePath, "./data/follow-through.sqlite");
   assert.equal(config.mcpName, "follow-through-ledger");
+  assert.equal(
+    config.handoverMcpPublicUrl,
+    "https://follow-through.example/mcp/handover",
+  );
+  assert.equal(config.handoverMcpName, "follow-through-handover");
   assert.equal(config.demoMode, true);
   assert.equal(config.cortiAgentId, undefined);
+  assert.equal(config.cortiHandoverAgentId, undefined);
   assert.equal(Object.hasOwn(config, "cortiAgentId"), true);
   assert.deepEqual(config.corti, {
     tenantName: "tenant-name",
@@ -37,6 +43,36 @@ test("applies defaults to a minimal required environment", () => {
     clientSecret: "client-secret",
     environment: "eu",
   });
+});
+
+test("accepts explicit handover agent and normalized MCP URL overrides", () => {
+  const config = parseConfig(
+    requiredEnvironment({
+      MCP_PUBLIC_URL: "https://follow-through.example/mcp/",
+      HANDOVER_MCP_PUBLIC_URL: "https://handover.example/tools",
+      HANDOVER_MCP_NAME: "custom-handover",
+      CORTI_HANDOVER_AGENT_ID: "agent-handover",
+    }),
+  );
+
+  assert.equal(config.mcpPublicUrl, "https://follow-through.example/mcp/");
+  assert.equal(config.handoverMcpPublicUrl, "https://handover.example/tools");
+  assert.equal(config.handoverMcpName, "custom-handover");
+  assert.equal(config.cortiHandoverAgentId, "agent-handover");
+});
+
+test("derives a normalized handover URL when the override is blank", () => {
+  const config = parseConfig(
+    requiredEnvironment({
+      MCP_PUBLIC_URL: "https://example.test/mcp/",
+      HANDOVER_MCP_PUBLIC_URL: "",
+    }),
+  );
+
+  assert.equal(
+    config.handoverMcpPublicUrl,
+    "https://example.test/mcp/handover",
+  );
 });
 
 test("accepts a blank pre-provisioning agent ID", () => {

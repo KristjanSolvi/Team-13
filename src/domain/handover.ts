@@ -42,15 +42,41 @@ export const handoverPacketSchema = z.object({
   unknowns: z.array(z.string().trim().min(1).max(500)).max(20),
 });
 
+const renderedStatementSchema = z.object({
+  statement: z.string().trim().min(1).max(1_000),
+  sourceRefs: z.array(z.string().min(1).max(240)).max(20),
+});
+
 export const renderedHandoverSchema = z.object({
   title: z.string().trim().min(1).max(160),
   sections: z
     .array(
-      z.object({
-        sectionId: z.string().trim().min(1).max(80),
-        heading: z.string().trim().min(1).max(160),
-        statements: z.array(groundedStatementSchema).max(50),
-      }),
+      z
+        .object({
+          sectionId: z.string().trim().min(1).max(80),
+          heading: z.string().trim().min(1).max(160),
+          statements: z.array(renderedStatementSchema).max(50),
+        })
+        .superRefine((section, context) => {
+          for (const [index, statement] of section.statements.entries()) {
+            const sourceCount = statement.sourceRefs.length;
+            if (section.sectionId === "unknowns" && sourceCount !== 0) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Unknown statements must not cite evidence",
+                path: ["statements", index, "sourceRefs"],
+              });
+            }
+            if (section.sectionId !== "unknowns" && sourceCount === 0) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                  "Rendered clinical and task statements require evidence",
+                path: ["statements", index, "sourceRefs"],
+              });
+            }
+          }
+        }),
     )
     .max(10),
   creditsConsumed: z.number().nonnegative(),

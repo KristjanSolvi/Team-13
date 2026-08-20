@@ -1,5 +1,4 @@
-import { CortiSdkGateway } from "./agent/corti-gateway.js";
-import { AgentRunner } from "./agent/runner.js";
+import { createAgentRunners } from "./agent/runtime.js";
 import { parseConfig } from "./config.js";
 import { seedKaren } from "./fixtures/karen.js";
 import { createApp } from "./http/app.js";
@@ -23,13 +22,7 @@ const handovers = new HandoverService(store, clock);
 const scheduler = new SchedulerService(store, clock);
 scheduler.tick();
 setInterval(() => scheduler.tick(), 15_000).unref();
-const runner = config.cortiAgentId
-  ? new AgentRunner(
-      new CortiSdkGateway(config.cortiAgentId, config),
-      store,
-      config.mcpBearerToken,
-    )
-  : undefined;
+const runners = createAgentRunners(config, store);
 
 createApp({
   store,
@@ -41,7 +34,8 @@ createApp({
   appBearerToken: config.appBearerToken,
   mcpBearerToken: config.mcpBearerToken,
   uiOrigin: config.uiOrigin,
-  ...(runner ? { runner } : {}),
+  ...(runners.task ? { runner: runners.task } : {}),
+  ...(runners.handover ? { handoverRunner: runners.handover } : {}),
 }).listen(config.port, config.host, () => {
   console.error(
     `Follow-Through listening on http://${config.host}:${config.port}`,

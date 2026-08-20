@@ -9,6 +9,8 @@ import {
   candidateCategories,
   type CodingResult,
   type GeneratedSupportingDocument,
+  type RenderedHandover,
+  type RenderHandoverInput,
   type SupportingDocumentType,
 } from "./contracts.js";
 import { PipelineError, upstreamPipelineError } from "./errors.js";
@@ -19,6 +21,7 @@ import type {
   GenerateSupportingDocumentInput,
   PredictCodesInput,
 } from "./gateway.js";
+import { renderGroundedHandover } from "./handover.js";
 import { canonicalTranscriptText } from "./transcript.js";
 
 const CORTI_TIMEOUT_MS = 180_000;
@@ -316,6 +319,92 @@ export class CortiSdkGateway implements CortiGateway {
         throw error;
       }
       throw upstreamPipelineError("document generation", error);
+    }
+  }
+
+  async renderHandover(
+    input: RenderHandoverInput,
+  ): Promise<RenderedHandover> {
+    try {
+      return await renderGroundedHandover(input, async (context) => {
+        const response = await withAbortTimeout((abortSignal) =>
+          this.#client.documents.generate(
+            {
+              outputLanguage: this.#config.outputLanguage,
+              labels: [{ key: "handover-id", value: input.handoverId }],
+              context: [{ type: "text", text: JSON.stringify(context) }],
+              dynamicTemplate: {
+                name: "Follow-Through Grounded Patient Handover",
+                generation: {
+                  instructions: {
+                    prompt:
+                      "Extract only the supplied narrative statements. Copy statement text and every source reference verbatim, preserving situation, background, and currentConcerns boundaries. Unknowns are preserved locally; never convert absence into a clinical conclusion. Do not add, paraphrase, or infer clinical or operational facts, diagnoses, recommendations, treatment instructions, lifecycle claims, reassurance, or discharge-readiness claims.",
+                  },
+                  sections: [
+                    {
+                      heading: "Grounded handover narrative",
+                      instructions: {
+                        contentPrompt:
+                          "Return an extractive list of retained input statements. The text field must exactly copy one complete input statement. Each object must identify that statement's original section and cite only sourceRefs copied verbatim from that same statement. Do not render tasks, owners, priorities, deadlines, or unknowns; those are appended deterministically by the application.",
+                        writingStylePrompt:
+                          "Copy source statement text exactly without rewriting.",
+                      },
+                      outputSchema: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 60,
+                        items: {
+                          type: "object",
+                          fields: [
+                            {
+                              key: "section",
+                              description:
+                                "The exact source section for this statement.",
+                              value: {
+                                type: "string",
+                                enum: [
+                                  "situation",
+                                  "background",
+                                  "currentConcerns",
+                                ],
+                              },
+                            },
+                            {
+                              key: "text",
+                              description:
+                                "One complete input statement copied exactly without paraphrase.",
+                              value: { type: "string" },
+                            },
+                            {
+                              key: "sourceRefs",
+                              description:
+                                "Source references copied verbatim from the same input section.",
+                              value: {
+                                type: "array",
+                                minItems: 1,
+                                maxItems: 20,
+                                items: { type: "string" },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            { abortSignal, timeoutInSeconds: CORTI_TIMEOUT_MS / 1000 },
+          ),
+        );
+        return {
+          generatedValue: firstStructuredSection(response),
+          creditsConsumed: response.usageInfo.creditsConsumed,
+        };
+      });
+    } catch (error) {
+      if (error instanceof PipelineError) throw error;
+      throw upstreamPipelineError("handover generation", error);
     }
   }
 
