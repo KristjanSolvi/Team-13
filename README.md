@@ -144,15 +144,21 @@ npm run build
 
 ## Railway deployment
 
-The repository contains Railway configuration for all seven services. Deploy
-the Lovable Ward UI and browser-facing integration API publicly, keep the Corti
-pipeline, patient-profile, downstream-gateway, and mock-EHR services on Railway's private network, and expose
-only the Agentic `/mcp` service required by Corti. Attach separate persistent
-volumes to the Agentic, patient-profile, downstream-gateway, and mock-EHR services for their SQLite databases.
+The repository contains Railway configuration for the six backend services.
+Deploy the browser-facing Integration API publicly, keep the Corti pipeline,
+patient-profile, downstream-gateway, and mock-EHR services on Railway's private
+network, and expose only the Agentic `/mcp` service required by Corti. Attach
+separate persistent volumes to the Agentic, patient-profile,
+downstream-gateway, and mock-EHR services for their SQLite databases. The UI
+team owns its Lovable repository and deployment separately.
 
-Railway services connected to this repository's `main` branch deploy
-automatically after the GitHub checks pass, while retaining their existing
-domains. The per-service watch patterns avoid rebuilding unaffected services.
+After the six backend Railway services are connected to this repository's
+`main` branch, they deploy automatically after the GitHub checks pass while
+retaining their existing domains. The per-service watch patterns avoid
+rebuilding unaffected services. The current project still needs the Railway
+GitHub App to be granted access to `KristjanSolvi/Team-13` before that source
+connection can be completed. The UI team manages its separate Lovable source
+and deployment independently.
 
 Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
 service roots, one-time GitHub connection, variables, bring-up order, and

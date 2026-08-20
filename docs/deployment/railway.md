@@ -1,8 +1,9 @@
 # Railway deployment
 
-Ward Threads deploys as seven services from the same GitHub repository. Keeping
-the current service boundaries avoids moving secrets into the browser and lets
-the Agentic ledger retain its SQLite ownership model for the hackathon.
+Ward Threads deploys as six backend services from `KristjanSolvi/Team-13` plus
+the separately managed Lovable UI. Keeping the current service boundaries
+avoids moving secrets into the browser and lets the Agentic ledger retain its
+SQLite ownership model for the hackathon.
 
 ## Service map
 
@@ -14,15 +15,13 @@ the Agentic ledger retain its SQLite ownership model for the hackathon.
 | `patient-profile` | `/apps/patient-profile` | `/apps/patient-profile/railway.toml` | No                   | `8791` |
 | `downstream-gateway` | `/apps/downstream-gateway` | `/apps/downstream-gateway/railway.toml` | No | `8792` |
 | `mock-ehr`        | `/apps/mock-ehr`        | `/apps/mock-ehr/railway.toml`       | No                   | `8793` |
-| `ward-ui`         | `/`                     | `/railway.ui.toml`                   | Yes                  | `8080` |
+| `ward-ui`         | UI team's Lovable repository | UI team's deployment config      | Yes                  | `8080` |
 
-Create all seven services from the `KristjanSolvi/Team-13` repository and use
-the root directories above. The checked-in `railway.toml` files define each
-service's immutable build, start, health-check, and restart settings.
-
-The UI intentionally builds from `/`, because it imports the browser adapters
-from `apps/corti-pipeline`. Select `/railway.ui.toml` as its custom config file;
-do not use the root `/railway.toml`, which belongs to `agentic`.
+Create the six backend services from the `KristjanSolvi/Team-13` repository and
+use the root directories above. The checked-in `railway.toml` files define each
+backend service's immutable build, start, health-check, and restart settings.
+The UI team owns the separate Lovable repository and should point it only at
+the browser-facing Integration API.
 
 ## Continuous deployment from `main`
 
@@ -30,6 +29,12 @@ For each of the six services, open **Settings → Source** and connect
 `KristjanSolvi/Team-13` with `main` as the deployment branch. Enable automatic
 deployments. A successful push to `main` will then replace the running version
 behind the same Railway domain; a new domain is not created for every deploy.
+
+At the time of this setup, the backend services were deployed successfully but
+their Railway sources were still unconnected: Railway reported that the
+connected account did not have access to the repository. Grant the Railway
+GitHub App access to `KristjanSolvi/Team-13`, then complete this step for each
+backend service. Until then, merges to `main` do not redeploy automatically.
 
 The repository's `.github/workflows/ci.yml` checks every deployable service on
 pushes and pull requests. In each Railway service, enable **Wait for CI** so a
@@ -53,11 +58,16 @@ Set these fixed ports and bind hosts in the corresponding service variables:
 agentic:          PORT=3000  HOST=0.0.0.0
 corti-pipeline:   PORT=8787  HOST=0.0.0.0
 integration-api: PORT=8790  HOST=0.0.0.0
-patient-profile: PATIENT_PROFILE_PORT=8791 PATIENT_PROFILE_HOST=0.0.0.0
-downstream-gateway: DOWNSTREAM_PORT=8792 DOWNSTREAM_HOST=0.0.0.0
-mock-ehr:        MOCK_EHR_PORT=8793 MOCK_EHR_HOST=0.0.0.0
+patient-profile: PORT=8791 HOST=0.0.0.0 PATIENT_PROFILE_PORT=8791 PATIENT_PROFILE_HOST=0.0.0.0
+downstream-gateway: PORT=8792 HOST=0.0.0.0 DOWNSTREAM_PORT=8792 DOWNSTREAM_HOST=0.0.0.0
+mock-ehr:        PORT=8793 HOST=0.0.0.0 MOCK_EHR_PORT=8793 MOCK_EHR_HOST=0.0.0.0
 ward-ui:          PORT=8080  HOST=0.0.0.0
 ```
+
+For the three custom-port services, keep the generic Railway `PORT`/`HOST`
+values aligned with the application-specific variables. Railway uses the
+generic values for platform port discovery, while each application reads its
+own namespaced values.
 
 The patient-profile, downstream-gateway, and mock-EHR services are exposed to
 the UI only through the Integration API. Do not give them public domains or
