@@ -509,24 +509,6 @@ export class SqliteStore {
            version, packet_json, rendered_json, source_snapshot_json,
            source_snapshot_hash, created_at, updated_at, generated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(handover_id) DO UPDATE SET
-          patient_id = excluded.patient_id,
-          interaction_id = excluded.interaction_id,
-          context_id = excluded.context_id,
-          requested_by = excluded.requested_by,
-          reason = excluded.reason,
-          focus = excluded.focus,
-          correlation_id = excluded.correlation_id,
-          idempotency_key = excluded.idempotency_key,
-          request_hash = excluded.request_hash,
-          status = excluded.status,
-          version = excluded.version,
-          packet_json = excluded.packet_json,
-          rendered_json = excluded.rendered_json,
-          source_snapshot_json = excluded.source_snapshot_json,
-          source_snapshot_hash = excluded.source_snapshot_hash,
-          updated_at = excluded.updated_at,
-          generated_at = excluded.generated_at
       `)
       .run(
         value.handoverId,
@@ -551,6 +533,105 @@ export class SqliteStore {
         value.updatedAt,
         value.generatedAt,
       );
+  }
+
+  updateHandover(
+    value: HandoverRecord,
+    expectedVersion: number,
+  ): HandoverRecord {
+    if (
+      !Number.isSafeInteger(expectedVersion) ||
+      !Number.isSafeInteger(value.version) ||
+      value.version !== expectedVersion + 1
+    ) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Handover version must advance by one",
+        false,
+        409,
+      );
+    }
+
+    return this.transaction(() => {
+      const current =
+        this.getHandover(value.handoverId) ??
+        this.getHandoverByRequest(value.requestedBy, value.idempotencyKey);
+      if (!current) {
+        throw new DomainError(
+          "HANDOVER_NOT_FOUND",
+          "Handover not found",
+          false,
+          404,
+        );
+      }
+      if (
+        current.handoverId !== value.handoverId ||
+        current.patientId !== value.patientId ||
+        current.interactionId !== value.interactionId ||
+        current.requestedBy !== value.requestedBy ||
+        current.reason !== value.reason ||
+        current.focus !== value.focus ||
+        current.correlationId !== value.correlationId ||
+        current.idempotencyKey !== value.idempotencyKey ||
+        current.requestHash !== value.requestHash ||
+        current.createdAt !== value.createdAt
+      ) {
+        throw new DomainError(
+          "HANDOVER_IDENTITY_MISMATCH",
+          "Handover request identity cannot change",
+          false,
+          409,
+        );
+      }
+
+      const result = this.database
+        .prepare(`
+          UPDATE handovers
+          SET context_id = ?,
+              status = ?,
+              version = ?,
+              packet_json = ?,
+              rendered_json = ?,
+              source_snapshot_json = ?,
+              source_snapshot_hash = ?,
+              updated_at = ?,
+              generated_at = ?
+          WHERE handover_id = ? AND version = ?
+        `)
+        .run(
+          value.contextId,
+          value.status,
+          value.version,
+          value.packet === null ? null : JSON.stringify(value.packet),
+          value.rendered === null ? null : JSON.stringify(value.rendered),
+          value.sourceSnapshot === null
+            ? null
+            : JSON.stringify(value.sourceSnapshot),
+          value.sourceSnapshotHash,
+          value.updatedAt,
+          value.generatedAt,
+          value.handoverId,
+          expectedVersion,
+        );
+      if (result.changes !== 1) {
+        if (!this.getHandover(value.handoverId)) {
+          throw new DomainError(
+            "HANDOVER_NOT_FOUND",
+            "Handover not found",
+            false,
+            404,
+          );
+        }
+        throw new DomainError(
+          "VERSION_CONFLICT",
+          "Handover changed concurrently",
+          false,
+          409,
+        );
+      }
+
+      return this.requireHandover(value.handoverId);
+    });
   }
 
   getHandover(handoverId: string): HandoverRecord | null {
