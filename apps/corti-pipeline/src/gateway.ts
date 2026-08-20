@@ -4,6 +4,8 @@ import type {
   CodingSystem,
   FollowThroughCandidate,
   GeneratedSupportingDocument,
+  RenderedHandover,
+  RenderHandoverInput,
   ScopedToken,
   SupportingDocumentType,
   TranscriptSegment,
@@ -45,5 +47,6 @@ export interface CortiGateway {
   generateSupportingDocument(
     input: GenerateSupportingDocumentInput,
   ): Promise<GeneratedSupportingDocument>;
+  renderHandover(input: RenderHandoverInput): Promise<RenderedHandover>;
   predictCodes(input: PredictCodesInput): Promise<CodingResult>;
 }

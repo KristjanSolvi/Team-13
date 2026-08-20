@@ -57,6 +57,57 @@ const codingRequestSchema = z.object({
   system: z.enum(codingSystems).optional(),
 });
 
+const handoverGroundedStatementSchema = z
+  .object({
+    statement: z.string().trim().min(1).max(1_000),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  })
+  .strict();
+
+const handoverTaskItemSchema = z
+  .object({
+    taskId: z.string().uuid(),
+    threadId: z.string().uuid(),
+    summary: z.string().trim().min(1).max(240),
+    state: z.enum([
+      "draft",
+      "offered_to_team",
+      "assigned_to_member",
+      "accepted",
+      "completed",
+      "escalated",
+    ]),
+    targetTeamId: z.string().trim().min(1).max(160),
+    assignedMemberId: z.string().trim().min(1).max(160).nullable(),
+    clinicalUrgency: z.enum(["high", "medium", "routine"]),
+    acceptBy: z.string().datetime(),
+    dueBy: z.string().datetime(),
+    version: z.number().int().positive(),
+    sourceRefs: z.array(z.string().min(1).max(240)).min(1).max(20),
+  })
+  .strict();
+
+const handoverPacketSchema = z
+  .object({
+    situation: z.array(handoverGroundedStatementSchema).max(20),
+    background: z.array(handoverGroundedStatementSchema).max(20),
+    currentConcerns: z.array(handoverGroundedStatementSchema).max(20),
+    outstandingTasks: z.array(handoverTaskItemSchema).max(50),
+    awaitingVerification: z.array(handoverTaskItemSchema).max(50),
+    escalations: z.array(handoverTaskItemSchema).max(50),
+    unknowns: z.array(z.string().trim().min(1).max(500)).max(20),
+  })
+  .strict();
+
+const renderHandoverRequestSchema = z
+  .object({
+    handoverId: z.string().uuid(),
+    patientId: z.string().trim().min(1).max(120),
+    sourceSnapshotHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    packet: handoverPacketSchema,
+  })
+  .strict();
+
 const directoryOptionSchema = z.object({
   id: z.string().min(1).max(120),
   label: z.string().min(1).max(160),
@@ -236,6 +287,14 @@ export function createPipelineApp(options: CreatePipelineAppOptions) {
     route(async (request, response) => {
       const input = supportingDocumentSchema.parse(request.body);
       response.json(await requireGateway().generateSupportingDocument(input));
+    }),
+  );
+
+  app.post(
+    "/api/corti/handovers/render",
+    route(async (request, response) => {
+      const input = renderHandoverRequestSchema.parse(request.body);
+      response.json(await requireGateway().renderHandover(input));
     }),
   );
 

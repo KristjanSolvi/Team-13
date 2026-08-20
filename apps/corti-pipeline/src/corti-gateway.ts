@@ -9,6 +9,8 @@ import {
   candidateCategories,
   type CodingResult,
   type GeneratedSupportingDocument,
+  type RenderedHandover,
+  type RenderHandoverInput,
   type SupportingDocumentType,
 } from "./contracts.js";
 import { PipelineError, upstreamPipelineError } from "./errors.js";
@@ -19,6 +21,7 @@ import type {
   GenerateSupportingDocumentInput,
   PredictCodesInput,
 } from "./gateway.js";
+import { renderGroundedHandover } from "./handover.js";
 import { canonicalTranscriptText } from "./transcript.js";
 
 const CORTI_TIMEOUT_MS = 180_000;
@@ -316,6 +319,92 @@ export class CortiSdkGateway implements CortiGateway {
         throw error;
       }
       throw upstreamPipelineError("document generation", error);
+    }
+  }
+
+  async renderHandover(
+    input: RenderHandoverInput,
+  ): Promise<RenderedHandover> {
+    try {
+      return await renderGroundedHandover(input, async (context) => {
+        const response = await withAbortTimeout((abortSignal) =>
+          this.#client.documents.generate(
+            {
+              outputLanguage: this.#config.outputLanguage,
+              labels: [{ key: "handover-id", value: input.handoverId }],
+              context: [{ type: "text", text: JSON.stringify(context) }],
+              dynamicTemplate: {
+                name: "Follow-Through Grounded Patient Handover",
+                generation: {
+                  instructions: {
+                    prompt:
+                      "Render only the supplied narrative statements. Preserve situation, background, and currentConcerns boundaries. Copy every source reference verbatim. Preserve explicit unknown wording without converting absence into a clinical conclusion. Do not add clinical or operational facts, diagnoses, recommendations, treatment instructions, lifecycle claims, reassurance, or discharge-readiness claims.",
+                  },
+                  sections: [
+                    {
+                      heading: "Grounded handover narrative",
+                      instructions: {
+                        contentPrompt:
+                          "Return concise direct clinical handover statements. Each object must identify its original section and cite only sourceRefs copied verbatim from statements in that same input section. Do not render tasks, owners, priorities, deadlines, or unknowns; those are appended deterministically by the application.",
+                        writingStylePrompt:
+                          "Concise, factual clinical handover language. Preserve uncertainty explicitly.",
+                      },
+                      outputSchema: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 60,
+                        items: {
+                          type: "object",
+                          fields: [
+                            {
+                              key: "section",
+                              description:
+                                "The exact source section for this statement.",
+                              value: {
+                                type: "string",
+                                enum: [
+                                  "situation",
+                                  "background",
+                                  "currentConcerns",
+                                ],
+                              },
+                            },
+                            {
+                              key: "text",
+                              description:
+                                "A concise statement grounded only in the cited input.",
+                              value: { type: "string" },
+                            },
+                            {
+                              key: "sourceRefs",
+                              description:
+                                "Source references copied verbatim from the same input section.",
+                              value: {
+                                type: "array",
+                                minItems: 1,
+                                maxItems: 20,
+                                items: { type: "string" },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            { abortSignal, timeoutInSeconds: CORTI_TIMEOUT_MS / 1000 },
+          ),
+        );
+        return {
+          generatedValue: firstStructuredSection(response),
+          creditsConsumed: response.usageInfo.creditsConsumed,
+        };
+      });
+    } catch (error) {
+      if (error instanceof PipelineError) throw error;
+      throw upstreamPipelineError("handover generation", error);
     }
   }
 
