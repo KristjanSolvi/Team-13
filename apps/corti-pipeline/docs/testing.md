@@ -116,9 +116,10 @@ Pass when:
 - unavailable Coding produces no fabricated fallback code.
 
 The evaluation page uses a clearly named synthetic approval ID. The integrated
-product must replace it with the stable approval record returned by Developer
-2's service. Until that contract exists, this page proves the Corti boundary,
-not an authoritative clinical commit.
+product must replace it with the Agentic service's stable `taskId` and signed
+`approvalProof`, plus the exact approved clinical text/version. That contract
+now exists, but this evaluator does not perform the BFF orchestration; it proves
+the Corti boundary, not an authoritative clinical commit.
 
 ## Record one rehearsal result
 
