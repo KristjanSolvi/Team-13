@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { DomainError } from "../domain/errors.js";
 import type { MeetingReconciliation } from "../domain/meeting.js";
 import type { SqliteStore } from "../infra/store.js";
@@ -12,8 +14,6 @@ export interface GenerateMeetingReconciliationInput {
   patientId: string;
   idempotencyKey: string;
 }
-
-const WARMUP_PROMPT = "Initialize an empty context. Do not call tools.";
 
 function requireCompletedInContext(
   result: AgentResult,
@@ -70,20 +70,11 @@ export class MeetingAgentRunner {
       );
     }
 
-    const submittedWarmup = await this.gateway.send({ text: WARMUP_PROMPT });
-    const warmup = await this.gateway.waitForCompletion(submittedWarmup);
-    if (warmup.state !== "completed" || warmup.contextId.length === 0) {
-      throw new DomainError(
-        "AGENT_CONTEXT_INITIALIZATION_FAILED",
-        "Corti could not initialize a meeting context",
-        true,
-        502,
-      );
-    }
+    const contextId = randomUUID();
     if (
       !claimMeetingAgentContext(this.store, {
         reconciliationId: input.reconciliationId,
-        contextId: warmup.contextId,
+        contextId,
         occurredAt: new Date().toISOString(),
       })
     ) {
@@ -96,7 +87,7 @@ export class MeetingAgentRunner {
     }
 
     const submitted = await this.gateway.send({
-      contextId: warmup.contextId,
+      contextId,
       text: "Reconcile the explicitly selected patient meeting segment. Save grounded draft tasks and carry-forward warnings exactly once.",
       data: {
         reconciliationId: requested.reconciliationId,
@@ -108,15 +99,12 @@ export class MeetingAgentRunner {
       },
     });
     const completed = await this.gateway.waitForCompletion(submitted);
-    requireCompletedInContext(completed, warmup.contextId);
+    requireCompletedInContext(completed, contextId);
 
     const persisted = this.store.requireMeetingReconciliation(
       input.reconciliationId,
     );
-    if (
-      persisted.status !== "saved" ||
-      persisted.contextId !== warmup.contextId
-    ) {
+    if (persisted.status !== "saved" || persisted.contextId !== contextId) {
       throw new DomainError(
         "MEETING_RECONCILIATION_UNCONFIRMED",
         "Corti completed without saving one meeting reconciliation",
@@ -126,7 +114,7 @@ export class MeetingAgentRunner {
     }
     return verifyMeetingAgentReconciliation(this.store, {
       reconciliationId: input.reconciliationId,
-      contextId: warmup.contextId,
+      contextId,
       idempotencyKey: input.idempotencyKey,
     });
   }

@@ -122,7 +122,7 @@ test("meeting agent prompt locks exact tools, evidence, and draft-only behavior"
   );
 });
 
-test("meeting runner uses a fresh context and verifies one saved reconciliation", async (t) => {
+test("meeting runner reserves a fresh context before one scoped call", async (t) => {
   const { store, meetings, request } = harness(t);
   store.putContextMapping(
     "ctx-stale",
@@ -134,19 +134,15 @@ test("meeting runner uses a fresh context and verifies one saved reconciliation"
   const gateway: AgentGateway = {
     async send(input) {
       calls.push(input);
-      if (calls.length === 1) {
-        assert.equal(input.contextId, undefined);
-        assert.equal(input.data, undefined);
-        return { contextId: "ctx-fresh", taskId: "warmup", state: "submitted" };
-      }
+      assert.ok(input.contextId);
       assert.equal(
         store.contextForInteraction(request.reconciliation.interactionId),
-        "ctx-fresh",
+        input.contextId,
       );
       meetings.saveReconciliation({
         reconciliationId: request.reconciliation.reconciliationId,
         patientId,
-        contextId: "ctx-fresh",
+        contextId: input.contextId,
         expectedVersion: request.reconciliation.version,
         sourceSnapshotHash: request.reconciliation.sourceSnapshotHash,
         proposals: [],
@@ -156,7 +152,7 @@ test("meeting runner uses a fresh context and verifies one saved reconciliation"
         correlationId: "corr-meeting-1",
       });
       return {
-        contextId: "ctx-fresh",
+        contextId: input.contextId,
         taskId: "reconcile",
         state: "submitted",
       };
@@ -177,9 +173,9 @@ test("meeting runner uses a fresh context and verifies one saved reconciliation"
   });
 
   assert.equal(result.status, "saved");
-  assert.equal(result.contextId, "ctx-fresh");
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls[1]?.data, {
+  assert.ok(result.contextId);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0]?.data, {
     reconciliationId: request.reconciliation.reconciliationId,
     patientId,
     expectedVersion: request.reconciliation.version,
@@ -195,7 +191,7 @@ test("meeting runner uses a fresh context and verifies one saved reconciliation"
     ),
     {
       reconciliationId: request.reconciliation.reconciliationId,
-      contextId: "ctx-fresh",
+      contextId: result.contextId,
       version: result.version,
     },
   );
@@ -203,13 +199,14 @@ test("meeting runner uses a fresh context and verifies one saved reconciliation"
 
 test("meeting runner rejects terminal failure even when a save is absent", async (t) => {
   const { store, request } = harness(t);
-  let calls = 0;
   const gateway: AgentGateway = {
-    async send() {
-      calls += 1;
-      return calls === 1
-        ? completed("ctx-failed", "warmup")
-        : { contextId: "ctx-failed", taskId: "reconcile", state: "failed" };
+    async send(input) {
+      assert.ok(input.contextId);
+      return {
+        contextId: input.contextId,
+        taskId: "reconcile",
+        state: "failed",
+      };
     },
     async waitForCompletion(result) {
       return result;
