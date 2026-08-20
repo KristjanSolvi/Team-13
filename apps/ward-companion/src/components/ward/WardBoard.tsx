@@ -1,8 +1,9 @@
-import type { Patient, Thread } from "@/data/ward";
+import type { CaseNote, Patient, Thread } from "@/data/ward";
 import { bays, patients } from "@/data/ward";
 
 type Props = {
   threads: Thread[];
+  notes?: Record<string, CaseNote[]>;
   onOpenThread: (threadId: string) => void;
   onOpenPatient: (patientId: string) => void;
   activePatientId?: string | null;
@@ -20,7 +21,13 @@ function dueStyle(due: string) {
   return "bg-tracking-soft text-tracking-strong";
 }
 
-export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientId }: Props) {
+export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activePatientId }: Props) {
+  const latestPlanFor = (p: Patient) => {
+    const list = notes?.[p.id] ?? [];
+    const candidates = list.filter((n) => n.doc === "ward-round");
+    const note = (candidates.length ? candidates : list).at(-1);
+    return note ? { text: note.text, at: note.at } : null;
+  };
   const openThreadsFor = (p: Patient) =>
     threads.filter(
       (t) => t.patientId === p.id && t.status !== "verified" && isDueTodayOrOverdue(t.due),
@@ -76,12 +83,15 @@ export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientI
                     </span>
                   </div>
 
-                  {patient.waitingFor ? (
-                    <p className="mb-2 text-[11px] text-muted-foreground">
-                      <span className="font-medium text-foreground/80">Pending:</span>{" "}
-                      {patient.waitingFor}
-                    </p>
-                  ) : null}
+                  {(() => {
+                    const plan = latestPlanFor(patient);
+                    return plan ? (
+                      <p className="mb-2 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                        <span className="font-medium text-foreground/80">Latest plan:</span>{" "}
+                        {plan.text}
+                      </p>
+                    ) : null;
+                  })()}
 
                   {open.length > 0 ? (
                     <div className="space-y-1">

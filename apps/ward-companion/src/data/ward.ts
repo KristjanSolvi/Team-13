@@ -435,6 +435,67 @@ export const initialNotes: Record<string, CaseNote[]> = {
   ],
 };
 
+initialNotes["p3"] = [
+  {
+    id: "n3",
+    doc: "ward-round",
+    at: "08:30",
+    author: "Dr. Aris",
+    source: "scribe",
+    text: "Plan: physio review this afternoon to confirm safe mobility, then home tomorrow if independent on stairs.",
+  },
+];
+initialNotes["p4"] = [
+  {
+    id: "n4",
+    doc: "ward-round",
+    at: "08:50",
+    author: "Surgical SHO",
+    source: "scribe",
+    text: "Plan: dressing change at 11:30, surgical wound review this afternoon before any discharge planning.",
+  },
+];
+initialNotes["p5"] = [
+  {
+    id: "n5",
+    doc: "ward-round",
+    at: "08:05",
+    author: "Dr. Neve Halloran",
+    source: "scribe",
+    text: "Plan: continue current analgesia, mobilise with nursing staff, review again tomorrow morning.",
+  },
+];
+initialNotes["p6"] = [
+  {
+    id: "n6",
+    doc: "ward-round",
+    at: "07:20",
+    author: "Dr. Neve Halloran",
+    source: "scribe",
+    text: "Plan: repeat potassium after infusion, recheck bloods tomorrow if stable.",
+  },
+];
+initialNotes["p7"] = [
+  {
+    id: "n7",
+    doc: "ward-round",
+    at: "09:10",
+    author: "V. Kilfoy",
+    source: "scribe",
+    text: "Plan: discharge script to pharmacy today, home tomorrow once TTOs dispensed.",
+  },
+];
+initialNotes["p8"] = [
+  {
+    id: "n8",
+    doc: "ward-round",
+    at: "08:40",
+    author: "Dr. Yuki T.",
+    source: "scribe",
+    text: "Plan: observe for a further 24 hours, no active issues, reassess on tomorrow's round.",
+  },
+];
+
 export type Staff = { name: string; role: string; team: string; free: boolean };
 
 export const staff: Staff[] = [

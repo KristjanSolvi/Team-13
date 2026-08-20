@@ -246,6 +246,9 @@ function Index() {
       <NervecentreShell
         patient={patients.find((p) => p.id === ehrPatientId)}
         notes={notes[ehrPatientId] ?? []}
+        activity={threads
+          .filter((t) => t.patientId === ehrPatientId)
+          .flatMap((t) => t.activity)}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
@@ -378,6 +381,7 @@ function Index() {
                 <div className="flex-1 overflow-y-auto p-5">
                   <WardBoard
                     threads={threads}
+                    notes={notes}
                     activePatientId={ehrPatientId}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
