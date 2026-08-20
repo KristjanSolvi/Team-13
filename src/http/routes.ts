@@ -7,6 +7,8 @@ import {
   Router,
 } from "express";
 import { ZodError, z } from "zod";
+
+import { sourceRevisionReasons } from "../domain/change-radar.js";
 import { demoScenarios } from "../demo/types.js";
 import { DomainError } from "../domain/errors.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
@@ -53,6 +55,16 @@ const commandBase = {
   expectedVersion: z.number().int().positive(),
   idempotencyKey: z.string().min(8).max(200),
 };
+
+const sourceRevisionSchema = z
+  .object({
+    sourceItemId: z.string().min(1).max(160),
+    expectedSourceRef: z.string().regex(EVIDENCE_REFERENCE),
+    newText: z.string().trim().min(3).max(4_000),
+    reason: z.enum(sourceRevisionReasons),
+    idempotencyKey: z.string().min(8).max(200),
+  })
+  .strict();
 
 const asyncRoute =
   (handler: (request: Request, response: Response) => Promise<void> | void) =>
@@ -681,6 +693,35 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
           pathParam(request, "patientId"),
         ),
       });
+    }),
+  );
+  router.get(
+    "/patients/:patientId/change-impacts",
+    asyncRoute((request, response) => {
+      response.json({
+        impacts: dependencies.records.listChangeImpacts(
+          pathParam(request, "patientId"),
+        ),
+      });
+    }),
+  );
+  router.post(
+    "/patients/:patientId/source-revisions",
+    asyncRoute((request, response) => {
+      const body = sourceRevisionSchema.parse(request.body);
+      response.status(201).json(
+        dependencies.records.recordSourceRevision({
+          patientId: pathParam(request, "patientId"),
+          sourceItemId: body.sourceItemId,
+          expectedSourceRef: body.expectedSourceRef,
+          newText: body.newText,
+          reason: body.reason,
+          changedBy: requireActor(request),
+          changedAt: dependencies.clock.now().toISOString(),
+          correlationId: correlationId(request, randomUUID()),
+          idempotencyKey: body.idempotencyKey,
+        }),
+      );
     }),
   );
   router.get(

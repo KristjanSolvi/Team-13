@@ -92,6 +92,13 @@ function harness() {
     })),
     listThreads: vi.fn(async () => [{ threadId: "thread-1" }]),
     listTasks: vi.fn(async () => [{ taskId: "task-1", state: "draft" }]),
+    listChangeImpacts: vi.fn(async () => []),
+    recordSourceRevision: vi.fn(async (_patientId, input) => ({
+      replayed: false,
+      reviewRequiredCount: 1,
+      revision: { revisionId: "revision-1" },
+      impacts: [{ impactId: "impact-1", sourceRef: input.expectedSourceRef }],
+    })),
     taskCommand: vi.fn(async () => ({
       taskId: "task-1",
       state: "offered_to_team",
@@ -194,6 +201,9 @@ describe("integration API", () => {
     );
     expect(response.body.paths).toHaveProperty(
       "/api/patients/{patientId}/companion",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/demo/patients/{patientId}/source-revisions",
     );
     expect(response.body.paths).toHaveProperty(
       "/api/ehr/patients/{patientId}",
@@ -1021,8 +1031,43 @@ describe("integration API", () => {
       patientId: "synthetic-karen",
       threads: [{ threadId: "thread-1" }],
       tasks: [{ taskId: "task-1", state: "draft" }],
+      changeImpacts: [],
       observedAt: "2026-08-20T12:00:00.000Z",
     });
+  });
+
+  it("exposes only the predefined synthetic Change Radar revision", async () => {
+    const { agentic, app } = harness();
+    const response = await request(app)
+      .post("/api/demo/patients/synthetic-karen/source-revisions")
+      .set("x-actor-id", "clinician:ward-demo")
+      .set("x-correlation-id", "corr-change-radar")
+      .send({ idempotencyKey: "change-radar-001" })
+      .expect(201);
+
+    expect(response.body.reviewRequiredCount).toBe(1);
+    expect(agentic.recordSourceRevision).toHaveBeenCalledWith(
+      "synthetic-karen",
+      {
+        sourceItemId: "karen-dizziness-signal",
+        expectedSourceRef: "encounter:sentence-42",
+        newText:
+          "Dizziness now also occurs at rest following the medication change",
+        reason: "clinical_note_revision",
+        idempotencyKey: "change-radar-001",
+      },
+      {
+        actorId: "clinician:ward-demo",
+        correlationId: "corr-change-radar",
+      },
+    );
+
+    await request(app)
+      .post("/api/demo/patients/real-patient/source-revisions")
+      .set("x-actor-id", "clinician:ward-demo")
+      .send({ idempotencyKey: "change-radar-002" })
+      .expect(403);
+    expect(agentic.recordSourceRevision).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the QR audience flow without forwarding server credentials to the browser", async () => {

@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/apps/integration-api/**"]
 buildCommand = "npm ci && npm run build"
 
 [deploy]

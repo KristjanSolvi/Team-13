@@ -23,6 +23,7 @@ import {
   meetingSegmentOpenSchema,
   meetingTranscriptAppendSchema,
   pipelineProxyPaths,
+  syntheticSourceRevisionSchema,
   taskCommandSchemas,
   wardMeetingCompleteSchema,
   wardMeetingStartSchema,
@@ -189,6 +190,20 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
         await options.service.wardCompanionOverview(
           patientId,
           correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/demo/patients/:patientId/source-revisions",
+    route(async (request, response) => {
+      const body = syntheticSourceRevisionSchema.parse(request.body);
+      response.status(201).json(
+        await options.service.simulateSyntheticSourceRevision(
+          pathParam(request, "patientId"),
+          body.idempotencyKey,
+          requestMeta(request, response),
         ),
       );
     }),

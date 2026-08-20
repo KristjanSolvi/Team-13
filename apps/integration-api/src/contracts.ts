@@ -29,6 +29,10 @@ export const candidateSchema = z.object({
 
 export type FollowThroughCandidate = z.infer<typeof candidateSchema>;
 
+export const syntheticSourceRevisionSchema = z
+  .object({ idempotencyKey: z.string().min(8).max(200) })
+  .strict();
+
 export const pipelineProxyPaths = [
   "/api/corti/ambient/session",
   "/api/corti/ambient/token",

@@ -47,8 +47,32 @@ const agenticTaskSchema = z.object({
   updatedAt: z.string().min(1),
 });
 
+const changeImpactSchema = z.object({
+  impactId: z.string().uuid(),
+  revisionId: z.string().uuid(),
+  dependencyId: z.string().uuid(),
+  patientId: z.string().min(1),
+  sourceItemId: z.string().min(1),
+  sourceRef: z.string().min(1),
+  artifactKind: z.enum(["task", "handover"]),
+  artifactId: z.string().min(1),
+  artifactVersion: z.number().int().positive(),
+  status: z.literal("review_required"),
+  summary: z.string().min(1),
+  detectedAt: z.string().min(1),
+  changedAt: z.string().min(1),
+  changedBy: z.string().min(1),
+  reason: z.enum([
+    "new_result",
+    "medication_update",
+    "clinical_note_revision",
+    "other",
+  ]),
+});
+
 type AgenticThread = z.infer<typeof agenticThreadSchema>;
 type AgenticTask = z.infer<typeof agenticTaskSchema>;
+export type ChangeImpact = z.infer<typeof changeImpactSchema>;
 type ThreadState = z.infer<typeof threadStateSchema>;
 type TaskState = z.infer<typeof taskStateSchema>;
 
@@ -104,12 +128,14 @@ export interface WardCompanionOverview {
   patientId: string;
   observedAt: string;
   threads: WardCompanionThread[];
+  changeImpacts: ChangeImpact[];
 }
 
 interface ProjectionInput {
   patientId: string;
   threads: unknown[];
   tasks: unknown[];
+  changeImpacts?: unknown[];
   observedAt: string;
 }
 
@@ -118,9 +144,14 @@ export function projectWardCompanionOverview(
 ): WardCompanionOverview {
   const threads = parseRecords(agenticThreadSchema, input.threads);
   const tasks = parseRecords(agenticTaskSchema, input.tasks);
+  const changeImpacts = parseRecords(
+    changeImpactSchema,
+    input.changeImpacts ?? [],
+  );
   const threadById = new Map<string, AgenticThread>();
   const tasksByThread = new Map<string, AgenticTask[]>();
   const taskIds = new Set<string>();
+  const impactIds = new Set<string>();
 
   for (const thread of threads) {
     if (
@@ -144,6 +175,17 @@ export function projectWardCompanionOverview(
     const related = tasksByThread.get(task.threadId) ?? [];
     related.push(task);
     tasksByThread.set(task.threadId, related);
+  }
+
+  for (const impact of changeImpacts) {
+    if (
+      impact.patientId !== input.patientId ||
+      impactIds.has(impact.impactId) ||
+      (impact.artifactKind === "task" && !taskIds.has(impact.artifactId))
+    ) {
+      throw invalidUpstreamResponse();
+    }
+    impactIds.add(impact.impactId);
   }
 
   const projected: WardCompanionThread[] = [];
@@ -170,6 +212,7 @@ export function projectWardCompanionOverview(
     patientId: input.patientId,
     observedAt: input.observedAt,
     threads: projected,
+    changeImpacts,
   };
 }
 

@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/src/**", "/package.json", "/package-lock.json", "/tsconfig.json", "/railway.toml"]
 buildCommand = "npm ci && npm run build"
 
 [deploy]

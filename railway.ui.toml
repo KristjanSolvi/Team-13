@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/apps/ward-companion/**", "/apps/corti-pipeline/src/browser/**", "/apps/corti-pipeline/package.json", "/apps/corti-pipeline/package-lock.json", "/railway.ui.toml"]
 buildCommand = "npm ci --prefix apps/corti-pipeline && npm ci --prefix apps/ward-companion && npm run build:railway --prefix apps/ward-companion"
 
 [deploy]

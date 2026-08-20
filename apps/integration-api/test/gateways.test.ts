@@ -515,6 +515,46 @@ describe("HTTP gateways", () => {
     ).rejects.toMatchObject({ code: "UPSTREAM_INVALID_RESPONSE", status: 502 });
   });
 
+  it("keeps Change Radar source revisions behind the Agentic service credential", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const path = new URL(String(input)).pathname;
+      return new Response(
+        JSON.stringify(path.endsWith("change-impacts") ? { impacts: [] } : {}),
+        { status: path.endsWith("change-impacts") ? 200 : 201 },
+      );
+    });
+    const gateway = new HttpAgenticGateway(
+      "http://agentic.test",
+      1_000,
+      "server-only-token",
+      fetchImpl,
+    );
+    const meta = { actorId: "clinician-1", correlationId: "corr-radar" };
+
+    await gateway.listChangeImpacts("synthetic-karen", meta);
+    await gateway.recordSourceRevision(
+      "synthetic-karen",
+      {
+        sourceItemId: "item-1",
+        expectedSourceRef: "encounter:sentence-42",
+        newText: "Revised synthetic observation",
+        reason: "clinical_note_revision",
+        idempotencyKey: "change-radar-001",
+      },
+      meta,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [revisionUrl, revisionOptions] = fetchImpl.mock.calls[1] ?? [];
+    expect(String(revisionUrl)).toBe(
+      "http://agentic.test/api/patients/synthetic-karen/source-revisions",
+    );
+    const headers = new Headers(revisionOptions?.headers);
+    expect(headers.get("authorization")).toBe("Bearer server-only-token");
+    expect(headers.get("x-actor-id")).toBe("clinician-1");
+    expect(String(revisionOptions?.body)).not.toContain("server-only-token");
+  });
+
   it("validates the pipeline health contract", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(

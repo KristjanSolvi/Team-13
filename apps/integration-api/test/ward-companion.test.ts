@@ -42,6 +42,7 @@ describe("Ward Companion projection", () => {
       schemaVersion: "1",
       patientId,
       observedAt: "2026-08-20T12:00:00.000Z",
+      changeImpacts: [],
       threads: [
         {
           id: "task-karen-bp",
@@ -144,6 +145,38 @@ describe("Ward Companion projection", () => {
         availableCommands: [],
       },
     });
+  });
+
+  it("projects the auditable source-to-task impact without changing task state", () => {
+    const impact = {
+      impactId: "11111111-1111-4111-8111-111111111111",
+      revisionId: "22222222-2222-4222-8222-222222222222",
+      dependencyId: "33333333-3333-4333-8333-333333333333",
+      patientId,
+      sourceItemId: "karen-dizziness-signal",
+      sourceRef: "encounter:sentence-42",
+      artifactKind: "task",
+      artifactId: task.taskId,
+      artifactVersion: 1,
+      status: "review_required",
+      summary:
+        "Linked evidence changed after this task was created. Review the task against the latest source; tracked work is unchanged.",
+      detectedAt: "2026-08-20T12:01:00.000Z",
+      changedAt: "2026-08-20T12:01:00.000Z",
+      changedBy: "clinician-1",
+      reason: "clinical_note_revision",
+    } as const;
+    const result = projectWardCompanionOverview({
+      patientId,
+      threads: [thread],
+      tasks: [task],
+      changeImpacts: [impact],
+      observedAt: "2026-08-20T12:02:00.000Z",
+    });
+
+    expect(result.changeImpacts).toEqual([impact]);
+    expect(result.threads[0]?.backend.taskState).toBe("draft");
+    expect(result.threads[0]?.status).toBe("pending");
   });
 
   it("does not expose dismissed records as verified work", () => {

@@ -31,11 +31,32 @@ export interface AgenticSourceEvidence {
   speakerId?: number;
 }
 
+export interface AgenticSourceRevisionInput {
+  sourceItemId: string;
+  expectedSourceRef: string;
+  newText: string;
+  reason:
+    | "new_result"
+    | "medication_update"
+    | "clinical_note_revision"
+    | "other";
+  idempotencyKey: string;
+}
+
 export interface AgenticGateway {
   health(): Promise<unknown>;
   submitSignal(input: AgenticSignalInput, meta: RequestMeta): Promise<unknown>;
   listThreads(patientId: string, meta: RequestMeta): Promise<unknown[]>;
   listTasks(patientId: string, meta: RequestMeta): Promise<unknown[]>;
+  listChangeImpacts?(
+    patientId: string,
+    meta: RequestMeta,
+  ): Promise<unknown[]>;
+  recordSourceRevision?(
+    patientId: string,
+    input: AgenticSourceRevisionInput,
+    meta: RequestMeta,
+  ): Promise<unknown>;
   taskCommand(
     taskId: string,
     command: TaskCommand,
@@ -340,6 +361,33 @@ export class HttpAgenticGateway implements AgenticGateway {
       { bearerToken: this.bearerToken, meta },
     );
     return requiredArray(payload, "tasks");
+  }
+
+  async listChangeImpacts(
+    patientId: string,
+    meta: RequestMeta,
+  ): Promise<unknown[]> {
+    const payload = await this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/change-impacts`,
+      { bearerToken: this.bearerToken, meta },
+    );
+    return requiredArray(payload, "impacts");
+  }
+
+  recordSourceRevision(
+    patientId: string,
+    input: AgenticSourceRevisionInput,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/patients/${encodeURIComponent(patientId)}/source-revisions`,
+      {
+        method: "POST",
+        body: input,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
   }
 
   taskCommand(

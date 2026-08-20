@@ -1,4 +1,5 @@
 [build]
+watchPatterns = ["/apps/patient-profile/**"]
 buildCommand = "npm ci && npm run build"
 
 [deploy]

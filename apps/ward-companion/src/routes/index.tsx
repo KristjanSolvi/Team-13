@@ -13,6 +13,7 @@ import {
   executeTaskCommand,
   FollowThroughApiError,
   getWardCompanionOverview,
+  type ChangeImpact,
   type WardTaskCommand,
 } from "@/lib/follow-through-api";
 import { loadWardState, saveWardState } from "@/lib/ward-persistence";
@@ -52,6 +53,7 @@ const ledgerCommandNotes: Record<WardTaskCommand, string> = {
 
 function Index() {
   const [threads, setThreads] = useState<Thread[]>(initialThreads);
+  const [changeImpacts, setChangeImpacts] = useState<Record<string, ChangeImpact[]>>({});
   const [notes, setNotes] = useState<Record<string, CaseNote[]>>(initialNotes);
   const [open, setOpen] = useState(true);
   const [maximized, setMaximized] = useState(false);
@@ -81,10 +83,18 @@ function Index() {
         ...current.filter((thread) => thread.patientId !== uiPatientId),
         ...authoritative,
       ]);
+      setChangeImpacts((current) => ({
+        ...current,
+        [uiPatientId]: overview.changeImpacts,
+      }));
     } catch {
       // Retain current local work when authoritative services are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    if (open && view === "activity") void refreshPatientThreads(scopeId);
+  }, [open, refreshPatientThreads, scopeId, view]);
 
   useEffect(() => {
     if (!open) return;
@@ -390,6 +400,7 @@ function Index() {
               <div key="activity" className="fade-in-view h-full">
                 <PatientActivity
                   threads={threads}
+                  changeImpacts={changeImpacts[scopeId] ?? null}
                   patientId={ehrPatientId}
                   scopeId={scopeId}
                   onScopeChange={(id) => {

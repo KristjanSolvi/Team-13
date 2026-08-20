@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 
+import {
+  type ChangeImpact,
+  type EvidenceArtifactKind,
+  type EvidenceDependency,
+  evidenceContentHash,
+  type SourceRevision,
+  type SourceRevisionReason,
+} from "../domain/change-radar.js";
 import { DomainError } from "../domain/errors.js";
 import {
   type HandoverRecord,
@@ -214,6 +222,71 @@ function parseHandoverStatus(value: string): HandoverRecord["status"] {
     return value;
   }
   throw new TypeError("Expected a valid handover status");
+}
+
+function parseArtifactKind(value: string): EvidenceArtifactKind {
+  if (value === "task" || value === "handover") return value;
+  throw new TypeError("Expected a valid evidence artifact kind");
+}
+
+function parseSourceRevisionReason(value: string): SourceRevisionReason {
+  if (
+    value === "new_result" ||
+    value === "medication_update" ||
+    value === "clinical_note_revision" ||
+    value === "other"
+  ) {
+    return value;
+  }
+  throw new TypeError("Expected a valid source revision reason");
+}
+
+function mapEvidenceDependency(row: SqlRow): EvidenceDependency {
+  return {
+    dependencyId: rowText(row, "dependency_id"),
+    patientId: rowText(row, "patient_id"),
+    sourceItemId: rowText(row, "source_item_id"),
+    sourceRef: rowText(row, "source_ref"),
+    sourceHash: rowText(row, "source_hash"),
+    artifactKind: parseArtifactKind(rowText(row, "artifact_kind")),
+    artifactId: rowText(row, "artifact_id"),
+    artifactVersion: rowNumber(row, "artifact_version"),
+    registeredAt: rowText(row, "registered_at"),
+  };
+}
+
+function mapSourceRevision(row: SqlRow): SourceRevision {
+  return {
+    revisionId: rowText(row, "revision_id"),
+    patientId: rowText(row, "patient_id"),
+    sourceItemId: rowText(row, "source_item_id"),
+    sourceRef: rowText(row, "source_ref"),
+    previousHash: rowText(row, "previous_hash"),
+    currentHash: rowText(row, "current_hash"),
+    reason: parseSourceRevisionReason(rowText(row, "reason")),
+    changedAt: rowText(row, "changed_at"),
+    changedBy: rowText(row, "changed_by"),
+  };
+}
+
+function mapChangeImpact(row: SqlRow): ChangeImpact {
+  return {
+    impactId: rowText(row, "impact_id"),
+    revisionId: rowText(row, "revision_id"),
+    dependencyId: rowText(row, "dependency_id"),
+    patientId: rowText(row, "patient_id"),
+    sourceItemId: rowText(row, "source_item_id"),
+    sourceRef: rowText(row, "source_ref"),
+    artifactKind: parseArtifactKind(rowText(row, "artifact_kind")),
+    artifactId: rowText(row, "artifact_id"),
+    artifactVersion: rowNumber(row, "artifact_version"),
+    status: "review_required",
+    summary: rowText(row, "summary"),
+    detectedAt: rowText(row, "detected_at"),
+    changedAt: rowText(row, "changed_at"),
+    changedBy: rowText(row, "changed_by"),
+    reason: parseSourceRevisionReason(rowText(row, "reason")),
+  };
 }
 
 function isActorType(value: unknown): value is Actor["type"] {
@@ -1006,6 +1079,195 @@ export class SqliteStore {
     }));
   }
 
+  getRecordItem(patientId: string, itemId: string): PatientRecordItem | null {
+    const row = this.database
+      .prepare(`
+        SELECT item_id, patient_id, item_type, text, source_ref, recorded_at
+        FROM patient_record_items
+        WHERE patient_id = ? AND item_id = ?
+      `)
+      .get(patientId, itemId);
+    return row
+      ? {
+          itemId: rowText(row, "item_id"),
+          patientId: rowText(row, "patient_id"),
+          itemType: rowText(row, "item_type"),
+          text: rowText(row, "text"),
+          sourceRef: rowText(row, "source_ref"),
+          recordedAt: rowText(row, "recorded_at"),
+        }
+      : null;
+  }
+
+  registerEvidenceDependency(value: EvidenceDependency): void {
+    this.database
+      .prepare(`
+        INSERT OR IGNORE INTO evidence_dependencies
+          (dependency_id, patient_id, source_item_id, source_ref, source_hash,
+           artifact_kind, artifact_id, artifact_version, registered_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        value.dependencyId,
+        value.patientId,
+        value.sourceItemId,
+        value.sourceRef,
+        value.sourceHash,
+        value.artifactKind,
+        value.artifactId,
+        value.artifactVersion,
+        value.registeredAt,
+      );
+  }
+
+  listEvidenceDependencies(
+    patientId: string,
+    sourceRef?: string,
+  ): EvidenceDependency[] {
+    const rows = sourceRef
+      ? this.database
+          .prepare(`
+            SELECT * FROM evidence_dependencies
+            WHERE patient_id = ? AND source_ref = ?
+            ORDER BY registered_at, dependency_id
+          `)
+          .all(patientId, sourceRef)
+      : this.database
+          .prepare(`
+            SELECT * FROM evidence_dependencies
+            WHERE patient_id = ?
+            ORDER BY registered_at, dependency_id
+          `)
+          .all(patientId);
+    return rows.map(mapEvidenceDependency);
+  }
+
+  putSourceRevision(value: SourceRevision): void {
+    this.database
+      .prepare(`
+        INSERT INTO source_revisions
+          (revision_id, patient_id, source_item_id, source_ref, previous_hash,
+           current_hash, reason, changed_at, changed_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        value.revisionId,
+        value.patientId,
+        value.sourceItemId,
+        value.sourceRef,
+        value.previousHash,
+        value.currentHash,
+        value.reason,
+        value.changedAt,
+        value.changedBy,
+      );
+  }
+
+  getSourceRevision(revisionId: string): SourceRevision | null {
+    const row = this.database
+      .prepare("SELECT * FROM source_revisions WHERE revision_id = ?")
+      .get(revisionId);
+    return row ? mapSourceRevision(row) : null;
+  }
+
+  putChangeImpact(value: ChangeImpact): void {
+    this.database
+      .prepare(`
+        INSERT INTO change_impacts
+          (impact_id, revision_id, dependency_id, patient_id, source_item_id,
+           source_ref, artifact_kind, artifact_id, artifact_version, status,
+           summary, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        value.impactId,
+        value.revisionId,
+        value.dependencyId,
+        value.patientId,
+        value.sourceItemId,
+        value.sourceRef,
+        value.artifactKind,
+        value.artifactId,
+        value.artifactVersion,
+        value.status,
+        value.summary,
+        value.detectedAt,
+      );
+  }
+
+  listChangeImpacts(patientId: string, revisionId?: string): ChangeImpact[] {
+    const where = revisionId
+      ? "ci.patient_id = ? AND ci.revision_id = ?"
+      : "ci.patient_id = ?";
+    const rows = this.database
+      .prepare(`
+        SELECT ci.*, sr.changed_at, sr.changed_by, sr.reason
+        FROM change_impacts ci
+        JOIN source_revisions sr ON sr.revision_id = ci.revision_id
+        WHERE ${where}
+        ORDER BY ci.detected_at DESC, ci.impact_id
+      `)
+      .all(...(revisionId ? [patientId, revisionId] : [patientId]));
+    return rows.map(mapChangeImpact);
+  }
+
+  private registerTaskEvidence(task: Task): void {
+    const bySourceRef = new Map(
+      this.listRecordItems(task.patientId).map((item) => [
+        item.sourceRef,
+        item,
+      ]),
+    );
+    for (const sourceRef of task.evidenceRefs) {
+      const item = bySourceRef.get(sourceRef);
+      if (!item) continue;
+      this.registerEvidenceDependency({
+        dependencyId: randomUUID(),
+        patientId: task.patientId,
+        sourceItemId: item.itemId,
+        sourceRef,
+        sourceHash: evidenceContentHash(item.text),
+        artifactKind: "task",
+        artifactId: task.taskId,
+        artifactVersion: task.version,
+        registeredAt: task.createdAt,
+      });
+    }
+  }
+
+  private registerHandoverEvidence(handover: HandoverRecord): void {
+    for (const item of handover.sourceSnapshot?.recordItems ?? []) {
+      this.registerEvidenceDependency({
+        dependencyId: randomUUID(),
+        patientId: handover.patientId,
+        sourceItemId: item.itemId,
+        sourceRef: item.sourceRef,
+        sourceHash: item.contentHash,
+        artifactKind: "handover",
+        artifactId: handover.handoverId,
+        artifactVersion: handover.version,
+        registeredAt: handover.updatedAt,
+      });
+    }
+  }
+
+  backfillEvidenceDependencies(): void {
+    this.transaction(() => {
+      const tasks = this.database
+        .prepare("SELECT * FROM tasks")
+        .all()
+        .map(mapTask);
+      const handovers = this.database
+        .prepare(
+          "SELECT * FROM handovers WHERE source_snapshot_json IS NOT NULL",
+        )
+        .all()
+        .map(mapHandover);
+      for (const task of tasks) this.registerTaskEvidence(task);
+      for (const handover of handovers) this.registerHandoverEvidence(handover);
+    });
+  }
+
   hasRecordEvidence(patientId: string, evidenceRefs: string[]): boolean {
     const knownReferences = new Set(
       this.listRecordItems(patientId).map((item) => item.sourceRef),
@@ -1345,6 +1607,7 @@ export class SqliteStore {
         value.updatedAt,
         value.generatedAt,
       );
+    this.registerHandoverEvidence(value);
   }
 
   updateHandover(
@@ -1442,6 +1705,7 @@ export class SqliteStore {
         );
       }
 
+      this.registerHandoverEvidence(value);
       return this.requireHandover(value.handoverId);
     });
   }
@@ -1651,6 +1915,7 @@ export class SqliteStore {
         task.createdAt,
         task.updatedAt,
       );
+    this.registerTaskEvidence(task);
   }
 
   getTask(taskId: string): Task | null {
