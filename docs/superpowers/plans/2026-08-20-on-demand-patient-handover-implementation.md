@@ -1515,7 +1515,7 @@ node --test build/test/handover-mcp.test.js build/test/handover-scenario.test.js
 Expected: the handover MCP has five tools, no task mutation tool, and the task
 state/version before and after the scenario are identical.
 
-- [ ] **Step 4: Push the completed feature branch**
+- [x] **Step 4: Push the completed feature branch**
 
 Only after every verification command is green:
 
