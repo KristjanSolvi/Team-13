@@ -168,6 +168,82 @@ export function openDatabase(databasePath: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_handovers_patient_created
       ON handovers(patient_id, created_at, handover_id);
 
+    CREATE TABLE IF NOT EXISTS ward_meetings (
+      meeting_id TEXT PRIMARY KEY,
+      ward_id TEXT NOT NULL,
+      interaction_id TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL,
+      started_by TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      version INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS patient_meeting_segments (
+      segment_id TEXT PRIMARY KEY,
+      meeting_id TEXT NOT NULL REFERENCES ward_meetings(meeting_id),
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      status TEXT NOT NULL,
+      opened_by TEXT NOT NULL,
+      opened_at TEXT NOT NULL,
+      closed_at TEXT,
+      version INTEGER NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_one_recording_segment
+      ON patient_meeting_segments(meeting_id)
+      WHERE status = 'recording';
+
+    CREATE INDEX IF NOT EXISTS idx_patient_meeting_history
+      ON patient_meeting_segments(patient_id, opened_at, segment_id);
+
+    CREATE TABLE IF NOT EXISTS meeting_transcript_segments (
+      evidence_id TEXT PRIMARY KEY,
+      meeting_id TEXT NOT NULL REFERENCES ward_meetings(meeting_id),
+      patient_segment_id TEXT REFERENCES patient_meeting_segments(segment_id),
+      interaction_id TEXT NOT NULL,
+      segment_key TEXT NOT NULL,
+      text TEXT NOT NULL,
+      start_seconds REAL NOT NULL,
+      end_seconds REAL NOT NULL,
+      speaker_id INTEGER,
+      is_final INTEGER NOT NULL,
+      audio_quality TEXT NOT NULL,
+      eligible INTEGER NOT NULL,
+      source_ref TEXT UNIQUE,
+      recorded_at TEXT NOT NULL,
+      UNIQUE (meeting_id, segment_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS meeting_reconciliations (
+      reconciliation_id TEXT PRIMARY KEY,
+      meeting_id TEXT NOT NULL REFERENCES ward_meetings(meeting_id),
+      patient_segment_id TEXT NOT NULL UNIQUE REFERENCES patient_meeting_segments(segment_id),
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      interaction_id TEXT NOT NULL UNIQUE,
+      context_id TEXT,
+      idempotency_key TEXT NOT NULL,
+      source_snapshot_hash TEXT NOT NULL,
+      status TEXT NOT NULL,
+      new_draft_task_ids_json TEXT NOT NULL,
+      carry_forward_task_refs_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      UNIQUE (patient_segment_id, idempotency_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS meeting_carry_forwards (
+      warning_id TEXT PRIMARY KEY,
+      reconciliation_id TEXT NOT NULL REFERENCES meeting_reconciliations(reconciliation_id),
+      patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+      task_ref TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      source_refs_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (reconciliation_id, task_ref)
+    );
+
     CREATE TABLE IF NOT EXISTS task_declines (
       task_id TEXT NOT NULL REFERENCES tasks(task_id),
       member_id TEXT NOT NULL,
