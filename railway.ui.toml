@@ -1,0 +1,9 @@
+[build]
+buildCommand = "npm ci --prefix apps/corti-pipeline && npm ci --prefix apps/ward-companion && npm run build:railway --prefix apps/ward-companion"
+
+[deploy]
+startCommand = "npm run start --prefix apps/ward-companion"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
