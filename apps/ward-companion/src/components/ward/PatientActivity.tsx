@@ -12,6 +12,7 @@ import {
 import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, staff, statusDotClass, statusLabels } from "@/data/ward";
 import { LiveStrip } from "./LiveStrip";
+import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 
 type Props = {
   threads: Thread[];
@@ -254,6 +255,8 @@ export function PatientActivity({
                       <p className="border-l-2 border-teal/40 pl-3 text-[13.5px] leading-relaxed italic text-foreground">
                         {thread.heard}
                       </p>
+
+                      {!done && <TaskCorrectionPanel thread={thread} />}
 
                       {!done && (
                         <div className="flex flex-wrap gap-2">

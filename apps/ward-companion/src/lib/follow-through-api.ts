@@ -2,6 +2,7 @@ import type {
   AmbientSession,
   FollowThroughCandidate,
   ScopedToken,
+  TaskRevisionPreview,
   TranscriptSegment,
 } from "@pipeline/contracts.js";
 
@@ -101,6 +102,39 @@ export async function refreshAmbientToken(correlationId: string): Promise<Scoped
       method: "POST",
       headers: jsonHeaders(correlationId),
       body: "{}",
+    }),
+  );
+}
+
+export async function getDictationToken(correlationId: string): Promise<ScopedToken> {
+  return responseJson<ScopedToken>(
+    await fetch(pipelineUrl("/api/corti/dictation/token"), {
+      method: "POST",
+      headers: jsonHeaders(correlationId),
+      body: "{}",
+    }),
+  );
+}
+
+export async function buildDictationRevisionPreview(input: {
+  taskId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  transcript: string;
+  recipientTeams: Array<{ id: string; label: string; aliases: string[] }>;
+  correlationId: string;
+}): Promise<TaskRevisionPreview> {
+  return responseJson<TaskRevisionPreview>(
+    await fetch(pipelineUrl("/api/corti/dictation/revision-preview"), {
+      method: "POST",
+      headers: jsonHeaders(input.correlationId),
+      body: JSON.stringify({
+        taskId: input.taskId,
+        expectedVersion: input.expectedVersion,
+        idempotencyKey: input.idempotencyKey,
+        transcript: input.transcript,
+        recipientTeams: input.recipientTeams,
+      }),
     }),
   );
 }

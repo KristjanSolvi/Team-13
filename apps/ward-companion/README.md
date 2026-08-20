@@ -18,6 +18,9 @@ and historical activity are synthetic demo fixtures; they are not a live EHR.
   generator.
 - Evidence-backed candidates are sent to the integration API for record and
   open-work checks. A candidate is not a task and does not authorize action.
+- Expanded task cards offer the official Corti Dictation control plus a typed
+  corridor fallback. Both produce a constrained change preview; fixture tasks
+  cannot be mutated because they have no authoritative ledger version.
 - If the integration/agent service is unavailable, the UI retains the
   candidate without creating local work.
 - Existing board rows and activity controls are demo fixtures until they are

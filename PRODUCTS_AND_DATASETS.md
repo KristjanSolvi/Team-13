@@ -37,7 +37,7 @@ something is added or removed.
 
 The exact dependency and version lists are in `package-lock.json`,
 `apps/corti-pipeline/package-lock.json`, `apps/integration-api/package-lock.json`,
-and `apps/ward-companion/bun.lock`. Major components include React, TanStack
+`apps/ward-companion/package-lock.json`, and the imported
+`apps/ward-companion/bun.lock`. Major components include React, TanStack
 Router/Start, Vite, TypeScript, Express, Zod, the Model Context Protocol SDK,
 Tailwind CSS, Lucide, and Vitest.
-
