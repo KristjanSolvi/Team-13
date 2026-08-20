@@ -244,7 +244,7 @@ The agent chooses from eligible teams, not individual people. For Karen's task, 
 4. If that member declines, the router tries the next eligible candidate.
 5. If no eligible member remains, the team retains ownership and the task escalates for human review.
 
-Candidate selection considers capability, current shift/availability, existing workload, and a stable fair tie-break. Availability changes who can receive the task; it does not change clinical urgency.
+Candidate selection considers capability, current shift/availability, existing workload, and a stable fair tie-break. The stable tie-break compares `tieBreakKey` and then `memberId` using locale-independent UTF-16 code-unit ordering, so identical inputs route identically across hosts. Availability changes who can receive the task; it does not change clinical urgency.
 
 ### Acceptance windows
 
@@ -273,7 +273,7 @@ Queue ordering is recalculated when time advances, a shift changes, availability
 
 The active target is `acceptBy` while a task is waiting for ownership and `dueBy` once it is accepted or reported complete but not yet verified. This is what lets a medium-urgency task rise visibly after waiting for hours or days. The stored breakdown explains every score change. The score orders work; the explicit `acceptBy` and `dueBy` deadlines authorize automatic transitions: acceptance expiry triggers deterministic member assignment, and due expiry without verification triggers escalation. None of these changes silently relabels a clinician's medium-urgency judgement as high urgency.
 
-An injectable clock makes multi-day waiting visible during the demo. Advancing the clock is environment-gated, authenticated, and audited, and is never exposed as an agent tool.
+An injectable clock makes multi-day waiting visible during the demo. The demo clock accepts only positive safe-integer millisecond increments, copies the `Date` supplied to its constructor and every `Date` it returns, and rejects advances beyond the JavaScript `Date` range before mutating its current time. Advancing the clock is environment-gated, authenticated, and audited, and is never exposed as an agent tool.
 
 ## MCP interface exposed to the Corti agent
 
