@@ -20,6 +20,28 @@ export type Thread = {
   candidates: { name: string; role: string; free: boolean }[];
   due: string;
   activity: ActivityEntry[];
+  backend?: {
+    threadId: string;
+    taskId: string | null;
+    threadVersion: number;
+    taskVersion: number | null;
+    threadState: "awaiting_review" | "tracking" | "verified" | "escalated" | "dismissed";
+    taskState:
+      | "draft"
+      | "offered_to_team"
+      | "assigned_to_member"
+      | "accepted"
+      | "completed"
+      | "verified"
+      | "escalated"
+      | "dismissed"
+      | null;
+    targetTeamId: string | null;
+    evidenceRefs: string[];
+    availableCommands: Array<
+      "approve" | "correct" | "dismiss" | "reopen" | "accept" | "decline" | "complete" | "verify"
+    >;
+  };
 };
 
 export type Patient = {

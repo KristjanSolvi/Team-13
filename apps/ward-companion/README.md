@@ -13,7 +13,8 @@ and historical activity are synthetic demo fixtures; they are not a live EHR.
 ## Current live boundary
 
 - `Corti Ambient` uses the real browser microphone adapter from
-  `apps/corti-pipeline` and shows transcript and audio-quality events.
+  `apps/corti-pipeline` and shows transcript and audio-quality events. Browser
+  requests go through the integration API's allow-listed proxy.
 - Final transcript evidence is sent to the pipeline's conservative candidate
   generator.
 - Evidence-backed candidates are sent to the integration API for record and
@@ -23,8 +24,9 @@ and historical activity are synthetic demo fixtures; they are not a live EHR.
   cannot be mutated because they have no authoritative ledger version.
 - If the integration/agent service is unavailable, the UI retains the
   candidate without creating local work.
-- Existing board rows and activity controls are demo fixtures until they are
-  replaced with the authoritative Agentic/MCP overview and command endpoints.
+- A successful companion read replaces that patient's demo rows with the
+  authoritative Agentic/MCP projection, including versions and valid commands.
+  Failed reads retain rows that are visibly labelled `demo fixture`.
 - Nervecentre, inbox, district-nursing, and task-system behavior is simulated;
   no external clinical system is connected.
 
@@ -40,30 +42,27 @@ cp .env.example .env  # once, then add the event credentials
 npm install
 npm run dev
 
-# Terminal 2 — UI (normally port 5173)
-cd apps/ward-companion
-cp .env.example .env  # optional; blank VITE values use same-origin proxies
-npm install
-npm run dev
-```
-
-For candidate investigation, also run the integration API on port 8790 and the
-Agentic/MCP backend on port 3000. Until the teammate's Agentic HTTP routes are
-implemented, investigation will visibly fail closed; this is expected and is
-safer than manufacturing a task in browser state.
-
-```bash
-# Terminal 3
+# Terminal 2 — browser-facing integration API (port 8790)
 cd apps/integration-api
 cp .env.example .env
 npm install
 npm run dev
 
-# Terminal 4
-cd ../..
+# Terminal 3 — UI (Lovable config currently selects port 8080)
+cd apps/ward-companion
+cp .env.example .env  # optional; blank VITE value uses the same-origin proxy
+npm install
+npm run dev
+
+# Terminal 4 — Agentic/MCP backend (port 3000, required for context/ledger work)
+# From the Team-13 repository root
 npm install
 npm run dev
 ```
+
+Without the Agentic HTTP service, Ambient and Dictation remain available through
+the integration proxy, while context checks and ledger reads fail closed. This
+is safer than manufacturing a task in browser state.
 
 Checks:
 

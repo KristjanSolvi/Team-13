@@ -5,11 +5,15 @@ import type {
   TaskRevisionPreview,
   TranscriptSegment,
 } from "@pipeline/contracts.js";
+import type { Thread } from "@/data/ward";
 
-type PipelineHealth = {
-  status: "ok";
-  cortiConfigured: boolean;
-  missingCortiVariables?: string[];
+type IntegrationHealth = { status: "ok" };
+
+export type WardCompanionOverview = {
+  schemaVersion: "1";
+  patientId: string;
+  observedAt: string;
+  threads: Thread[];
 };
 
 export type CandidateGenerationResult = {
@@ -37,11 +41,6 @@ export class FollowThroughApiError extends Error {
 
 function browserOrigin(): string {
   return window.location.origin;
-}
-
-function pipelineUrl(path: string): URL {
-  const configured = import.meta.env["VITE_PIPELINE_BASE_URL"]?.trim();
-  return new URL(path, configured || browserOrigin());
 }
 
 function integrationUrl(path: string): URL {
@@ -79,8 +78,8 @@ function jsonHeaders(correlationId: string): Record<string, string> {
   };
 }
 
-export async function getPipelineHealth(): Promise<PipelineHealth> {
-  return responseJson<PipelineHealth>(await fetch(pipelineUrl("/pipeline-health")));
+export async function getIntegrationHealth(): Promise<IntegrationHealth> {
+  return responseJson<IntegrationHealth>(await fetch(integrationUrl("/healthz")));
 }
 
 export async function createAmbientSession(
@@ -88,7 +87,7 @@ export async function createAmbientSession(
   correlationId: string,
 ): Promise<AmbientSession> {
   return responseJson<AmbientSession>(
-    await fetch(pipelineUrl("/api/corti/ambient/session"), {
+    await fetch(integrationUrl("/api/corti/ambient/session"), {
       method: "POST",
       headers: jsonHeaders(correlationId),
       body: JSON.stringify({ encounterIdentifier }),
@@ -98,7 +97,7 @@ export async function createAmbientSession(
 
 export async function refreshAmbientToken(correlationId: string): Promise<ScopedToken> {
   return responseJson<ScopedToken>(
-    await fetch(pipelineUrl("/api/corti/ambient/token"), {
+    await fetch(integrationUrl("/api/corti/ambient/token"), {
       method: "POST",
       headers: jsonHeaders(correlationId),
       body: "{}",
@@ -108,7 +107,7 @@ export async function refreshAmbientToken(correlationId: string): Promise<Scoped
 
 export async function getDictationToken(correlationId: string): Promise<ScopedToken> {
   return responseJson<ScopedToken>(
-    await fetch(pipelineUrl("/api/corti/dictation/token"), {
+    await fetch(integrationUrl("/api/corti/dictation/token"), {
       method: "POST",
       headers: jsonHeaders(correlationId),
       body: "{}",
@@ -125,7 +124,7 @@ export async function buildDictationRevisionPreview(input: {
   correlationId: string;
 }): Promise<TaskRevisionPreview> {
   return responseJson<TaskRevisionPreview>(
-    await fetch(pipelineUrl("/api/corti/dictation/revision-preview"), {
+    await fetch(integrationUrl("/api/corti/dictation/revision-preview"), {
       method: "POST",
       headers: jsonHeaders(input.correlationId),
       body: JSON.stringify({
@@ -146,7 +145,7 @@ export async function generateCandidates(input: {
   segments: TranscriptSegment[];
 }): Promise<CandidateGenerationResult> {
   return responseJson<CandidateGenerationResult>(
-    await fetch(pipelineUrl("/api/corti/candidates/generate"), {
+    await fetch(integrationUrl("/api/corti/candidates/generate"), {
       method: "POST",
       headers: jsonHeaders(input.correlationId),
       body: JSON.stringify({
@@ -166,6 +165,17 @@ export async function investigateCandidate(
       method: "POST",
       headers: jsonHeaders(candidate.correlationId),
       body: JSON.stringify(candidate),
+    }),
+  );
+}
+
+export async function getWardCompanionOverview(
+  patientId: string,
+  correlationId: string,
+): Promise<WardCompanionOverview> {
+  return responseJson<WardCompanionOverview>(
+    await fetch(integrationUrl(`/api/patients/${encodeURIComponent(patientId)}/companion`), {
+      headers: { "x-correlation-id": correlationId },
     }),
   );
 }

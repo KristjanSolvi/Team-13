@@ -144,8 +144,8 @@ export function TaskCorrectionPanel({ thread }: Props) {
     setPreview(null);
     try {
       const result = await buildDictationRevisionPreview({
-        taskId: thread.id,
-        expectedVersion: 1,
+        taskId: thread.backend?.taskId ?? thread.id,
+        expectedVersion: thread.backend?.taskVersion ?? 1,
         idempotencyKey: `correct-${crypto.randomUUID()}`,
         transcript,
         recipientTeams,
@@ -256,8 +256,9 @@ export function TaskCorrectionPanel({ thread }: Props) {
           ))}
           <p className="flex items-start gap-1.5 border-t border-border pt-2 text-[11.5px] text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal" />
-            Preview only · explicit clinician confirmation and an authoritative task version are
-            required before this can change tracked work.
+            {thread.backend?.taskId === null || thread.backend?.taskVersion == null
+              ? "Preview only · explicit clinician confirmation and an authoritative task version are required before this can change tracked work."
+              : "Preview only · this uses the authoritative task version, but explicit clinician confirmation is still required before mutation."}
           </p>
         </div>
       )}

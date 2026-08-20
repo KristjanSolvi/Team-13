@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, LayoutGrid, ListChecks, X } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
+import { getWardCompanionOverview } from "@/lib/follow-through-api";
 import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
 import {
   initialNotes,
@@ -46,6 +47,28 @@ function Index() {
   const [cameFromBoard, setCameFromBoard] = useState(false);
   const [scopeId, setScopeId] = useState<string | null>(null);
   const lastShift = useRef(0);
+
+  const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
+    const patient = patients.find((candidate) => candidate.id === uiPatientId);
+    if (patient === undefined) return;
+    try {
+      const overview = await getWardCompanionOverview(
+        patient.pipelinePatientId,
+        crypto.randomUUID(),
+      );
+      if (overview.patientId !== patient.pipelinePatientId) return;
+      const authoritative = overview.threads.map((thread) => ({
+        ...thread,
+        patientId: uiPatientId,
+      }));
+      setThreads((current) => [
+        ...current.filter((thread) => thread.patientId !== uiPatientId),
+        ...authoritative,
+      ]);
+    } catch {
+      // Retain visibly labelled demo fixtures when authoritative services are unavailable.
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -306,6 +329,7 @@ function Index() {
                 onAddActivity={handleAddActivity}
                 onAddThread={handleAddThread}
                 onSelectPatient={setEhrPatientId}
+                onRefreshPatient={refreshPatientThreads}
                 cameFromBoard={cameFromBoard}
                 onBackToBoard={() => {
                   setView("board");

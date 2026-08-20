@@ -26,6 +26,7 @@ type Props = {
   onAddActivity: (id: string, text: string) => void;
   onAddThread: (patientId: string, title: string) => void;
   onSelectPatient: (id: string) => void;
+  onRefreshPatient: (id: string) => Promise<void>;
   cameFromBoard?: boolean;
   onBackToBoard: () => void;
 };
@@ -48,6 +49,7 @@ export function PatientActivity({
   onAddActivity,
   onAddThread,
   onSelectPatient,
+  onRefreshPatient,
   cameFromBoard,
   onBackToBoard,
 }: Props) {
@@ -160,7 +162,7 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} />
+        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
 
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -236,7 +238,7 @@ export function PatientActivity({
                           </span>
                         )}
                         {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due}
+                        {thread.due} · {thread.backend === undefined ? "demo fixture" : "ledger"}
                       </span>
                     </span>
                     <ChevronDown

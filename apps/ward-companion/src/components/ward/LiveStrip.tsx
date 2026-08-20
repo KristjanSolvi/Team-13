@@ -10,7 +10,7 @@ import type { Patient } from "@/data/ward";
 import {
   createAmbientSession,
   generateCandidates,
-  getPipelineHealth,
+  getIntegrationHealth,
   investigateCandidate,
   refreshAmbientToken,
 } from "@/lib/follow-through-api";
@@ -34,7 +34,10 @@ type CandidateView = {
   message: string;
 };
 
-type Props = { patient: Patient };
+type Props = {
+  patient: Patient;
+  onAuthoritativeChange: () => Promise<void>;
+};
 
 function timeLabel(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -54,7 +57,7 @@ function microphoneMessage(error: unknown): string {
     : "Ambient capture could not start. Check the pipeline service and retry.";
 }
 
-export function LiveStrip({ patient }: Props) {
+export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const [state, setState] = useState<CaptureState>("checking");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [candidateViews, setCandidateViews] = useState<CandidateView[]>([]);
@@ -82,21 +85,16 @@ export function LiveStrip({ patient }: Props) {
 
   useEffect(() => {
     let active = true;
-    void getPipelineHealth()
-      .then((health) => {
+    void getIntegrationHealth()
+      .then(() => {
         if (!active) return;
-        if (health.cortiConfigured) {
-          setState("idle");
-          setMessage("Ready for a consented ward-round capture");
-        } else {
-          setState("unavailable");
-          setMessage("Pipeline is running, but Corti credentials are not configured");
-        }
+        setState("idle");
+        setMessage("Integration ready · Corti is checked when capture starts");
       })
       .catch(() => {
         if (!active) return;
         setState("unavailable");
-        setMessage("Pipeline unavailable · start the Corti service on port 8787");
+        setMessage("Integration service unavailable · start it on port 8790");
       });
     void refreshDevices();
     const onDeviceChange = () => void refreshDevices();
@@ -120,7 +118,7 @@ export function LiveStrip({ patient }: Props) {
     setCandidateViews([]);
     setAudioMessage("Audio not checked");
     setState((current) => (current === "unavailable" ? current : "idle"));
-    setMessage("Ready for a consented ward-round capture");
+    setMessage("Integration ready · Corti is checked when capture starts");
   }, [patient.id]);
 
   const onPipelineEvent = (event: PipelineEvent) => {
@@ -238,10 +236,12 @@ export function LiveStrip({ patient }: Props) {
       setMessage(
         `${generated.candidates.length} evidence-backed candidate${generated.candidates.length === 1 ? "" : "s"} sent for context checks`,
       );
+      let investigationAccepted = false;
       await Promise.allSettled(
         generated.candidates.map(async (candidate) => {
           try {
             await investigateCandidate(candidate);
+            investigationAccepted = true;
             updateCandidate(candidate.candidateId, {
               state: "sent",
               message: "Context check requested · no task has been created yet",
@@ -254,6 +254,7 @@ export function LiveStrip({ patient }: Props) {
           }
         }),
       );
+      if (investigationAccepted) await onAuthoritativeChange();
     } catch (error) {
       captureRef.current = null;
       setState("error");
@@ -382,8 +383,8 @@ export function LiveStrip({ patient }: Props) {
       )}
 
       <footer className="border-t border-border px-4 py-2.5 text-[11.5px] text-muted-foreground">
-        Ambient evidence may suggest a candidate. Only an authenticated clinician approval can
-        create tracked work.
+        Ambient evidence may suggest a candidate. Only an attributed clinician approval can create
+        tracked work.
       </footer>
     </section>
   );
