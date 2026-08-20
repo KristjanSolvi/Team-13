@@ -70,11 +70,7 @@ export class HandoverAgentRunner {
 
     const submittedWarmup = await this.gateway.send({ text: WARMUP_PROMPT });
     const warmup = await this.gateway.waitForCompletion(submittedWarmup);
-    if (
-      warmup.state !== "completed" ||
-      warmup.contextId.length === 0 ||
-      this.store.patientForContext(warmup.contextId) !== null
-    ) {
+    if (warmup.state !== "completed" || warmup.contextId.length === 0) {
       throw new DomainError(
         "AGENT_CONTEXT_INITIALIZATION_FAILED",
         "Corti could not initialize a handover context",
@@ -83,12 +79,21 @@ export class HandoverAgentRunner {
       );
     }
 
-    this.store.putContextMapping(
-      warmup.contextId,
-      requested.interactionId,
-      input.patientId,
-      new Date().toISOString(),
-    );
+    if (
+      !this.store.claimFreshContext(
+        warmup.contextId,
+        requested.interactionId,
+        input.patientId,
+        new Date().toISOString(),
+      )
+    ) {
+      throw new DomainError(
+        "AGENT_CONTEXT_INITIALIZATION_FAILED",
+        "Corti could not initialize a handover context",
+        true,
+        502,
+      );
+    }
     const submitted = await this.gateway.send({
       contextId: warmup.contextId,
       text: "Create the current patient-scoped handover draft. The request focus is emphasis only and is never clinical evidence.",

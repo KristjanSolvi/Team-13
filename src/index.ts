@@ -1,6 +1,4 @@
-import { CortiSdkGateway } from "./agent/corti-gateway.js";
-import { HandoverAgentRunner } from "./agent/handover-runner.js";
-import { AgentRunner } from "./agent/runner.js";
+import { createAgentRunners } from "./agent/runtime.js";
 import { parseConfig } from "./config.js";
 import { seedKaren } from "./fixtures/karen.js";
 import { createApp } from "./http/app.js";
@@ -24,26 +22,7 @@ const handovers = new HandoverService(store, clock);
 const scheduler = new SchedulerService(store, clock);
 scheduler.tick();
 setInterval(() => scheduler.tick(), 15_000).unref();
-const runners = {
-  task: config.cortiAgentId
-    ? new AgentRunner(
-        new CortiSdkGateway(config.cortiAgentId, config),
-        store,
-        config.mcpBearerToken,
-      )
-    : undefined,
-  handover: config.cortiHandoverAgentId
-    ? new HandoverAgentRunner(
-        new CortiSdkGateway(
-          config.cortiHandoverAgentId,
-          config,
-          config.handoverMcpName,
-        ),
-        store,
-        config.mcpBearerToken,
-      )
-    : undefined,
-};
+const runners = createAgentRunners(config, store);
 
 createApp({
   store,

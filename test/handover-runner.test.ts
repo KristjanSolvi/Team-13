@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
 import { CortiSdkGateway } from "../src/agent/corti-gateway.js";
+import {
+  buildAgentDefinitions,
+  buildProvisioningSummary,
+} from "../src/agent/definitions.js";
 import { HANDOVER_PROMPT } from "../src/agent/handover-prompt.js";
 import { HandoverAgentRunner } from "../src/agent/handover-runner.js";
 import type {
@@ -9,6 +13,8 @@ import type {
   AgentResult,
   AgentSendInput,
 } from "../src/agent/runner.js";
+import { AgentRunner } from "../src/agent/runner.js";
+import { createAgentRunners } from "../src/agent/runtime.js";
 import { parseConfig } from "../src/config.js";
 import { DomainError } from "../src/domain/errors.js";
 import type { HandoverPacket } from "../src/domain/handover.js";
@@ -44,6 +50,21 @@ const PACKET: HandoverPacket = {
 
 function completed(contextId: string, taskId: string): AgentResult {
   return { contextId, taskId, state: "completed" };
+}
+
+function testConfig(overrides: NodeJS.ProcessEnv = {}) {
+  return parseConfig({
+    APP_BEARER_TOKEN: "app-token",
+    MCP_BEARER_TOKEN: "mcp-token",
+    APPROVAL_HMAC_SECRET: "approval-secret-at-least-32-characters",
+    MCP_PUBLIC_URL: "https://example.test/mcp",
+    CORTI_TENANT_NAME: "tenant",
+    CORTI_CLIENT_ID: "client",
+    CORTI_CLIENT_SECRET: "secret",
+    CORTI_ENVIRONMENT: "eu",
+    DEMO_MODE: "true",
+    ...overrides,
+  });
 }
 
 function harness(t: TestContext) {
@@ -104,17 +125,7 @@ Rules:
 });
 
 test("the dedicated Corti gateway attaches the token to the handover MCP name", async () => {
-  const config = parseConfig({
-    APP_BEARER_TOKEN: "app-token",
-    MCP_BEARER_TOKEN: "mcp-token",
-    APPROVAL_HMAC_SECRET: "approval-secret-at-least-32-characters",
-    MCP_PUBLIC_URL: "https://example.test/mcp",
-    CORTI_TENANT_NAME: "tenant",
-    CORTI_CLIENT_ID: "client",
-    CORTI_CLIENT_SECRET: "secret",
-    CORTI_ENVIRONMENT: "eu",
-    DEMO_MODE: "true",
-  });
+  const config = testConfig();
   const gateway = new CortiSdkGateway(
     "handover-agent",
     config,
@@ -154,6 +165,85 @@ test("the dedicated Corti gateway attaches the token to the handover MCP name", 
       token: MCP_TOKEN,
     },
   });
+});
+
+test("pure provisioning definitions configure exactly one distinct MCP per agent", () => {
+  const config = testConfig({
+    HANDOVER_MCP_PUBLIC_URL: "https://handover.example/mcp",
+    HANDOVER_MCP_NAME: "handover-tools",
+  });
+
+  const definitions = buildAgentDefinitions(config);
+
+  assert.equal(
+    definitions.task.systemPrompt.includes("publish_team_task"),
+    true,
+  );
+  assert.deepEqual(definitions.task.mcpServers, [
+    {
+      name: "follow-through-ledger",
+      description:
+        "Six patient-scoped tools for record investigation and clinician-approved team-task publication.",
+      transportType: "streamable_http",
+      authorizationType: "bearer",
+      url: "https://example.test/mcp",
+    },
+  ]);
+  assert.equal(definitions.handover.systemPrompt, HANDOVER_PROMPT);
+  assert.deepEqual(definitions.handover.mcpServers, [
+    {
+      name: "handover-tools",
+      description:
+        "Five patient-scoped, non-actionable tools for grounded handover reads and draft persistence.",
+      transportType: "streamable_http",
+      authorizationType: "bearer",
+      url: "https://handover.example/mcp",
+    },
+  ]);
+  assert.deepEqual(
+    buildProvisioningSummary(config, "task-agent", "handover-agent"),
+    {
+      taskAgentId: "task-agent",
+      handoverAgentId: "handover-agent",
+      taskMcpUrl: "https://example.test/mcp",
+      handoverMcpUrl: "https://handover.example/mcp",
+    },
+  );
+});
+
+test("runtime constructs only configured agents with their distinct MCP names", (t) => {
+  const store = new SqliteStore(openDatabase(":memory:"));
+  t.after(() => store.close());
+  const gateway: AgentGateway = {
+    async send() {
+      return completed("ctx-unused", "unused");
+    },
+    async waitForCompletion(agentResult) {
+      return agentResult;
+    },
+  };
+  const calls: Array<{ agentId: string; mcpName: string }> = [];
+  const factory = (agentId: string, mcpName: string) => {
+    calls.push({ agentId, mcpName });
+    return gateway;
+  };
+
+  assert.deepEqual(createAgentRunners(testConfig(), store, factory), {});
+  const configured = createAgentRunners(
+    testConfig({
+      CORTI_AGENT_ID: "task-agent",
+      CORTI_HANDOVER_AGENT_ID: "handover-agent",
+    }),
+    store,
+    factory,
+  );
+
+  assert.ok(configured.task instanceof AgentRunner);
+  assert.ok(configured.handover instanceof HandoverAgentRunner);
+  assert.deepEqual(calls, [
+    { agentId: "task-agent", mcpName: "follow-through-ledger" },
+    { agentId: "handover-agent", mcpName: "follow-through-handover" },
+  ]);
 });
 
 test("a handover always uses a fresh data-free context and verifies one persisted draft", async (t) => {
