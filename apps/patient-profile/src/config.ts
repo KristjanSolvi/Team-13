@@ -8,6 +8,10 @@ const environmentSchema = z.object({
     .min(1)
     .default("./data/patient-profiles.sqlite"),
   PATIENT_PROFILE_BEARER_TOKEN: z.string().min(16),
+  PATIENT_PROFILE_SEED_SYNTHETIC_KAREN: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export function parseConfig(environment: NodeJS.ProcessEnv) {
@@ -17,5 +21,6 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
     host: value.PATIENT_PROFILE_HOST,
     databasePath: value.PATIENT_PROFILE_DATABASE_PATH,
     bearerToken: value.PATIENT_PROFILE_BEARER_TOKEN,
+    seedSyntheticKaren: value.PATIENT_PROFILE_SEED_SYNTHETIC_KAREN,
   };
 }

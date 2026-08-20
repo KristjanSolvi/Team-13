@@ -3,6 +3,7 @@ import "dotenv/config";
 import { createPatientProfileApp } from "./app.js";
 import { parseConfig } from "./config.js";
 import { openProfileDatabase } from "./database.js";
+import { seedSyntheticKarenProfile } from "./demo.js";
 import { PatientProfileService } from "./service.js";
 import { PatientProfileStore } from "./store.js";
 
@@ -10,8 +11,12 @@ const config = parseConfig(process.env);
 const store = new PatientProfileStore(
   openProfileDatabase(config.databasePath),
 );
+const service = new PatientProfileService(store);
+if (config.seedSyntheticKaren) {
+  seedSyntheticKarenProfile(service, store);
+}
 const app = createPatientProfileApp({
-  service: new PatientProfileService(store),
+  service,
   bearerToken: config.bearerToken,
 });
 const server = app.listen(config.port, config.host, () => {

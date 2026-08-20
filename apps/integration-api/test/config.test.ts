@@ -9,6 +9,7 @@ describe("integration API config", () => {
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
       UI_ORIGINS:
         "http://127.0.0.1:5173, https://ui-preview.example.test ",
     });
@@ -20,12 +21,14 @@ describe("integration API config", () => {
       pipelineBaseUrl: "http://127.0.0.1:8787",
       patientProfileBaseUrl: "http://127.0.0.1:8791",
       mockEhrBaseUrl: "http://127.0.0.1:8793",
+      downstreamBaseUrl: "http://127.0.0.1:8792",
       allowedOrigins: [
         "http://127.0.0.1:5173",
         "https://ui-preview.example.test",
       ],
       upstreamTimeoutMs: 8_000,
       handoverUpstreamTimeoutMs: 600_000,
+      downstreamReconcileIntervalMs: 5_000,
       integrationApiBearerToken: "public-secret",
     });
   });
@@ -38,6 +41,7 @@ describe("integration API config", () => {
         AGENTIC_APP_BEARER_TOKEN: "app-secret",
         PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
         MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
       }),
     ).toThrow();
   });
@@ -46,6 +50,7 @@ describe("integration API config", () => {
     ["Agentic", "AGENTIC_APP_BEARER_TOKEN"],
     ["patient profile", "PATIENT_PROFILE_BEARER_TOKEN"],
     ["mock EHR", "MOCK_EHR_BEARER_TOKEN"],
+    ["downstream gateway", "DOWNSTREAM_BEARER_TOKEN"],
   ] as const)(
     "rejects reuse of the inbound bearer for the %s trust domain",
     (_label, reusedVariable) => {
@@ -54,6 +59,7 @@ describe("integration API config", () => {
         AGENTIC_APP_BEARER_TOKEN: "agentic-secret",
         PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
         MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
       };
       environment[reusedVariable] = environment.INTEGRATION_API_BEARER_TOKEN;
 
@@ -67,6 +73,7 @@ describe("integration API config", () => {
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
     });
 
     expect(config.allowedOrigins).toEqual([
@@ -81,6 +88,7 @@ describe("integration API config", () => {
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
       HOST: "0.0.0.0",
       PORT: "8080",
     });
@@ -95,6 +103,7 @@ describe("integration API config", () => {
       AGENTIC_APP_BEARER_TOKEN: "app-secret",
       PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
       MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+      DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
       HANDOVER_UPSTREAM_TIMEOUT_MS: "900000",
     });
 
@@ -105,6 +114,7 @@ describe("integration API config", () => {
         AGENTIC_APP_BEARER_TOKEN: "app-secret",
         PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
         MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
         HANDOVER_UPSTREAM_TIMEOUT_MS: "479999",
       }),
     ).toThrow();
@@ -114,6 +124,7 @@ describe("integration API config", () => {
         AGENTIC_APP_BEARER_TOKEN: "app-secret",
         PATIENT_PROFILE_BEARER_TOKEN: "profile-secret",
         MOCK_EHR_BEARER_TOKEN: "mock-ehr-secret",
+        DOWNSTREAM_BEARER_TOKEN: "downstream-secret",
         HANDOVER_UPSTREAM_TIMEOUT_MS: "900001",
       }),
     ).toThrow();

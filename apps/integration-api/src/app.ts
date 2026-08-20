@@ -13,7 +13,9 @@ import {
   demoAssignmentSchema,
   demoJoinSchema,
   demoSessionCreateSchema,
+  downstreamSimulationSchema,
   ehrCreateDocumentSchema,
+  ehrCreateReferralSnapshotSchema,
   ehrFileDocumentSchema,
   ehrProfileUpdateSchema,
   ehrReviseDocumentSchema,
@@ -364,6 +366,43 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
   );
 
   app.post(
+    "/api/ehr/patients/:patientId/referral-snapshots",
+    route(async (request, response) => {
+      response.status(201).json(
+        await options.service.createReferralSnapshot(
+          ehrIdentifier(request, "patientId"),
+          ehrCreateReferralSnapshotSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/ehr/patients/:patientId/referral-snapshots",
+    route(async (request, response) => {
+      response.json(
+        await options.service.listReferralSnapshots(
+          ehrIdentifier(request, "patientId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/ehr/referral-snapshots/:referralId",
+    route(async (request, response) => {
+      response.json(
+        await options.service.getReferralSnapshot(
+          ehrIdentifier(request, "referralId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
     "/api/demo/sessions",
     route(async (request, response) => {
       response.status(201).json(
@@ -419,6 +458,32 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
       response.json(
         await options.service.demoParticipantView(
           participantToken(request),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/tasks/:taskId/deliveries",
+    route(async (request, response) => {
+      response.json(
+        await options.service.listTaskDeliveries(
+          ehrIdentifier(request, "taskId"),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/demo/downstream/deliveries/:deliveryId/status",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      response.json(
+        await options.service.simulateDownstreamStatus(
+          ehrIdentifier(request, "deliveryId"),
+          downstreamSimulationSchema.parse(request.body),
           correlationId(response),
         ),
       );

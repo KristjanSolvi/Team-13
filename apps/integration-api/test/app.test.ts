@@ -96,6 +96,7 @@ function harness() {
       taskId: "task-1",
       state: "offered_to_team",
     })),
+    verifyExternal: vi.fn(async () => ({})),
     createDemoSession: vi.fn(async () => ({
       sessionId: "session-1",
       joinCode: "JOINCODE",

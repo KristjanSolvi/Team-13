@@ -131,6 +131,14 @@ export const taskCommandSchemas = {
     approvalChannel: z
       .enum(["app_one_tap", "dictation_confirmation"])
       .default("app_one_tap"),
+    referralSnapshotId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(160)
+      .regex(/^[A-Za-z0-9:._-]+$/)
+      .nullable()
+      .default(null),
   }),
   correct: z
     .object({
@@ -309,3 +317,43 @@ export const ehrFileDocumentSchema = z
     reason: z.string().trim().min(3).max(500),
   })
   .strict();
+
+export const ehrCreateReferralSnapshotSchema = z
+  .object({
+    idempotencyKey: z.string().trim().min(8).max(200),
+    referralType: z.string().trim().min(2).max(160),
+    destination: z.string().trim().min(2).max(240),
+    clinicalReason: z.string().trim().min(5).max(4_000),
+    additionalInstructions: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2_000)
+      .nullable(),
+  })
+  .strict();
+
+export const downstreamSimulationSchema = z
+  .object({
+    idempotencyKey: z.string().trim().min(8).max(200),
+    status: z.enum(["accepted", "completed", "rejected"]),
+    outcomeReference: z.string().trim().min(1).max(240).nullable(),
+    reason: z.string().trim().min(1).max(500).nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.status === "completed" && value.outcomeReference === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["outcomeReference"],
+        message: "Completed provider work requires an outcome reference",
+      });
+    }
+    if (value.status === "rejected" && value.reason === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "Rejected provider work requires a reason",
+      });
+    }
+  });
