@@ -1,7 +1,11 @@
 import type {
   AmbientSession,
+  CodingResult,
+  CodingSystem,
   FollowThroughCandidate,
+  GeneratedSupportingDocument,
   ScopedToken,
+  SupportingDocumentType,
   TaskRevisionPreview,
   TranscriptSegment,
 } from "@pipeline/contracts.js";
@@ -26,6 +30,37 @@ export type CandidateGenerationResult = {
 export type CandidateInvestigationResult = {
   candidateId: string;
   handoff: unknown;
+};
+
+export type ClinicalDocument = {
+  schemaVersion: "1";
+  documentId: string;
+  patientId: string;
+  category: "medical" | "discharge";
+  title: string;
+  content: string;
+  source: "clinician" | "agent" | "scribe";
+  status: "draft" | "filed";
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  filedAt: string | null;
+  filedBy: string | null;
+  correlationId: string;
+};
+
+export type ClinicalDocumentVersion = ClinicalDocument & {
+  changeReason: string;
+};
+
+export type EhrPatientRecord = {
+  schemaVersion: "1";
+  patientId: string;
+  profile: unknown;
+  documents: ClinicalDocument[];
+  observedAt: string;
 };
 
 export class FollowThroughApiError extends Error {
@@ -75,6 +110,13 @@ function jsonHeaders(correlationId: string): Record<string, string> {
   return {
     "content-type": "application/json",
     "x-correlation-id": correlationId,
+  };
+}
+
+function attributedJsonHeaders(correlationId: string, actorId: string): Record<string, string> {
+  return {
+    ...jsonHeaders(correlationId),
+    "x-actor-id": actorId,
   };
 }
 
@@ -206,6 +248,138 @@ export async function getWardCompanionOverview(
 ): Promise<WardCompanionOverview> {
   return responseJson<WardCompanionOverview>(
     await fetch(integrationUrl(`/api/patients/${encodeURIComponent(patientId)}/companion`), {
+      headers: { "x-correlation-id": correlationId },
+    }),
+  );
+}
+
+export async function generateSupportingDocument(input: {
+  approvalId: string;
+  approvedClinicalText: string;
+  documentType: SupportingDocumentType;
+  correlationId: string;
+}): Promise<GeneratedSupportingDocument> {
+  return responseJson<GeneratedSupportingDocument>(
+    await fetch(integrationUrl("/api/corti/documents/generate"), {
+      method: "POST",
+      headers: jsonHeaders(input.correlationId),
+      body: JSON.stringify({
+        approvalId: input.approvalId,
+        approvedClinicalText: input.approvedClinicalText,
+        documentType: input.documentType,
+      }),
+    }),
+  );
+}
+
+export async function predictMedicalCodes(input: {
+  approvalId: string;
+  approvedClinicalText: string;
+  system?: CodingSystem;
+  correlationId: string;
+}): Promise<CodingResult> {
+  return responseJson<CodingResult>(
+    await fetch(integrationUrl("/api/corti/coding/predict"), {
+      method: "POST",
+      headers: jsonHeaders(input.correlationId),
+      body: JSON.stringify({
+        approvalId: input.approvalId,
+        approvedClinicalText: input.approvedClinicalText,
+        ...(input.system === undefined ? {} : { system: input.system }),
+      }),
+    }),
+  );
+}
+
+export async function getEhrPatientRecord(
+  patientId: string,
+  correlationId: string,
+): Promise<EhrPatientRecord> {
+  return responseJson<EhrPatientRecord>(
+    await fetch(integrationUrl(`/api/ehr/patients/${encodeURIComponent(patientId)}`), {
+      headers: { "x-correlation-id": correlationId },
+    }),
+  );
+}
+
+export async function createEhrDocument(input: {
+  patientId: string;
+  actorId: string;
+  correlationId: string;
+  idempotencyKey: string;
+  category: ClinicalDocument["category"];
+  title: string;
+  content: string;
+  source: ClinicalDocument["source"];
+}): Promise<ClinicalDocument> {
+  return responseJson<ClinicalDocument>(
+    await fetch(
+      integrationUrl(`/api/ehr/patients/${encodeURIComponent(input.patientId)}/documents`),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          idempotencyKey: input.idempotencyKey,
+          category: input.category,
+          title: input.title,
+          content: input.content,
+          source: input.source,
+        }),
+      },
+    ),
+  );
+}
+
+export async function reviseEhrDocument(input: {
+  documentId: string;
+  actorId: string;
+  correlationId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+  changes: { title?: string; content?: string };
+}): Promise<ClinicalDocument> {
+  return responseJson<ClinicalDocument>(
+    await fetch(integrationUrl(`/api/ehr/documents/${encodeURIComponent(input.documentId)}`), {
+      method: "PATCH",
+      headers: attributedJsonHeaders(input.correlationId, input.actorId),
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+        idempotencyKey: input.idempotencyKey,
+        reason: input.reason,
+        changes: input.changes,
+      }),
+    }),
+  );
+}
+
+export async function fileEhrDocument(input: {
+  documentId: string;
+  actorId: string;
+  correlationId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+}): Promise<ClinicalDocument> {
+  return responseJson<ClinicalDocument>(
+    await fetch(integrationUrl(`/api/ehr/documents/${encodeURIComponent(input.documentId)}/file`), {
+      method: "POST",
+      headers: attributedJsonHeaders(input.correlationId, input.actorId),
+      body: JSON.stringify({
+        expectedVersion: input.expectedVersion,
+        idempotencyKey: input.idempotencyKey,
+        reason: input.reason,
+      }),
+    }),
+  );
+}
+
+export async function getEhrDocumentHistory(
+  documentId: string,
+  correlationId: string,
+): Promise<{ versions: ClinicalDocumentVersion[] }> {
+  return responseJson<{ versions: ClinicalDocumentVersion[] }>(
+    await fetch(integrationUrl(`/api/ehr/documents/${encodeURIComponent(documentId)}/history`), {
       headers: { "x-correlation-id": correlationId },
     }),
   );
