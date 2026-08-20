@@ -180,6 +180,18 @@ function renderedFor(packet: HandoverPacket): RenderedHandover {
           packet.situation[0] as HandoverPacket["situation"][number],
         ],
       },
+      ...(packet.unknowns.length > 0
+        ? [
+            {
+              sectionId: "unknowns",
+              heading: "Unknowns",
+              statements: packet.unknowns.map((statement) => ({
+                statement,
+                sourceRefs: [],
+              })),
+            },
+          ]
+        : []),
     ],
     creditsConsumed: 1.25,
   };
@@ -1110,6 +1122,166 @@ test("finalize renders atomically when sources are unchanged and rejects new sou
         rejected.draft.version,
         rejected.draft.sourceSnapshotHash as string,
         unknown,
+      ),
+    "HANDOVER_EVIDENCE_NOT_FOUND",
+    409,
+  );
+});
+
+test("finalize preserves packet unknowns exactly as ungrounded statements", (t) => {
+  const setup = savePreparedDraft(t);
+  const rendered = renderedFor(setup.packet);
+
+  const finalized = setup.service.finalize(
+    setup.draft.handoverId,
+    setup.draft.version,
+    setup.draft.sourceSnapshotHash as string,
+    rendered,
+  );
+
+  assert.deepEqual(
+    finalized.rendered?.sections.find(
+      ({ sectionId }) => sectionId === "unknowns",
+    )?.statements,
+    setup.packet.unknowns.map((statement) => ({
+      statement,
+      sourceRefs: [],
+    })),
+  );
+});
+
+test("finalize rejects omitted, added, duplicated, or rewritten unknowns", (t) => {
+  const cases: Array<{
+    label: string;
+    mutate: (rendered: RenderedHandover) => void;
+  }> = [
+    {
+      label: "omitted section",
+      mutate: (rendered) => {
+        rendered.sections = rendered.sections.filter(
+          ({ sectionId }) => sectionId !== "unknowns",
+        );
+      },
+    },
+    {
+      label: "added statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        unknowns.statements.push({
+          statement: "A new unsupported unknown.",
+          sourceRefs: [],
+        });
+      },
+    },
+    {
+      label: "duplicated statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        const statement = unknowns.statements[0];
+        assert.ok(statement);
+        unknowns.statements.push(structuredClone(statement));
+      },
+    },
+    {
+      label: "rewritten statement",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        const statement = unknowns.statements[0];
+        assert.ok(statement);
+        statement.statement = "The response is probably normal.";
+      },
+    },
+    {
+      label: "duplicate unknowns section",
+      mutate: (rendered) => {
+        const unknowns = rendered.sections.find(
+          ({ sectionId }) => sectionId === "unknowns",
+        );
+        assert.ok(unknowns);
+        rendered.sections.push(structuredClone(unknowns));
+      },
+    },
+  ];
+
+  for (const { label, mutate } of cases) {
+    const setup = savePreparedDraft(t);
+    const rendered = renderedFor(setup.packet);
+    mutate(rendered);
+
+    assertDomainError(
+      () =>
+        setup.service.finalize(
+          setup.draft.handoverId,
+          setup.draft.version,
+          setup.draft.sourceSnapshotHash as string,
+          rendered,
+        ),
+      "HANDOVER_EVIDENCE_NOT_FOUND",
+      409,
+    );
+    assert.equal(
+      setup.store.requireHandover(setup.draft.handoverId).status,
+      "draft",
+      label,
+    );
+  }
+});
+
+test("finalize omits the unknowns section when the packet has no unknowns", (t) => {
+  const setup = prepareRequested(t);
+  setup.packet.unknowns = [];
+  const draft = setup.service.saveDraft({
+    handoverId: setup.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: setup.packet,
+  });
+  const rendered = renderedFor(setup.packet);
+
+  assert.equal(
+    rendered.sections.some(({ sectionId }) => sectionId === "unknowns"),
+    false,
+  );
+  assert.equal(
+    setup.service.finalize(
+      draft.handoverId,
+      draft.version,
+      draft.sourceSnapshotHash as string,
+      rendered,
+    ).status,
+    "rendered",
+  );
+
+  const rejected = prepareRequested(t);
+  rejected.packet.unknowns = [];
+  const rejectedDraft = rejected.service.saveDraft({
+    handoverId: rejected.requested.handoverId,
+    patientId: PATIENT_ID,
+    contextId: HANDOVER_CONTEXT_ID,
+    packet: rejected.packet,
+  });
+  const withEmptyUnknowns = renderedFor(rejected.packet);
+  withEmptyUnknowns.sections.push({
+    sectionId: "unknowns",
+    heading: "Unknowns",
+    statements: [],
+  });
+  assertDomainError(
+    () =>
+      rejected.service.finalize(
+        rejectedDraft.handoverId,
+        rejectedDraft.version,
+        rejectedDraft.sourceSnapshotHash as string,
+        withEmptyUnknowns,
       ),
     "HANDOVER_EVIDENCE_NOT_FOUND",
     409,

@@ -391,6 +391,7 @@ export class HandoverService {
         };
       }
 
+      this.validateRenderedUnknowns(handover.packet, parsedRendered);
       const packetSourceRefs = this.packetSourceRefs(handover.packet);
       for (const section of parsedRendered.sections) {
         for (const statement of section.statements) {
@@ -723,6 +724,39 @@ export class HandoverService {
         );
       }
     }
+  }
+
+  private validateRenderedUnknowns(
+    packet: HandoverPacket,
+    rendered: RenderedHandover,
+  ): void {
+    const unknownSections = rendered.sections.filter(
+      ({ sectionId }) => sectionId === "unknowns",
+    );
+    if (packet.unknowns.length === 0) {
+      if (unknownSections.length === 0) return;
+      throw this.invalidRenderedUnknowns();
+    }
+
+    const renderedUnknowns = unknownSections[0]?.statements.map(
+      ({ statement }) => statement,
+    );
+    if (
+      unknownSections.length !== 1 ||
+      renderedUnknowns === undefined ||
+      !sameJson(renderedUnknowns, packet.unknowns)
+    ) {
+      throw this.invalidRenderedUnknowns();
+    }
+  }
+
+  private invalidRenderedUnknowns(): DomainError {
+    return new DomainError(
+      "HANDOVER_EVIDENCE_NOT_FOUND",
+      "Rendered handover must preserve every packet unknown exactly once",
+      false,
+      409,
+    );
   }
 
   private packetSourceRefs(packet: HandoverPacket): Set<string> {
