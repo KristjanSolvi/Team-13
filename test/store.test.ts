@@ -5,6 +5,12 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { DomainError } from "../src/domain/errors.js";
+import {
+  type HandoverRecord,
+  handoverPacketSchema,
+  handoverSourceSnapshotSchema,
+  renderedHandoverSchema,
+} from "../src/domain/handover.js";
 import type { Member, Task, Team, Thread } from "../src/domain/types.js";
 import { seedKaren } from "../src/fixtures/karen.js";
 import { openDatabase } from "../src/infra/database.js";
@@ -90,6 +96,106 @@ function createTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+function createRequestedHandover(
+  overrides: Partial<HandoverRecord> = {},
+): HandoverRecord {
+  return {
+    handoverId: "0d771b25-d46a-4eaf-9529-2dfead81aeba",
+    patientId: "synthetic-karen",
+    interactionId: "handover:0d771b25-d46a-4eaf-9529-2dfead81aeba",
+    contextId: null,
+    requestedBy: "clinician-1",
+    reason: "assignment",
+    focus: "Medication changes",
+    correlationId: "corr-handover-1",
+    idempotencyKey: "handover-karen-001",
+    requestHash: `sha256:${"1".repeat(64)}`,
+    status: "requested",
+    version: 1,
+    packet: null,
+    rendered: null,
+    sourceSnapshot: null,
+    sourceSnapshotHash: null,
+    createdAt: now,
+    updatedAt: now,
+    generatedAt: null,
+    ...overrides,
+  };
+}
+
+const draftPacket = handoverPacketSchema.parse({
+  situation: [
+    {
+      statement: "Karen has a recent medication change.",
+      sourceRefs: ["record:medication-1"],
+    },
+  ],
+  background: [],
+  currentConcerns: [
+    {
+      statement: "Blood pressure follow-up remains outstanding.",
+      sourceRefs: ["record:observation-1"],
+    },
+  ],
+  outstandingTasks: [
+    {
+      taskId: "11111111-1111-4111-8111-111111111111",
+      threadId: "22222222-2222-4222-8222-222222222222",
+      summary: "Check blood pressure after medication change",
+      state: "accepted",
+      targetTeamId: "district-nursing",
+      assignedMemberId: "nurse-a",
+      clinicalUrgency: "medium",
+      acceptBy: "2026-08-20T10:30:00.000Z",
+      dueBy: "2026-08-21T10:00:00.000Z",
+      version: 2,
+      sourceRefs: ["record:medication-1", "record:observation-1"],
+    },
+  ],
+  awaitingVerification: [],
+  escalations: [],
+  unknowns: ["The response to the medication change is not yet documented."],
+});
+
+const draftSourceSnapshot = handoverSourceSnapshotSchema.parse({
+  recordItems: [
+    {
+      itemId: "medication-1",
+      sourceRef: "record:medication-1",
+      contentHash: `sha256:${"2".repeat(64)}`,
+    },
+  ],
+  threads: [
+    {
+      threadId: "22222222-2222-4222-8222-222222222222",
+      version: 3,
+    },
+  ],
+  tasks: [
+    {
+      taskId: "11111111-1111-4111-8111-111111111111",
+      version: 2,
+    },
+  ],
+});
+
+const renderedHandover = renderedHandoverSchema.parse({
+  title: "Karen Jensen handover",
+  sections: [
+    {
+      sectionId: "situation",
+      heading: "Situation",
+      statements: [
+        {
+          statement: "Karen has a recent medication change.",
+          sourceRefs: ["record:medication-1"],
+        },
+      ],
+    },
+  ],
+  creditsConsumed: 1.25,
+});
+
 function putTaskPrerequisites(store: SqliteStore): void {
   store.putPatient("patient-1", "Patient One", { synthetic: true });
   store.putTeam(createTeam());
@@ -123,6 +229,175 @@ test("state and its audit event survive a database restart", () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("a requested handover round-trips by ID and request identity after restart", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "handover-requested-"));
+  const databasePath = path.join(directory, "test.sqlite");
+  const handover = createRequestedHandover();
+
+  try {
+    const firstStore = new SqliteStore(openDatabase(databasePath));
+    seedKaren(firstStore, now);
+    firstStore.putHandover(handover);
+    firstStore.close();
+
+    const secondStore = new SqliteStore(openDatabase(databasePath));
+    try {
+      assert.deepEqual(secondStore.getHandover(handover.handoverId), handover);
+      assert.deepEqual(
+        secondStore.getHandoverByRequest(
+          handover.requestedBy,
+          handover.idempotencyKey,
+        ),
+        handover,
+      );
+    } finally {
+      secondStore.close();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a draft handover preserves its packet and source snapshot after restart", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "handover-draft-"));
+  const databasePath = path.join(directory, "test.sqlite");
+  const requested = createRequestedHandover();
+  const draft: HandoverRecord = {
+    ...requested,
+    status: "draft",
+    version: 2,
+    packet: draftPacket,
+    sourceSnapshot: draftSourceSnapshot,
+    sourceSnapshotHash: `sha256:${"3".repeat(64)}`,
+    updatedAt: "2026-08-20T10:01:00.000Z",
+  };
+
+  try {
+    const firstStore = new SqliteStore(openDatabase(databasePath));
+    seedKaren(firstStore, now);
+    firstStore.putHandover(requested);
+    firstStore.putHandover(draft);
+    firstStore.close();
+
+    const secondStore = new SqliteStore(openDatabase(databasePath));
+    try {
+      assert.deepEqual(secondStore.getHandover(draft.handoverId), draft);
+    } finally {
+      secondStore.close();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rendered handover maps every field and preserves its original creation time", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const requested = createRequestedHandover();
+  store.putHandover(requested);
+
+  const rendered: HandoverRecord = {
+    ...requested,
+    reason: "on_demand",
+    focus: null,
+    status: "rendered",
+    version: 3,
+    packet: draftPacket,
+    rendered: renderedHandover,
+    sourceSnapshot: draftSourceSnapshot,
+    sourceSnapshotHash: `sha256:${"3".repeat(64)}`,
+    createdAt: "2026-08-20T10:02:00.000Z",
+    updatedAt: "2026-08-20T10:03:00.000Z",
+    generatedAt: "2026-08-20T10:03:00.000Z",
+  };
+  store.putHandover(rendered);
+
+  assert.deepEqual(store.getHandover(rendered.handoverId), {
+    ...rendered,
+    createdAt: requested.createdAt,
+  });
+});
+
+test("patient handovers are scoped and ordered by creation time then ID", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  store.putPatient("patient-2", "Patient Two", { synthetic: true });
+  const later = createRequestedHandover({
+    handoverId: "33333333-3333-4333-8333-333333333333",
+    interactionId: "handover:33333333-3333-4333-8333-333333333333",
+    idempotencyKey: "handover-karen-003",
+    createdAt: "2026-08-20T11:00:00.000Z",
+    updatedAt: "2026-08-20T11:00:00.000Z",
+  });
+  const sameTimeB = createRequestedHandover({
+    handoverId: "22222222-2222-4222-8222-222222222222",
+    interactionId: "handover:22222222-2222-4222-8222-222222222222",
+    idempotencyKey: "handover-karen-002",
+  });
+  const sameTimeA = createRequestedHandover();
+  const otherPatient = createRequestedHandover({
+    handoverId: "44444444-4444-4444-8444-444444444444",
+    patientId: "patient-2",
+    interactionId: "handover:44444444-4444-4444-8444-444444444444",
+    idempotencyKey: "handover-patient-2-001",
+  });
+
+  store.putHandover(later);
+  store.putHandover(sameTimeB);
+  store.putHandover(otherPatient);
+  store.putHandover(sameTimeA);
+
+  assert.deepEqual(
+    store
+      .listPatientHandovers("synthetic-karen")
+      .map((handover) => handover.handoverId),
+    [sameTimeA.handoverId, sameTimeB.handoverId, later.handoverId],
+  );
+});
+
+test("requireHandover returns a row or throws the canonical not-found error", (t) => {
+  const store = createStore(t);
+  seedKaren(store, now);
+  const handover = createRequestedHandover();
+  store.putHandover(handover);
+
+  assert.deepEqual(store.requireHandover(handover.handoverId), handover);
+
+  let caught: unknown;
+  try {
+    store.requireHandover("missing-handover");
+  } catch (error) {
+    caught = error;
+  }
+  assert.ok(caught instanceof DomainError);
+  assert.equal(caught.code, "HANDOVER_NOT_FOUND");
+  assert.equal(caught.status, 404);
+  assert.equal(caught.retryable, false);
+});
+
+test("handover inserts enforce patient and request identity constraints", (t) => {
+  const store = createStore(t);
+  const handover = createRequestedHandover();
+
+  assert.throws(
+    () => store.putHandover(handover),
+    /FOREIGN KEY constraint failed/,
+  );
+
+  seedKaren(store, now);
+  store.putHandover(handover);
+  const duplicateRequest = createRequestedHandover({
+    handoverId: "55555555-5555-4555-8555-555555555555",
+    interactionId: "handover:55555555-5555-4555-8555-555555555555",
+  });
+  assert.throws(
+    () => store.putHandover(duplicateRequest),
+    /UNIQUE constraint failed: handovers.requested_by, handovers.idempotency_key/,
+  );
+  assert.equal(store.getHandover(duplicateRequest.handoverId), null);
+  assert.deepEqual(store.listPatientHandovers(handover.patientId), [handover]);
 });
 
 test("a failed transaction rolls patient state and its event back together", (t) => {
@@ -655,6 +930,7 @@ test("every declared foreign key exists and orphan writes are rejected", (t) => 
   const tables = [
     "approvals",
     "context_mappings",
+    "handovers",
     "members",
     "patient_record_items",
     "task_declines",
@@ -687,6 +963,12 @@ test("every declared foreign key exists and orphan writes are rejected", (t) => 
     },
     {
       childTable: "context_mappings",
+      childColumn: "patient_id",
+      parentTable: "patients",
+      parentColumn: "patient_id",
+    },
+    {
+      childTable: "handovers",
       childColumn: "patient_id",
       parentTable: "patients",
       parentColumn: "patient_id",
