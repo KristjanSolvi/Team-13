@@ -964,7 +964,7 @@ git commit -m "feat: run handovers through dedicated Corti agent"
 - Modify: `test/support.ts`
 - Modify: `test/http.test.ts`
 
-- [ ] **Step 1: Write failing HTTP tests**
+- [x] **Step 1: Write failing HTTP tests**
 
 Cover:
 
@@ -981,7 +981,7 @@ Cover:
 The fake runner should call `handovers.saveDraft` so the route test proves the
 same postcondition as the real runner.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```bash
 npm run build
@@ -989,7 +989,7 @@ npm run build
 
 Expected: compile failure because the routes and runner dependency are absent.
 
-- [ ] **Step 3: Add internal routes**
+- [x] **Step 3: Add internal routes**
 
 Mount these routes under the existing authenticated `/api` router:
 
@@ -1044,14 +1044,14 @@ projection includes `handoverId`, `patientId`, `status`, `renderingStatus`,
 `reason`, `requestedBy`, `generatedAt`, `version`, `sourceSnapshotHash`,
 `packet`, nullable `rendered`, and `activity`.
 
-- [ ] **Step 4: Compose dependencies and test harness**
+- [x] **Step 4: Compose dependencies and test harness**
 
 Add `handovers: HandoverService` and optional `handoverRunner` to
 `AppDependencies`. Mount the handover routes from `src/http/routes.ts` after app
 authentication is installed. Update `createAppHarness` to create and return the
 service even when no live runner is configured.
 
-- [ ] **Step 5: Run HTTP and root checks**
+- [x] **Step 5: Run HTTP and root checks**
 
 ```bash
 npm run build
@@ -1061,7 +1061,7 @@ npm run check
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit the agentic HTTP boundary**
+- [x] **Step 6: Commit the agentic HTTP boundary**
 
 ```bash
 git add src/http/handover-routes.ts src/http/app.ts src/http/routes.ts test/support.ts test/http.test.ts
@@ -1218,7 +1218,7 @@ git commit -m "feat: render grounded handovers with Corti"
 - Modify: `apps/integration-api/test/http-boundary.test.ts`
 - Modify: `apps/integration-api/README.md`
 
-- [ ] **Step 1: Write failing orchestration tests**
+- [x] **Step 1: Write failing orchestration tests**
 
 Test these exact paths:
 
@@ -1236,7 +1236,7 @@ Test these exact paths:
    `pipelineProxyPaths` and therefore cannot be invoked through the generic
    public Corti proxy loop.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```bash
 npm --prefix apps/integration-api test -- test/app.test.ts test/gateways.test.ts
@@ -1244,7 +1244,7 @@ npm --prefix apps/integration-api test -- test/app.test.ts test/gateways.test.ts
 
 Expected: failures for missing gateway methods and public route.
 
-- [ ] **Step 3: Add gateway methods**
+- [x] **Step 3: Add gateway methods**
 
 Extend `AgenticGateway`:
 
@@ -1271,7 +1271,7 @@ renderHandover(input: unknown, meta: RequestMeta): Promise<unknown>;
 The HTTP implementations call the exact internal paths from Task 6 and Task 7.
 Agentic calls include its bearer; pipeline calls do not.
 
-- [ ] **Step 4: Implement orchestration**
+- [x] **Step 4: Implement orchestration**
 
 Add:
 
@@ -1292,7 +1292,7 @@ handover ID, patient ID, packet, and snapshot hash to the pipeline. Strip the
 finalization envelope and return 200 for replay or 201 for a newly finalized
 request.
 
-- [ ] **Step 5: Add public route and OpenAPI**
+- [x] **Step 5: Add public route and OpenAPI**
 
 Add:
 
@@ -1313,7 +1313,7 @@ z.object({
 Document 200, 201, 400, 403, 409, 502, 503, and 504 responses in OpenAPI. Add
 a README curl example with no real bearer value.
 
-- [ ] **Step 6: Run integration checks**
+- [x] **Step 6: Run integration checks**
 
 ```bash
 npm --prefix apps/integration-api run typecheck
@@ -1323,7 +1323,7 @@ npm --prefix apps/integration-api run build
 
 Expected: all pass with strict orchestration order and no network calls.
 
-- [ ] **Step 7: Commit public orchestration**
+- [x] **Step 7: Commit public orchestration**
 
 ```bash
 git add apps/integration-api/src/contracts.ts apps/integration-api/src/gateways.ts apps/integration-api/src/service.ts apps/integration-api/src/app.ts apps/integration-api/src/openapi.ts apps/integration-api/test/gateways.test.ts apps/integration-api/test/app.test.ts apps/integration-api/test/http-boundary.test.ts apps/integration-api/README.md
@@ -1340,7 +1340,7 @@ git commit -m "feat: orchestrate on-demand patient handovers"
 - Modify: `package.json` only if a local smoke script is added
 - Create: `scripts/smoke-handover.ts`
 
-- [ ] **Step 1: Write the deterministic scenario test**
+- [x] **Step 1: Write the deterministic scenario test**
 
 Use the real in-memory agentic app and a fake `AgentGateway`. In its scoped send,
 call the same `HandoverService.saveDraft` operation the MCP tool performs. Assert:
@@ -1354,7 +1354,7 @@ call the same `HandoverService.saveDraft` operation the MCP tool performs. Asser
 6. the audit event order is requested, context initialized, sources retrieved,
    draft saved, render requested, rendered.
 
-- [ ] **Step 2: Run the complete scenario**
+- [x] **Step 2: Run the complete scenario**
 
 ```bash
 npm run build
@@ -1364,7 +1364,7 @@ node --test build/test/handover-scenario.test.js
 Expected: pass. If the scenario exposes a contract mismatch, fix the owning
 service and retain the end-to-end assertion.
 
-- [ ] **Step 3: Document the final contracts**
+- [x] **Step 3: Document the final contracts**
 
 In `docs/contracts.md`, document:
 
@@ -1395,7 +1395,7 @@ Then document tunnel exposure of both `/mcp` and `/mcp/handover`, one manual
 handover POST. Warn that provisioning and the live request use Corti resources
 and are never run by the test suite.
 
-- [ ] **Step 4: Add the one-call smoke helper**
+- [x] **Step 4: Add the one-call smoke helper**
 
 Create `scripts/smoke-handover.ts` with exactly one POST, no retry loop, and
 redacted output:
@@ -1447,7 +1447,7 @@ The output is limited to:
 Add `"smoke:handover": "tsx scripts/smoke-handover.ts"` to `package.json`.
 Do not print tokens, source prose, prompts, full records, or the full response.
 
-- [ ] **Step 5: Run all verification twice where nondeterminism matters**
+- [x] **Step 5: Run all verification twice where nondeterminism matters**
 
 ```bash
 git diff --check
@@ -1466,7 +1466,7 @@ Expected: every command exits 0; the second root test run has the same result;
 the worktree contains no database artifacts, secrets, generated build output, or
 unrelated UI changes.
 
-- [ ] **Step 6: Commit docs and scenario**
+- [x] **Step 6: Commit docs and scenario**
 
 ```bash
 git add test/handover-scenario.test.ts docs/contracts.md docs/runbook.md scripts/smoke-handover.ts package.json
