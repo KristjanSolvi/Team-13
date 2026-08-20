@@ -462,6 +462,98 @@ test("saveDraft requires the exact task reference and rejects stale or foreign t
   );
 });
 
+test("saveDraft rejects cross-patient task items and task source references without mutation", (t) => {
+  const setup = prepareRequested(t);
+  setup.store.putPatient("synthetic-other", "Other Patient", {
+    synthetic: true,
+  });
+  const karenThread = setup.store.requireThread(setup.task.threadId);
+  const foreignThread = {
+    ...karenThread,
+    threadId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    patientId: "synthetic-other",
+    interactionId: "interaction-other",
+    contextId: null,
+    version: 4,
+  };
+  setup.store.putThread(foreignThread);
+  const foreignTask: Task = {
+    ...setup.task,
+    taskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    threadId: foreignThread.threadId,
+    patientId: foreignThread.patientId,
+    version: foreignThread.version,
+  };
+  setup.store.putTask(foreignTask);
+  const foreignTaskRef = `task:${foreignTask.taskId}@${foreignTask.version}`;
+
+  const foreignItemPacket = structuredClone(setup.packet);
+  foreignItemPacket.outstandingTasks.push(taskItem(foreignTask));
+  assertDomainError(
+    () =>
+      setup.service.saveDraft({
+        handoverId: setup.requested.handoverId,
+        patientId: PATIENT_ID,
+        contextId: HANDOVER_CONTEXT_ID,
+        packet: foreignItemPacket,
+      }),
+    "HANDOVER_TASK_SET_MISMATCH",
+    409,
+  );
+
+  const secondRequested = setup.service.beginRequest({
+    ...BEGIN_INPUT,
+    correlationId: "corr-cross-patient-ref",
+    idempotencyKey: "handover-cross-patient-ref",
+  }).handover;
+  const secondContextId = "ctx-handover-cross-patient-ref";
+  setup.store.putContextMapping(
+    secondContextId,
+    secondRequested.interactionId,
+    PATIENT_ID,
+    NOW,
+  );
+  const foreignRefPacket = structuredClone(setup.packet);
+  const karenTaskItem = foreignRefPacket.outstandingTasks[0];
+  assert.ok(karenTaskItem);
+  karenTaskItem.sourceRefs.push(foreignTaskRef);
+  assertDomainError(
+    () =>
+      setup.service.saveDraft({
+        handoverId: secondRequested.handoverId,
+        patientId: PATIENT_ID,
+        contextId: secondContextId,
+        packet: foreignRefPacket,
+      }),
+    "HANDOVER_EVIDENCE_NOT_FOUND",
+    409,
+  );
+
+  assert.deepEqual(
+    setup.store.requireHandover(setup.requested.handoverId),
+    setup.requested,
+  );
+  assert.deepEqual(
+    setup.store.requireHandover(secondRequested.handoverId),
+    secondRequested,
+  );
+  const testedHandoverIds = new Set([
+    setup.requested.handoverId,
+    secondRequested.handoverId,
+  ]);
+  assert.deepEqual(
+    setup.store
+      .listEvents(0)
+      .filter(
+        (event) =>
+          testedHandoverIds.has(String(event.payload.handoverId)) &&
+          (event.eventType === "handover.sources_retrieved" ||
+            event.eventType === "handover.draft_saved"),
+      ),
+    [],
+  );
+});
+
 test("saveDraft rejects every copied authoritative task field mismatch", (t) => {
   const setup = prepareRequested(t);
   const mismatches: Array<Partial<HandoverTaskItem>> = [
