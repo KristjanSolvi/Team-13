@@ -1,5 +1,6 @@
 import type { CaseNote, Patient, Thread } from "@/data/ward";
 import { bays, patients } from "@/data/ward";
+import { StatusBand } from "./StatusBand";
 
 type Props = {
   threads: Thread[];
@@ -35,9 +36,10 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
 
   return (
     <div className="space-y-12">
+      <StatusBand threads={threads} />
       {bays.map((bay) => (
         <section key={bay.id}>
-          <h2 className="mb-6 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             {bay.name}
           </h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -78,7 +80,7 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                     <h3 className="text-[17px] font-medium leading-tight text-foreground">
                       {patient.name}
                     </h3>
-                    <span className="mt-0.5 shrink-0 text-[10px] font-medium text-muted-foreground">
+                    <span className="mt-0.5 shrink-0 text-[10px] font-medium text-foreground">
                       Bed {patient.bed}
                     </span>
                   </div>
@@ -111,7 +113,7 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                     </div>
                   ) : (
                     <p className="text-[11px] font-medium italic text-muted-foreground">
-                      No tracked follow-through blockers
+                      Clear for discharge
                     </p>
                   )}
 
