@@ -71,14 +71,25 @@ export class IntegrationService {
       .update(candidate.candidateId)
       .digest("hex")
       .slice(0, 24);
+    const evidenceRefs = candidate.evidence.map(
+      (_evidence, index) => `encounter:candidate-${stableId}.${index + 1}`,
+    );
+    const sourceEvidence = candidate.evidence.map((evidence, index) => ({
+      evidenceRef: evidenceRefs[index] as string,
+      sourceQuote: evidence.sourceQuote,
+      startSeconds: evidence.startSeconds,
+      endSeconds: evidence.endSeconds,
+      ...(evidence.speakerId === undefined
+        ? {}
+        : { speakerId: evidence.speakerId }),
+    }));
     const handoff = await this.agentic.submitSignal(
       {
         patientId: candidate.patientId,
         interactionId: candidate.interactionId,
         signalText: candidate.summary,
-        evidenceRefs: candidate.evidence.map(
-          (_evidence, index) => `encounter:candidate-${stableId}.${index + 1}`,
-        ),
+        evidenceRefs,
+        sourceEvidence,
         idempotencyKey: `candidate-${stableId}`,
       },
       {

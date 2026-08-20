@@ -15,7 +15,9 @@ authoritative for Ambient, Dictation, Text Generation, and Medical Coding.
 - `GET /readyz`: aggregate Agentic and pipeline reachability and report whether
   live Corti calls are configured.
 - `POST /api/candidates/investigate`: validate a normalized pipeline candidate
-  and retain it as one idempotent Agentic signal.
+  and retain it as one idempotent Agentic signal. Each validated evidence item
+  is forwarded with its generated reference, exact quote, timestamps, and
+  optional speaker ID so the Agentic backend can register grounded evidence.
 - `POST /api/corti/...`: explicit allow-listed proxy for the seven existing
   pipeline endpoints, preserving their request and response contracts.
 - `GET /api/patients/:patientId/overview`: return authoritative threads and
