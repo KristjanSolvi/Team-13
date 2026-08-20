@@ -66,15 +66,18 @@ npm run dev
 Use the same `AGENTIC_APP_BEARER_TOKEN` configured by the Agentic/MCP backend.
 Never expose that token to the browser or commit `.env`.
 
-Both `http://127.0.0.1:5173` and `http://localhost:5173` are accepted as local
-UI origins by default. Add the deployed or Lovable preview origin explicitly to
-`UI_ORIGINS`; wildcard origins are intentionally unsupported.
+The local Lovable UI origins on port `8080` and the pipeline harness origins on
+port `5173` are accepted by the example configuration. Add the deployed or
+Lovable preview origin explicitly to `UI_ORIGINS`; wildcard origins are
+intentionally unsupported.
 
-## Deferred until contracts freeze
+## Next integration slice
 
-- Post-approval Text Generation and Medical Coding orchestration. The current
-  approval response does not expose a stable approval identifier in every
-  success mode, so this service must not guess or parse one from proof material.
+- Post-approval Text Generation and Medical Coding orchestration. Agentic now
+  returns a stable `taskId`, signed `approvalProof`, and expiry. The BFF must
+  still retrieve the exact approved task/version, validate that boundary, call
+  the pipeline, and retain the resulting draft artifacts. Approval alone must
+  never be presented as publication or downstream action.
 - Mutations for manually created tasks, free-form activity, and case notes.
   Their Agentic/EHR ownership and audit contracts must be defined before the UI
   sends them to a backend.
