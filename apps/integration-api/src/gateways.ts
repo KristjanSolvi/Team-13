@@ -11,7 +11,16 @@ export interface AgenticSignalInput {
   interactionId: string;
   signalText: string;
   evidenceRefs: string[];
+  sourceEvidence?: AgenticSourceEvidence[];
   idempotencyKey: string;
+}
+
+export interface AgenticSourceEvidence {
+  evidenceRef: string;
+  sourceQuote: string;
+  startSeconds?: number;
+  endSeconds?: number;
+  speakerId?: number;
 }
 
 export interface AgenticGateway {

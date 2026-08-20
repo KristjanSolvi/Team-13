@@ -141,6 +141,13 @@ describe("integration API", () => {
             sourceQuote: "I've been dizzy since the medication changed.",
             startSeconds: 42.1,
             endSeconds: 46.8,
+            speakerId: 1,
+          },
+          {
+            interactionId: "interaction-karen-1",
+            sourceQuote: "Nobody has arranged a blood pressure check.",
+            startSeconds: 50.25,
+            endSeconds: 53.75,
           },
         ],
         status: "candidate",
@@ -156,7 +163,25 @@ describe("integration API", () => {
         patientId: "synthetic-karen",
         interactionId: "interaction-karen-1",
         signalText: "Dizziness after a medication change needs follow-through",
-        evidenceRefs: ["encounter:candidate-9a23a2890125a1859ee91fbf.1"],
+        evidenceRefs: [
+          "encounter:candidate-9a23a2890125a1859ee91fbf.1",
+          "encounter:candidate-9a23a2890125a1859ee91fbf.2",
+        ],
+        sourceEvidence: [
+          {
+            evidenceRef: "encounter:candidate-9a23a2890125a1859ee91fbf.1",
+            sourceQuote: "I've been dizzy since the medication changed.",
+            startSeconds: 42.1,
+            endSeconds: 46.8,
+            speakerId: 1,
+          },
+          {
+            evidenceRef: "encounter:candidate-9a23a2890125a1859ee91fbf.2",
+            sourceQuote: "Nobody has arranged a blood pressure check.",
+            startSeconds: 50.25,
+            endSeconds: 53.75,
+          },
+        ],
         idempotencyKey: "candidate-9a23a2890125a1859ee91fbf",
       },
       {

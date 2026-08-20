@@ -26,6 +26,14 @@ describe("HTTP gateways", () => {
         interactionId: "interaction-karen-1",
         signalText: "Dizziness needs follow-through",
         evidenceRefs: ["encounter:candidate-1.1"],
+        sourceEvidence: [
+          {
+            evidenceRef: "encounter:candidate-1.1",
+            sourceQuote: "I feel dizzy when I stand up.",
+            startSeconds: 10,
+            endSeconds: 12,
+          },
+        ],
         idempotencyKey: "candidate-candidate-1",
       },
       {
@@ -41,6 +49,22 @@ describe("HTTP gateways", () => {
     expect(headers.get("authorization")).toBe("Bearer server-only-token");
     expect(headers.get("x-actor-id")).toBe("pipeline:candidate-handoff");
     expect(headers.get("x-correlation-id")).toBe("corr-karen-1");
+    expect(JSON.parse(String(options?.body))).toEqual({
+      patientId: "synthetic-karen",
+      interactionId: "interaction-karen-1",
+      signalText: "Dizziness needs follow-through",
+      evidenceRefs: ["encounter:candidate-1.1"],
+      sourceEvidence: [
+        {
+          evidenceRef: "encounter:candidate-1.1",
+          sourceQuote: "I feel dizzy when I stand up.",
+          startSeconds: 10,
+          endSeconds: 12,
+        },
+      ],
+      idempotencyKey: "candidate-candidate-1",
+    });
+    expect(String(options?.body)).not.toContain("server-only-token");
   });
 
   it("does not send the application credential to the public health route", async () => {

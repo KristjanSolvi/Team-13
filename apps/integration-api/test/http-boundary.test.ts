@@ -149,6 +149,13 @@ describe("real HTTP service boundaries", () => {
             sourceQuote: "I feel dizzy.",
             startSeconds: 10,
             endSeconds: 12,
+            speakerId: 2,
+          },
+          {
+            interactionId: "interaction-karen-1",
+            sourceQuote: "No blood pressure check has been arranged.",
+            startSeconds: 13.5,
+            endSeconds: 16.25,
           },
         ],
         status: "candidate",
@@ -183,7 +190,35 @@ describe("real HTTP service boundaries", () => {
       authorization: "Bearer server-only-app-token",
       actorId: "pipeline:candidate-handoff",
       correlationId: "corr-http-candidate",
+      body: {
+        patientId: "synthetic-karen",
+        interactionId: "interaction-karen-1",
+        signalText: "Dizziness needs follow-through",
+        evidenceRefs: [
+          "encounter:candidate-565b228effba846822d49798.1",
+          "encounter:candidate-565b228effba846822d49798.2",
+        ],
+        sourceEvidence: [
+          {
+            evidenceRef: "encounter:candidate-565b228effba846822d49798.1",
+            sourceQuote: "I feel dizzy.",
+            startSeconds: 10,
+            endSeconds: 12,
+            speakerId: 2,
+          },
+          {
+            evidenceRef: "encounter:candidate-565b228effba846822d49798.2",
+            sourceQuote: "No blood pressure check has been arranged.",
+            startSeconds: 13.5,
+            endSeconds: 16.25,
+          },
+        ],
+        idempotencyKey: "candidate-565b228effba846822d49798",
+      },
     });
+    expect(JSON.stringify(candidate.body)).not.toContain(
+      "server-only-app-token",
+    );
     expect(captured.approve).toMatchObject({
       authorization: "Bearer server-only-app-token",
       actorId: "clinician-1",
