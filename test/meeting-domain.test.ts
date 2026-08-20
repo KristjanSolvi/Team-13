@@ -101,6 +101,12 @@ test("reconciliation rejects a task as both new and carry-forward", () => {
       "meeting-reconciliation:33333333-3333-4333-8333-333333333333",
     contextId: null,
     idempotencyKey: "reconcile-karen-0001",
+    sourceSnapshot: {
+      currentEvidence: [],
+      previousEvidence: [],
+      handover: null,
+      tasks: [],
+    },
     sourceSnapshotHash: `sha256:${"a".repeat(64)}`,
     status: "saved",
     newDraftTaskIds: [taskId],

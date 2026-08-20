@@ -223,6 +223,7 @@ export function openDatabase(databasePath: string): DatabaseSync {
       interaction_id TEXT NOT NULL UNIQUE,
       context_id TEXT,
       idempotency_key TEXT NOT NULL,
+      source_snapshot_json TEXT NOT NULL,
       source_snapshot_hash TEXT NOT NULL,
       status TEXT NOT NULL,
       new_draft_task_ids_json TEXT NOT NULL,

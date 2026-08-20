@@ -3,6 +3,61 @@ import { z } from "zod";
 const identifier = z.string().min(1).max(200);
 const sha256 = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const taskReference = z.string().regex(/^task:[0-9a-f-]{36}@[1-9][0-9]*$/);
+const snapshotEvidenceSchema = z
+  .object({
+    sourceRef: z.string().regex(/^encounter:[A-Za-z0-9._-]+$/),
+    contentHash: sha256,
+  })
+  .strict();
+const snapshotTaskSchema = z
+  .object({
+    taskId: z.string().uuid(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+const snapshotHandoverSchema = z
+  .object({
+    handoverId: z.string().uuid(),
+    version: z.number().int().positive(),
+    sourceSnapshotHash: sha256,
+  })
+  .strict();
+
+function uniqueBy<T>(values: T[], key: (value: T) => string): boolean {
+  return new Set(values.map(key)).size === values.length;
+}
+
+export const meetingSourceSnapshotSchema = z
+  .object({
+    currentEvidence: z.array(snapshotEvidenceSchema).max(500),
+    previousEvidence: z.array(snapshotEvidenceSchema).max(500),
+    handover: snapshotHandoverSchema.nullable(),
+    tasks: z.array(snapshotTaskSchema).max(100),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!uniqueBy(value.currentEvidence, (item) => item.sourceRef)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["currentEvidence"],
+        message: "Current evidence references must be unique",
+      });
+    }
+    if (!uniqueBy(value.previousEvidence, (item) => item.sourceRef)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["previousEvidence"],
+        message: "Previous evidence references must be unique",
+      });
+    }
+    if (!uniqueBy(value.tasks, (item) => item.taskId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tasks"],
+        message: "Task snapshot identifiers must be unique",
+      });
+    }
+  });
 
 export const meetingStatuses = ["recording", "completed", "failed"] as const;
 export const patientSegmentStatuses = [
@@ -137,6 +192,7 @@ export const meetingReconciliationSchema = z
     interactionId: identifier,
     contextId: identifier.nullable(),
     idempotencyKey: z.string().min(8).max(200),
+    sourceSnapshot: meetingSourceSnapshotSchema,
     sourceSnapshotHash: sha256,
     status: z.enum(reconciliationStatuses),
     newDraftTaskIds: z.array(z.string().uuid()).max(50),
@@ -185,3 +241,4 @@ export type MeetingTranscriptEvidence = z.infer<
 >;
 export type MeetingReconciliation = z.infer<typeof meetingReconciliationSchema>;
 export type CarryForwardWarning = z.infer<typeof carryForwardWarningSchema>;
+export type MeetingSourceSnapshot = z.infer<typeof meetingSourceSnapshotSchema>;

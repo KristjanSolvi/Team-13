@@ -9,7 +9,11 @@ import {
   renderedHandoverSchema,
 } from "../domain/handover.js";
 import {
+  type CarryForwardWarning,
+  carryForwardWarningSchema,
+  type MeetingReconciliation,
   type MeetingTranscriptEvidence,
+  meetingReconciliationSchema,
   meetingTranscriptEvidenceSchema,
   type PatientMeetingSegment,
   patientMeetingSegmentSchema,
@@ -403,6 +407,40 @@ function mapMeetingTranscript(row: SqlRow): MeetingTranscriptEvidence {
   });
 }
 
+function mapMeetingReconciliation(row: SqlRow): MeetingReconciliation {
+  return meetingReconciliationSchema.parse({
+    reconciliationId: rowText(row, "reconciliation_id"),
+    meetingId: rowText(row, "meeting_id"),
+    patientSegmentId: rowText(row, "patient_segment_id"),
+    patientId: rowText(row, "patient_id"),
+    interactionId: rowText(row, "interaction_id"),
+    contextId: rowOptionalText(row, "context_id"),
+    idempotencyKey: rowText(row, "idempotency_key"),
+    sourceSnapshot: parseJson(rowText(row, "source_snapshot_json")),
+    sourceSnapshotHash: rowText(row, "source_snapshot_hash"),
+    status: rowText(row, "status"),
+    newDraftTaskIds: parseStrings(rowText(row, "new_draft_task_ids_json")),
+    carryForwardTaskRefs: parseStrings(
+      rowText(row, "carry_forward_task_refs_json"),
+    ),
+    createdAt: rowText(row, "created_at"),
+    updatedAt: rowText(row, "updated_at"),
+    version: rowNumber(row, "version"),
+  });
+}
+
+function mapCarryForward(row: SqlRow): CarryForwardWarning {
+  return carryForwardWarningSchema.parse({
+    warningId: rowText(row, "warning_id"),
+    reconciliationId: rowText(row, "reconciliation_id"),
+    patientId: rowText(row, "patient_id"),
+    taskRef: rowText(row, "task_ref"),
+    reason: rowText(row, "reason"),
+    sourceRefs: parseStrings(rowText(row, "source_refs_json")),
+    createdAt: rowText(row, "created_at"),
+  });
+}
+
 export class SqliteStore {
   private transactionDepth = 0;
 
@@ -494,6 +532,54 @@ export class SqliteStore {
     return meeting;
   }
 
+  updateMeeting(value: WardMeeting, expectedVersion: number): WardMeeting {
+    const next = wardMeetingSchema.parse(value);
+    if (next.version !== expectedVersion + 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting version must advance by one",
+        false,
+        409,
+      );
+    }
+    const current = this.requireMeeting(next.meetingId);
+    if (
+      current.wardId !== next.wardId ||
+      current.interactionId !== next.interactionId ||
+      current.startedBy !== next.startedBy ||
+      current.startedAt !== next.startedAt
+    ) {
+      throw new DomainError(
+        "MEETING_IDENTITY_MISMATCH",
+        "Meeting identity cannot change",
+        false,
+        409,
+      );
+    }
+    const updated = this.database
+      .prepare(`
+        UPDATE ward_meetings
+        SET status = ?, completed_at = ?, version = ?
+        WHERE meeting_id = ? AND version = ?
+      `)
+      .run(
+        next.status,
+        next.completedAt,
+        next.version,
+        next.meetingId,
+        expectedVersion,
+      );
+    if (updated.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting changed concurrently",
+        false,
+        409,
+      );
+    }
+    return this.requireMeeting(next.meetingId);
+  }
+
   putPatientMeetingSegment(value: PatientMeetingSegment): void {
     const segment = patientMeetingSegmentSchema.parse(value);
     const meeting = this.requireMeeting(segment.meetingId);
@@ -542,6 +628,18 @@ export class SqliteStore {
       );
     }
     return segment;
+  }
+
+  listMeetingPatientSegments(meetingId: string): PatientMeetingSegment[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM patient_meeting_segments
+        WHERE meeting_id = ?
+        ORDER BY opened_at, segment_id
+      `)
+      .all(meetingId);
+    return rows.map(mapPatientMeetingSegment);
   }
 
   updatePatientMeetingSegment(
@@ -660,6 +758,29 @@ export class SqliteStore {
     return rows.map(mapMeetingTranscript);
   }
 
+  getMeetingTranscriptEvidence(
+    evidenceId: string,
+  ): MeetingTranscriptEvidence | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_transcript_segments WHERE evidence_id = ?",
+      )
+      .get(evidenceId);
+    return row ? mapMeetingTranscript(row) : null;
+  }
+
+  listMeetingTranscript(meetingId: string): MeetingTranscriptEvidence[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM meeting_transcript_segments
+        WHERE meeting_id = ?
+        ORDER BY start_seconds, evidence_id
+      `)
+      .all(meetingId);
+    return rows.map(mapMeetingTranscript);
+  }
+
   getPreviousPatientMeeting(
     patientId: string,
     beforeMeetingId: string,
@@ -681,6 +802,165 @@ export class SqliteStore {
       `)
       .get(beforeMeetingId, patientId);
     return row ? mapPatientMeetingSegment(row) : null;
+  }
+
+  putMeetingReconciliation(value: MeetingReconciliation): void {
+    const reconciliation = meetingReconciliationSchema.parse(value);
+    this.database
+      .prepare(`
+        INSERT INTO meeting_reconciliations
+          (reconciliation_id, meeting_id, patient_segment_id, patient_id,
+           interaction_id, context_id, idempotency_key, source_snapshot_json,
+           source_snapshot_hash, status, new_draft_task_ids_json,
+           carry_forward_task_refs_json, created_at, updated_at, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        reconciliation.reconciliationId,
+        reconciliation.meetingId,
+        reconciliation.patientSegmentId,
+        reconciliation.patientId,
+        reconciliation.interactionId,
+        reconciliation.contextId,
+        reconciliation.idempotencyKey,
+        JSON.stringify(reconciliation.sourceSnapshot),
+        reconciliation.sourceSnapshotHash,
+        reconciliation.status,
+        JSON.stringify(reconciliation.newDraftTaskIds),
+        JSON.stringify(reconciliation.carryForwardTaskRefs),
+        reconciliation.createdAt,
+        reconciliation.updatedAt,
+        reconciliation.version,
+      );
+  }
+
+  getMeetingReconciliation(
+    reconciliationId: string,
+  ): MeetingReconciliation | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_reconciliations WHERE reconciliation_id = ?",
+      )
+      .get(reconciliationId);
+    return row ? mapMeetingReconciliation(row) : null;
+  }
+
+  getMeetingReconciliationForSegment(
+    segmentId: string,
+  ): MeetingReconciliation | null {
+    const row = this.database
+      .prepare(
+        "SELECT * FROM meeting_reconciliations WHERE patient_segment_id = ?",
+      )
+      .get(segmentId);
+    return row ? mapMeetingReconciliation(row) : null;
+  }
+
+  requireMeetingReconciliation(
+    reconciliationId: string,
+  ): MeetingReconciliation {
+    const reconciliation = this.getMeetingReconciliation(reconciliationId);
+    if (!reconciliation) {
+      throw new DomainError(
+        "MEETING_RECONCILIATION_NOT_FOUND",
+        "Meeting reconciliation not found",
+        false,
+        404,
+      );
+    }
+    return reconciliation;
+  }
+
+  updateMeetingReconciliation(
+    value: MeetingReconciliation,
+    expectedVersion: number,
+  ): MeetingReconciliation {
+    const next = meetingReconciliationSchema.parse(value);
+    if (next.version !== expectedVersion + 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting reconciliation version must advance by one",
+        false,
+        409,
+      );
+    }
+    const current = this.requireMeetingReconciliation(next.reconciliationId);
+    if (
+      current.meetingId !== next.meetingId ||
+      current.patientSegmentId !== next.patientSegmentId ||
+      current.patientId !== next.patientId ||
+      current.interactionId !== next.interactionId ||
+      current.idempotencyKey !== next.idempotencyKey ||
+      current.sourceSnapshotHash !== next.sourceSnapshotHash ||
+      JSON.stringify(current.sourceSnapshot) !==
+        JSON.stringify(next.sourceSnapshot) ||
+      current.createdAt !== next.createdAt
+    ) {
+      throw new DomainError(
+        "MEETING_RECONCILIATION_IDENTITY_MISMATCH",
+        "Meeting reconciliation identity cannot change",
+        false,
+        409,
+      );
+    }
+    const updated = this.database
+      .prepare(`
+        UPDATE meeting_reconciliations
+        SET context_id = ?, status = ?, new_draft_task_ids_json = ?,
+            carry_forward_task_refs_json = ?, updated_at = ?, version = ?
+        WHERE reconciliation_id = ? AND version = ?
+      `)
+      .run(
+        next.contextId,
+        next.status,
+        JSON.stringify(next.newDraftTaskIds),
+        JSON.stringify(next.carryForwardTaskRefs),
+        next.updatedAt,
+        next.version,
+        next.reconciliationId,
+        expectedVersion,
+      );
+    if (updated.changes !== 1) {
+      throw new DomainError(
+        "VERSION_CONFLICT",
+        "Meeting reconciliation changed concurrently",
+        false,
+        409,
+      );
+    }
+    return this.requireMeetingReconciliation(next.reconciliationId);
+  }
+
+  putMeetingCarryForward(value: CarryForwardWarning): void {
+    const warning = carryForwardWarningSchema.parse(value);
+    this.database
+      .prepare(`
+        INSERT INTO meeting_carry_forwards
+          (warning_id, reconciliation_id, patient_id, task_ref, reason,
+           source_refs_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        warning.warningId,
+        warning.reconciliationId,
+        warning.patientId,
+        warning.taskRef,
+        warning.reason,
+        JSON.stringify(warning.sourceRefs),
+        warning.createdAt,
+      );
+  }
+
+  listMeetingCarryForwards(reconciliationId: string): CarryForwardWarning[] {
+    const rows = this.database
+      .prepare(`
+        SELECT *
+        FROM meeting_carry_forwards
+        WHERE reconciliation_id = ?
+        ORDER BY created_at, warning_id
+      `)
+      .all(reconciliationId);
+    return rows.map(mapCarryForward);
   }
 
   putRecordItem(item: PatientRecordItem): void {
