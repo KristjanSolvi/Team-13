@@ -710,6 +710,28 @@ export class SqliteStore {
       .run(contextId, interactionId, patientId, createdAt);
   }
 
+  claimFreshContext(
+    contextId: string,
+    interactionId: string,
+    patientId: string,
+    createdAt: string,
+  ): boolean {
+    return this.transaction(() => {
+      if (this.patientForContext(contextId) !== null) return false;
+      this.database
+        .prepare("DELETE FROM context_mappings WHERE interaction_id = ?")
+        .run(interactionId);
+      this.database
+        .prepare(`
+          INSERT INTO context_mappings
+            (context_id, interaction_id, patient_id, created_at)
+          VALUES (?, ?, ?, ?)
+        `)
+        .run(contextId, interactionId, patientId, createdAt);
+      return true;
+    });
+  }
+
   patientForContext(contextId: string): string | null {
     const row = this.database
       .prepare("SELECT patient_id FROM context_mappings WHERE context_id = ?")

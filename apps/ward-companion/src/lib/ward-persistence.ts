@@ -1,18 +1,20 @@
 import type { CaseNote, Thread } from "@/data/ward";
 
-const STORAGE_KEY = "ward-threads:ward-state:v1";
-const STORAGE_VERSION = 1;
+const STORAGE_KEY = "ward-threads:ward-state:v2";
+const LEGACY_STORAGE_KEY = "ward-threads:ward-state:v1";
+const STORAGE_VERSION = 2;
 
 export type PersistedWardState = {
   threads: Thread[];
   notes: Record<string, CaseNote[]>;
 };
 
-type StorageReader = Pick<Storage, "getItem">;
+type StorageReader = Pick<Storage, "getItem" | "removeItem">;
 type StorageWriter = Pick<Storage, "setItem">;
 
 export function loadWardState(storage: StorageReader): PersistedWardState | null {
   try {
+    storage.removeItem(LEGACY_STORAGE_KEY);
     const raw = storage.getItem(STORAGE_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as unknown;
@@ -41,7 +43,7 @@ export function saveWardState(storage: StorageWriter, state: PersistedWardState)
 }
 
 function isStoredEnvelope(value: unknown): value is {
-  version: 1;
+  version: 2;
   savedAt: string;
   threads: Thread[];
   notes: Record<string, CaseNote[]>;

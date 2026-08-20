@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import express, {
   type ErrorRequestHandler,
@@ -17,6 +17,7 @@ import {
   ehrFileDocumentSchema,
   ehrProfileUpdateSchema,
   ehrReviseDocumentSchema,
+  handoverRequestSchema,
   isTaskCommand,
   pipelineProxyPaths,
   taskCommandSchemas,
@@ -32,6 +33,7 @@ const safeEhrIdentifier = /^[A-Za-z0-9:._-]{1,160}$/;
 export interface CreateIntegrationAppOptions {
   service: IntegrationService;
   allowedOrigins?: string[];
+  integrationApiBearerToken: string;
 }
 
 export function createIntegrationApp(options: CreateIntegrationAppOptions) {
@@ -184,6 +186,20 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
           correlationId(response),
         ),
       );
+    }),
+  );
+
+  app.post(
+    "/api/patients/:patientId/handovers",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      const meta = requestMeta(request, response);
+      const result = await options.service.requestHandover(
+        pathParam(request, "patientId"),
+        handoverRequestSchema.parse(request.body),
+        meta,
+      );
+      response.status(result.status).json(result.body);
     }),
   );
 
@@ -380,6 +396,35 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
   app.use(errorHandler);
 
   return app;
+}
+
+function requireIntegrationBearer(expectedToken: string) {
+  const expectedDigest = tokenDigest(expectedToken);
+  return (request: Request, _response: Response, next: NextFunction) => {
+    const authorization = request.header("authorization") ?? "";
+    const match = /^Bearer ([^\s]+)$/i.exec(authorization);
+    const candidate = match?.[1] ?? "";
+    const authenticated = timingSafeEqual(
+      tokenDigest(candidate),
+      expectedDigest,
+    );
+    if (match === null || !authenticated) {
+      next(
+        new IntegrationError(
+          "UNAUTHORIZED",
+          "Authentication required",
+          401,
+          false,
+        ),
+      );
+      return;
+    }
+    next();
+  };
+}
+
+function tokenDigest(token: string): Buffer {
+  return createHash("sha256").update(token, "utf8").digest();
 }
 
 function correlationId(response: Response): string {

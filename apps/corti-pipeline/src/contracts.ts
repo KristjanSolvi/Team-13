@@ -202,3 +202,57 @@ export interface ScopedToken {
   accessToken: string;
   expiresIn: number;
 }
+
+export interface HandoverGroundedStatement {
+  statement: string;
+  sourceRefs: string[];
+}
+
+export type HandoverTaskState =
+  | "draft"
+  | "offered_to_team"
+  | "assigned_to_member"
+  | "accepted"
+  | "completed"
+  | "escalated";
+
+export interface HandoverTaskItem {
+  taskId: string;
+  threadId: string;
+  summary: string;
+  state: HandoverTaskState;
+  targetTeamId: string;
+  assignedMemberId: string | null;
+  clinicalUrgency: "high" | "medium" | "routine";
+  acceptBy: string;
+  dueBy: string;
+  version: number;
+  sourceRefs: string[];
+}
+
+export interface HandoverPacket {
+  situation: HandoverGroundedStatement[];
+  background: HandoverGroundedStatement[];
+  currentConcerns: HandoverGroundedStatement[];
+  outstandingTasks: HandoverTaskItem[];
+  awaitingVerification: HandoverTaskItem[];
+  escalations: HandoverTaskItem[];
+  unknowns: string[];
+}
+
+export interface RenderHandoverInput {
+  handoverId: string;
+  patientId: string;
+  sourceSnapshotHash: string;
+  packet: HandoverPacket;
+}
+
+export interface RenderedHandover {
+  title: string;
+  sections: Array<{
+    sectionId: string;
+    heading: string;
+    statements: HandoverGroundedStatement[];
+  }>;
+  creditsConsumed: number;
+}

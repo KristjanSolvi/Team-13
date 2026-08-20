@@ -36,6 +36,10 @@ export interface PublishApprovedInput {
   idempotencyKey: string;
 }
 
+type PublicationPreflight =
+  | { kind: "publish" }
+  | { kind: "recover"; contextId: string };
+
 const WARMUP_PROMPT = "Initialize an empty context. Do not call tools.";
 
 export class AgentRunner {
@@ -85,7 +89,10 @@ export class AgentRunner {
       return existing;
     }
 
-    const submitted = await this.gateway.send({ text: WARMUP_PROMPT });
+    const submitted = await this.gateway.send({
+      text: WARMUP_PROMPT,
+      data: { mcpToken: this.mcpToken },
+    });
     const warmup = await this.gateway.waitForCompletion(submitted);
     if (warmup.state !== "completed" || warmup.contextId.length === 0) {
       throw new DomainError(
@@ -102,6 +109,85 @@ export class AgentRunner {
       new Date().toISOString(),
     );
     return warmup.contextId;
+  }
+
+  private verificationScope(input: PublishApprovedInput): string {
+    return `publish-verified:${input.taskId}:${input.expectedVersion + 1}`;
+  }
+
+  private parseVerifiedPublication(
+    value: Record<string, unknown>,
+    contextId: string,
+  ): AgentResult {
+    const taskId = value.taskId;
+    const credits = value.credits;
+    if (
+      value.contextId !== contextId ||
+      value.state !== "completed" ||
+      (taskId !== null && typeof taskId !== "string") ||
+      (credits !== undefined && typeof credits !== "number")
+    ) {
+      throw new DomainError(
+        "TASK_PUBLICATION_UNCONFIRMED",
+        "Stored publication verification is invalid",
+        true,
+        502,
+      );
+    }
+    return {
+      contextId,
+      taskId,
+      state: "completed",
+      ...(typeof credits === "number" ? { credits } : {}),
+    };
+  }
+
+  private verifyPublication(
+    input: PublishApprovedInput,
+    contextId: string,
+    candidate: AgentResult,
+  ): AgentResult {
+    return this.store.transaction(() => {
+      const verificationScope = this.verificationScope(input);
+      const replay = this.store.getProcessedCommand(
+        verificationScope,
+        input.idempotencyKey,
+      );
+      if (replay) return this.parseVerifiedPublication(replay, contextId);
+
+      const committed = this.store.requireTask(input.taskId);
+      const publication = this.store.getProcessedCommand(
+        `publish:${input.taskId}`,
+        input.idempotencyKey,
+      );
+      if (
+        committed.state !== "offered_to_team" ||
+        committed.version !== input.expectedVersion + 1 ||
+        publication?.taskId !== input.taskId
+      ) {
+        throw new DomainError(
+          "TASK_PUBLICATION_UNCONFIRMED",
+          "Task publication was not committed",
+          true,
+          502,
+        );
+      }
+      this.store.appendTaskEvent(
+        committed,
+        input.interactionId,
+        contextId,
+        { type: "agent", id: "corti" },
+        "task.publish_verified",
+        {},
+      );
+      this.store.saveProcessedCommand(
+        verificationScope,
+        input.idempotencyKey,
+        candidate,
+        committed.updatedAt,
+      );
+      return candidate;
+    });
   }
 
   async investigate(input: InvestigateSignalInput): Promise<AgentResult> {
@@ -139,26 +225,60 @@ export class AgentRunner {
   }
 
   async publishApproved(input: PublishApprovedInput): Promise<AgentResult> {
-    const task = this.store.requireTask(input.taskId);
-    const thread = this.store.requireThread(task.threadId);
-    if (
-      task.patientId !== input.patientId ||
-      thread.interactionId !== input.interactionId
-    ) {
-      throw new DomainError(
-        "PATIENT_SCOPE_DENIED",
-        "Patient scope is unavailable",
-        false,
-        403,
+    const preflight: PublicationPreflight = this.store.transaction(() => {
+      const task = this.store.requireTask(input.taskId);
+      const thread = this.store.requireThread(task.threadId);
+      if (
+        task.patientId !== input.patientId ||
+        thread.interactionId !== input.interactionId
+      ) {
+        throw new DomainError(
+          "PATIENT_SCOPE_DENIED",
+          "Patient scope is unavailable",
+          false,
+          403,
+        );
+      }
+      const contextId = this.store.contextForInteraction(input.interactionId);
+      if (
+        contextId !== null &&
+        this.store.patientForContext(contextId) === input.patientId &&
+        this.store.getProcessedCommand(
+          this.verificationScope(input),
+          input.idempotencyKey,
+        ) !== null
+      ) {
+        return { kind: "recover", contextId };
+      }
+      if (task.state === "draft" && task.version === input.expectedVersion) {
+        return { kind: "publish" };
+      }
+      const publication = this.store.getProcessedCommand(
+        `publish:${input.taskId}`,
+        input.idempotencyKey,
       );
-    }
-    if (task.state !== "draft" || task.version !== input.expectedVersion) {
+      if (
+        task.state === "offered_to_team" &&
+        task.version === input.expectedVersion + 1 &&
+        publication?.taskId === input.taskId &&
+        contextId !== null &&
+        this.store.patientForContext(contextId) === input.patientId
+      ) {
+        return { kind: "recover", contextId };
+      }
       throw new DomainError(
         "VERSION_CONFLICT",
         "Draft changed before publication",
         false,
         409,
       );
+    });
+    if (preflight.kind === "recover") {
+      return this.verifyPublication(input, preflight.contextId, {
+        contextId: preflight.contextId,
+        taskId: null,
+        state: "completed",
+      });
     }
     const contextId = await this.ensureContext(
       input.patientId,
@@ -183,18 +303,6 @@ export class AgentRunner {
     });
     const completed = await this.gateway.waitForCompletion(submitted);
     const result = this.requireCompletedInContext(completed, contextId);
-    const committed = this.store.requireTask(input.taskId);
-    if (
-      committed.state !== "offered_to_team" ||
-      committed.version !== input.expectedVersion + 1
-    ) {
-      throw new DomainError(
-        "TASK_PUBLICATION_UNCONFIRMED",
-        "Task publication was not committed",
-        true,
-        502,
-      );
-    }
-    return result;
+    return this.verifyPublication(input, contextId, result);
   }
 }

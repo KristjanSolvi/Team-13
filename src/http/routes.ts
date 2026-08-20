@@ -13,6 +13,7 @@ import { demoScenarios } from "../demo/types.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor, requireAppAuth } from "./auth.js";
+import { mountHandoverRoutes } from "./handover-routes.js";
 
 const EVIDENCE_REFERENCE = /^(encounter|record|dictation):[A-Za-z0-9._-]+$/;
 const SAFE_CORRELATION_ID = /^[A-Za-z0-9._-]{1,100}$/;
@@ -64,6 +65,7 @@ const asyncRoute =
 export function mountRoutes(app: Router, dependencies: AppDependencies): void {
   const router = Router();
   router.use(requireAppAuth(dependencies.appBearerToken));
+  mountHandoverRoutes(router, dependencies);
 
   router.post(
     "/signals",

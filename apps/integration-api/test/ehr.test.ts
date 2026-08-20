@@ -94,7 +94,10 @@ function harness() {
   return {
     profile,
     mockEhr,
-    app: createIntegrationApp({ service }),
+    app: createIntegrationApp({
+      service,
+      integrationApiBearerToken: "integration-public-token",
+    }),
   };
 }
 

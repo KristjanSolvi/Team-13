@@ -57,11 +57,12 @@ function Index() {
   const [open, setOpen] = useState(true);
   const [view, setView] = useState<"board" | "activity" | "insights">("board");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
-  const [activeThreadId, setActiveThreadId] = useState<string | null>("t1");
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [cameFromBoard, setCameFromBoard] = useState(false);
   const [scopeId, setScopeId] = useState<string | null>(null);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
+  const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId ?? "ward"}` : view);
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
@@ -82,9 +83,24 @@ function Index() {
         ...authoritative,
       ]);
     } catch {
-      // Retain visibly labelled demo fixtures when authoritative services are unavailable.
+      // Retain current local work when authoritative services are unavailable.
     }
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const launcherClicked =
+        target instanceof Element && target.closest("[data-ward-launcher]") !== null;
+      if (!launcherClicked && !panelRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   useEffect(() => {
     const persisted = loadWardState(window.localStorage);
@@ -296,7 +312,6 @@ function Index() {
   };
 
   const handleAddThread = (patientId: string, title: string) => {
-    const patient = patients.find((p) => p.id === patientId);
     const id = `t-${Date.now()}`;
     setThreads((prev) => [
       ...prev,
@@ -307,12 +322,9 @@ function Index() {
         status: "pending",
         heard: "Added by hand on the ward.",
         matters: "Flagged as worth following through to completion.",
-        suggestion: `Offer this to whoever is free in ${patient?.bay ?? "the bay"}.`,
+        suggestion: "Awaiting assignment.",
         assignee: null,
-        candidates: [
-          { name: "Nurse in charge", role: "Coordinator", free: true },
-          { name: "Dr. Neve Halloran", role: "SHO", free: true },
-        ],
+        candidates: [],
         due: "Today",
         activity: [
           { id: `${id}-1`, at: stamp(), actor: "You", text: "Thread created.", kind: "system" },
@@ -349,7 +361,10 @@ function Index() {
       />
 
       {open && (
-        <section className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300">
+        <section
+          ref={panelRef}
+          className="liquid-glass fixed bottom-4 right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-[52rem] flex-col overflow-hidden rounded-[28px] transition-[max-width] duration-300"
+        >
           <header className="border-b border-white/25 bg-white/12 px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <ViewTabs
@@ -430,14 +445,7 @@ function Index() {
               </div>
             ) : view === "insights" ? (
               <div key="insights" className="fade-in-view h-full">
-                <Insights
-                  threads={threads}
-                  onOpenPatient={(pid) => {
-                    setEhrPatientId(pid);
-                    setCameFromBoard(false);
-                    setView("activity");
-                  }}
-                />
+                <Insights threads={threads} />
               </div>
             ) : (
               <div key="board" className="fade-in-view flex h-full flex-col">
@@ -450,10 +458,8 @@ function Index() {
                   </div>
                   <dl className="flex gap-6 text-[12.5px] text-muted-foreground">
                     <div>
-                      <dt>Home tomorrow</dt>
-                      <dd className="text-foreground">
-                        {patients.filter((p) => p.homeTomorrow).length}
-                      </dd>
+                      <dt>Patients</dt>
+                      <dd className="text-foreground">{patients.length}</dd>
                     </div>
                     <div>
                       <dt>Past deadline</dt>
@@ -464,7 +470,6 @@ function Index() {
                 <div className="flex-1 overflow-y-auto p-5">
                   <WardBoard
                     threads={threads}
-                    notes={notes}
                     activePatientId={ehrPatientId}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
@@ -493,7 +498,7 @@ function Index() {
         </section>
       )}
 
-      {!open && <FloatingLauncher onOpen={() => setOpen(true)} />}
+      <FloatingLauncher open={open} onToggle={() => setOpen((current) => !current)} />
     </div>
   );
 }

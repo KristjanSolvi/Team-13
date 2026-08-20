@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 
+import type { HandoverAgentRunner } from "../agent/handover-runner.js";
 import type { AgentRunner } from "../agent/runner.js";
 import type { DemoClock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
@@ -25,6 +26,7 @@ export interface AppDependencies {
   appBearerToken: string;
   mcpBearerToken: string;
   runner?: AgentRunner;
+  handoverRunner?: Pick<HandoverAgentRunner, "generate">;
 }
 
 export function createApp(dependencies: AppDependencies): Express {

@@ -27,6 +27,9 @@ Medical Coding.
 - `GET /api/patients/:patientId/companion`: map those authoritative records
   into the current Ward Companion `Thread` read model without coupling the
   backend to the UI component tree.
+- `POST /api/patients/:patientId/handovers`: generate or replay one grounded,
+  attributable patient handover by coordinating the Agentic draft, dedicated
+  Corti renderer, and snapshot-checked finalization.
 - `GET /api/events/stream`: proxy the Agentic SSE stream while keeping the
   application bearer token server-side; supports `Last-Event-ID` resume.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
@@ -63,6 +66,26 @@ Synthetic consumer examples live in [`fixtures/`](fixtures/). UI work can build
 against those examples and replace only its adapter when the live services are
 available.
 
+Request an on-demand handover through the public integration boundary:
+
+```bash
+curl --request POST \
+  http://127.0.0.1:8790/api/patients/synthetic-karen/handovers \
+  --header "authorization: Bearer $INTEGRATION_API_BEARER_TOKEN" \
+  --header 'content-type: application/json' \
+  --header 'x-actor-id: clinician:demo' \
+  --header 'x-correlation-id: handover-demo-1' \
+  --data '{
+    "idempotencyKey": "handover-demo-001",
+    "reason": "on_demand",
+    "focus": null
+  }'
+```
+
+The caller supplies the dedicated inbound `INTEGRATION_API_BEARER_TOKEN`. The
+browser never receives or supplies the separate private Agentic service bearer.
+A replay returns `200`; a newly generated handover returns `201`.
+
 ## Ward Companion boundary
 
 The companion projection matches the existing UI fields (`id`, `title`,
@@ -90,10 +113,18 @@ npm test
 npm run dev
 ```
 
-Use the same `AGENTIC_APP_BEARER_TOKEN` configured by the Agentic/MCP backend.
-Set `PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
-private-service values. Never expose any of these tokens to the browser or
-commit `.env`.
+Generate a dedicated `INTEGRATION_API_BEARER_TOKEN` for inbound handover
+requests. Do not reuse it as `AGENTIC_APP_BEARER_TOKEN`, which must match the
+Agentic/MCP backend's private application token. Set
+`PATIENT_PROFILE_BEARER_TOKEN` and `MOCK_EHR_BEARER_TOKEN` to the matching
+private-service values. Never commit `.env`.
+
+Keep ordinary upstream calls on `UPSTREAM_TIMEOUT_MS=8000`. Use
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover draft generation and Corti
+rendering. The draft can contain two Corti agent phases, each allowing up to 60
+seconds to send and 180 seconds to poll, so the dedicated value cannot be lower
+than 480000 and may be raised to at most 900000. Finalization remains on the
+ordinary timeout because it is a local snapshot-checked ledger write.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on
 port `5173` are accepted by the example configuration. Add the deployed or

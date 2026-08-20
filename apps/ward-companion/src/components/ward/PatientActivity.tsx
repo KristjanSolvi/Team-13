@@ -12,7 +12,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import type { Thread, ThreadStatus } from "@/data/ward";
-import { patients, staff, statusDotClass, statusLabels } from "@/data/ward";
+import { patients, statusDotClass, statusLabels } from "@/data/ward";
 import type { WardTaskCommand } from "@/lib/follow-through-api";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
@@ -252,7 +252,7 @@ export function PatientActivity({
 
           {items.length === 0 && (
             <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[13.5px] text-muted-foreground">
-              Nothing here — everything in this filter is clear.
+              No tracked work in this view.
             </p>
           )}
 
@@ -288,7 +288,7 @@ export function PatientActivity({
                           </span>
                         )}
                         {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due} · {thread.backend === undefined ? "demo fixture" : "ledger"}
+                        {thread.due} · {thread.backend === undefined ? "local task" : "ledger"}
                       </span>
                     </span>
                     <ChevronDown
@@ -385,34 +385,41 @@ export function PatientActivity({
                               Assign to {suggested.name.split(" ")[0]}
                             </button>
                           )}
-                          <button
-                            onClick={() => setPickerFor(pickerFor === thread.id ? null : thread.id)}
-                            className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-muted-foreground hover:bg-background"
-                            aria-label="Choose someone else"
-                          >
-                            …
-                          </button>
+                          {thread.candidates.length > 0 && (
+                            <button
+                              onClick={() =>
+                                setPickerFor(pickerFor === thread.id ? null : thread.id)
+                              }
+                              className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-muted-foreground hover:bg-background"
+                              aria-label="Choose someone else"
+                            >
+                              …
+                            </button>
+                          )}
                         </div>
                       )}
 
                       {pickerFor === thread.id && (
                         <div className="flex flex-wrap gap-1.5">
-                          {staff.map((s) => (
+                          {thread.candidates.map((candidate) => (
                             <button
-                              key={s.name}
+                              key={candidate.name}
                               onClick={() => {
-                                onAssign(thread.id, thread.assignee === s.name ? null : s.name);
+                                onAssign(
+                                  thread.id,
+                                  thread.assignee === candidate.name ? null : candidate.name,
+                                );
                                 setPickerFor(null);
                               }}
                               className={`rounded-full border px-2.5 py-1 text-[12.5px] transition-colors ${
-                                thread.assignee === s.name
+                                thread.assignee === candidate.name
                                   ? "border-teal bg-teal/10 text-teal"
                                   : "border-border bg-panel text-foreground hover:bg-background"
                               }`}
                             >
-                              {s.name}
+                              {candidate.name}
                               <span className="ml-1 text-muted-foreground">
-                                {s.free ? "· free" : "· busy"}
+                                {candidate.free ? "· free" : "· busy"}
                               </span>
                             </button>
                           ))}

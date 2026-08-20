@@ -1,5 +1,7 @@
 import type { Server } from "node:http";
 
+import type { GenerateHandoverInput } from "../src/agent/handover-runner.js";
+import type { HandoverRecord } from "../src/domain/handover.js";
 import { seedKaren } from "../src/fixtures/karen.js";
 import { createApp } from "../src/http/app.js";
 import { DemoClock } from "../src/infra/clock.js";
@@ -15,7 +17,13 @@ export const APP_TOKEN = "app-secret";
 export const MCP_TOKEN = "mcp-secret";
 export const UI_ORIGIN = "http://127.0.0.1:5173";
 
-export function createAppHarness() {
+export function createAppHarness(
+  options: {
+    handoverRunner?: {
+      generate(input: GenerateHandoverInput): Promise<HandoverRecord>;
+    };
+  } = {},
+) {
   const store = new SqliteStore(openDatabase(":memory:"));
   seedKaren(store, "2026-08-20T10:00:00.000Z");
   store.putContextMapping(
@@ -45,6 +53,9 @@ export function createAppHarness() {
     uiOrigin: UI_ORIGIN,
     appBearerToken: APP_TOKEN,
     mcpBearerToken: MCP_TOKEN,
+    ...(options.handoverRunner
+      ? { handoverRunner: options.handoverRunner }
+      : {}),
   });
   return {
     app,

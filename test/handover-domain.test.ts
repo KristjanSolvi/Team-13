@@ -351,3 +351,59 @@ test("rendered handover schema returns trimmed display labels", () => {
   assert.equal(rendered.sections[0]?.sectionId, "situation");
   assert.equal(rendered.sections[0]?.heading, "Situation");
 });
+
+test("rendered handover schema permits ungrounded statements only in unknowns", () => {
+  const valid = renderedHandoverSchema.safeParse({
+    title: "Current handover",
+    sections: [
+      {
+        sectionId: "unknowns",
+        heading: "Unknowns",
+        statements: [
+          {
+            statement: "The response is not yet documented.",
+            sourceRefs: [],
+          },
+        ],
+      },
+    ],
+    creditsConsumed: 0,
+  });
+  assert.equal(valid.success, true);
+
+  const unknownWithEvidence = renderedHandoverSchema.safeParse({
+    title: "Current handover",
+    sections: [
+      {
+        sectionId: "unknowns",
+        heading: "Unknowns",
+        statements: [
+          {
+            statement: "The response is not yet documented.",
+            sourceRefs: ["record:medication-1"],
+          },
+        ],
+      },
+    ],
+    creditsConsumed: 0,
+  });
+  assert.equal(unknownWithEvidence.success, false);
+
+  const ungroundedClinicalStatement = renderedHandoverSchema.safeParse({
+    title: "Current handover",
+    sections: [
+      {
+        sectionId: "situation",
+        heading: "Situation",
+        statements: [
+          {
+            statement: "Karen has a recent medication change.",
+            sourceRefs: [],
+          },
+        ],
+      },
+    ],
+    creditsConsumed: 0,
+  });
+  assert.equal(ungroundedClinicalStatement.success, false);
+});

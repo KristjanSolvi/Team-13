@@ -1,6 +1,8 @@
-import { type Corti, CortiClient } from "@corti/sdk";
-
-import { FOLLOW_THROUGH_PROMPT } from "../src/agent/prompt.js";
+import { CortiClient } from "@corti/sdk";
+import {
+  buildAgentDefinitions,
+  buildProvisioningSummary,
+} from "../src/agent/definitions.js";
 import { parseConfig } from "../src/config.js";
 
 const config = parseConfig(process.env);
@@ -13,25 +15,21 @@ const client = new CortiClient({
   },
   analytics: { examples_repo: "team-13-follow-through" },
 });
-const mcpServer: Corti.AgentsCreateMcpServer = {
-  name: config.mcpName,
-  description:
-    "Six patient-scoped tools for record investigation and clinician-approved team-task publication.",
-  transportType: "streamable_http",
-  authorizationType: "bearer",
-  url: config.mcpPublicUrl,
-};
-const definition = {
-  name: "Follow-Through Orchestrator",
-  description:
-    "Investigates registered conversation evidence and creates clinician-approved team tasks.",
-  systemPrompt: FOLLOW_THROUGH_PROMPT,
-  mcpServers: [mcpServer],
-};
-const agent = config.cortiAgentId
-  ? await client.agents.update(config.cortiAgentId, definition)
-  : await client.agents.create(definition);
+const definitions = buildAgentDefinitions(config);
+const taskAgent = config.cortiAgentId
+  ? await client.agents.update(config.cortiAgentId, definitions.task)
+  : await client.agents.create(definitions.task);
+const handoverAgent = config.cortiHandoverAgentId
+  ? await client.agents.update(
+      config.cortiHandoverAgentId,
+      definitions.handover,
+    )
+  : await client.agents.create(definitions.handover);
 
 console.log(
-  JSON.stringify({ agentId: agent.id, mcpUrl: config.mcpPublicUrl }, null, 2),
+  JSON.stringify(
+    buildProvisioningSummary(config, taskAgent.id, handoverAgent.id),
+    null,
+    2,
+  ),
 );
