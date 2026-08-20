@@ -114,7 +114,9 @@ function Index() {
   useEffect(() => {
     const persisted = loadWardState(window.localStorage);
     if (persisted !== null) {
-      setThreads(persisted.threads);
+      // Preserve real saved work. An empty state from the earlier fixture-free
+      // phase is reseeded so the hackathon demo is useful again after refresh.
+      setThreads(persisted.threads.length > 0 ? persisted.threads : initialThreads);
       setNotes(persisted.notes);
     }
     setPersistenceReady(true);

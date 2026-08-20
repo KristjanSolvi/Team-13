@@ -1,3 +1,5 @@
+import { demoThreads } from "./demo-threads";
+
 export type ThreadStatus = "pending" | "tracking" | "verified" | "escalated";
 
 export type ActivityEntry = {
@@ -20,6 +22,7 @@ export type Thread = {
   candidates: { name: string; role: string; free: boolean }[];
   due: string;
   activity: ActivityEntry[];
+  fixture?: "demo";
   backend?: {
     threadId: string;
     taskId: string | null;
@@ -170,7 +173,7 @@ export const patients: Patient[] = [
   },
 ];
 
-export const initialThreads: Thread[] = [];
+export const initialThreads: Thread[] = demoThreads;
 
 export const statusLabels: Record<ThreadStatus, string> = {
   pending: "Pending",

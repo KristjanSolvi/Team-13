@@ -18,14 +18,16 @@ Team-13 repository. Fetch it through the `ward-ui` remote and port changes into
 this directory path-by-path; do not merge its unrelated root history directly
 into Team-13.
 
-Lovable is the source for visual design and interaction changes, not runtime
-ward data. Every sync must preserve these product boundaries:
+Lovable is the source for visual design, interaction changes, and temporary
+hackathon demo fixtures. Every sync must preserve these product boundaries:
 
-- `initialThreads` starts empty. Never import seeded tasks, checkpoints, or
-  activity trails into the Ward Threads overlay.
-- Do not import hardcoded staff availability, assignment rosters, discharge
-  readiness, expected-discharge dates, latest-plan text, or similar operational
-  claims into Ward Threads.
+- Seeded threads, checkpoints, activity trails, staff availability, operational
+  counts, and discharge labels are allowed during the current demo phase. Keep
+  them isolated and explicitly identifiable as demo fixtures so they can be
+  removed cleanly later.
+- Demo fixtures must not carry backend identifiers, masquerade as live data, or
+  overwrite non-empty persisted work. Authoritative backend data remains the
+  source of truth whenever it is available for a patient.
 - Keep persisted live work and the v2-or-newer storage migration that removes
   the old v1 fixture state.
 - Keep the EHR shell fixtures and the patient roster, names, beds, and EHR notes;
@@ -34,6 +36,7 @@ ward data. Every sync must preserve these product boundaries:
   task correction flow, record closure, Railway configuration, and environment
   handling when porting Lovable UI changes.
 
-After each sync, audit `src/data/ward.ts`, `src/components/ward`, and
-`src/routes/index.tsx` for reintroduced fixture work, then run typecheck, lint,
-and the production build before committing.
+After each sync, audit `src/data/ward.ts`, demo fixture files,
+`src/components/ward`, and `src/routes/index.tsx` to keep fixtures separate from
+backend state, then run typecheck, lint, and the production build before
+committing.
