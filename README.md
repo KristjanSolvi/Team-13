@@ -16,6 +16,8 @@ Lovable Ward UI (8080)
           evidence registry + approval proof + task/thread ledger
       -> Patient profile service (8791)
           versioned manual details + immutable referral snapshots
+      -> Downstream gateway (8792)
+          idempotent delivery + independent provider readback
       -> Synthetic mock EHR (8793)
           versioned document drafts + explicit immutable filing
 ```
@@ -35,6 +37,7 @@ cp .env.example .env
 cp apps/corti-pipeline/.env.example apps/corti-pipeline/.env
 cp apps/integration-api/.env.example apps/integration-api/.env
 cp apps/patient-profile/.env.example apps/patient-profile/.env
+cp apps/downstream-gateway/.env.example apps/downstream-gateway/.env
 cp apps/mock-ehr/.env.example apps/mock-ehr/.env
 cp apps/ward-companion/.env.example apps/ward-companion/.env
 ```
@@ -47,6 +50,8 @@ cp apps/ward-companion/.env.example apps/ward-companion/.env
   be exposed in a `VITE_*` variable.
 - Use another private bearer for `apps/mock-ehr/.env`; copy both private values
   into the Integration API environment under their matching variable names.
+- Use a third private bearer for `apps/downstream-gateway/.env`; copy it into
+  the Integration API as `DOWNSTREAM_BEARER_TOKEN`.
 - Use long, independent random values for the application bearer, MCP bearer,
   and approval HMAC secret.
 - Keep `DEMO_MODE=true` only for the synthetic hackathon demo.
@@ -67,15 +72,19 @@ npm run dev
 cd apps/patient-profile
 npm run dev
 
-# 4. Synthetic mock EHR document store
+# 4. Simulated external task delivery and readback
+cd apps/downstream-gateway
+npm run dev
+
+# 5. Synthetic mock EHR document store
 cd apps/mock-ehr
 npm run dev
 
-# 5. Browser-facing integration API
+# 6. Browser-facing integration API
 cd apps/integration-api
 npm run dev
 
-# 6. Lovable Ward Threads UI
+# 7. Lovable Ward Threads UI
 cd apps/ward-companion
 npm run dev
 ```
@@ -120,6 +129,12 @@ npm test
 npm run typecheck
 npm run build
 
+# Downstream delivery gateway
+cd apps/downstream-gateway
+npm test
+npm run typecheck
+npm run build
+
 # Ward UI
 cd apps/ward-companion
 npm run typecheck
@@ -129,11 +144,11 @@ npm run build
 
 ## Railway deployment
 
-The repository contains Railway configuration for all six services. Deploy
+The repository contains Railway configuration for all seven services. Deploy
 the Lovable Ward UI and browser-facing integration API publicly, keep the Corti
-pipeline, patient-profile, and mock-EHR services on Railway's private network, and expose
+pipeline, patient-profile, downstream-gateway, and mock-EHR services on Railway's private network, and expose
 only the Agentic `/mcp` service required by Corti. Attach separate persistent
-volumes to the Agentic, patient-profile, and mock-EHR services for their SQLite databases.
+volumes to the Agentic, patient-profile, downstream-gateway, and mock-EHR services for their SQLite databases.
 
 Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
 service roots, variables, bring-up order, and health checks. Do not add

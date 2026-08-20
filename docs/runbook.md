@@ -140,6 +140,13 @@ npm run dev
 ```
 
 ```bash
+cd /Users/solvisantos/.config/superpowers/worktrees/hackathon-kit/agentic-mcp/apps/downstream-gateway
+cp .env.example .env
+npm install
+npm run dev
+```
+
+```bash
 cd /Users/solvisantos/.config/superpowers/worktrees/hackathon-kit/agentic-mcp/apps/mock-ehr
 cp .env.example .env
 npm install
@@ -156,9 +163,10 @@ npm run dev
 In `apps/integration-api/.env`, keep `AGENTIC_BASE_URL=http://127.0.0.1:3000`,
 `PIPELINE_BASE_URL=http://127.0.0.1:8787`,
 `PATIENT_PROFILE_BASE_URL=http://127.0.0.1:8791`, and
+`DOWNSTREAM_BASE_URL=http://127.0.0.1:8792`, and
 `MOCK_EHR_BASE_URL=http://127.0.0.1:8793`. Set `AGENTIC_APP_BEARER_TOKEN` to
-the backend's `APP_BEARER_TOKEN`, and set the profile/mock-EHR bearer values to
-their matching private service tokens. Generate a separate
+the backend's `APP_BEARER_TOKEN`, and set the profile/downstream/mock-EHR bearer
+values to their matching private service tokens. Generate a separate
 `INTEGRATION_API_BEARER_TOKEN` of at least eight characters for callers of the
 public handover endpoint; never reuse `AGENTIC_APP_BEARER_TOKEN`. Add the actual
 Lovable preview origin to `UI_ORIGINS`; do not use a wildcard.
@@ -175,6 +183,9 @@ Confirm the handover path is ready before spending credit:
 ```bash
 curl --fail http://127.0.0.1:3000/healthz
 curl --fail http://127.0.0.1:8787/health
+curl --fail http://127.0.0.1:8791/healthz
+curl --fail http://127.0.0.1:8792/healthz
+curl --fail http://127.0.0.1:8793/healthz
 curl --fail http://127.0.0.1:8790/readyz
 ```
 
@@ -208,8 +219,11 @@ follow-through items”**, never “clear for discharge” or “ready for disch
 
 For the Nervecentre surface, read `GET /api/ehr/patients/:patientId`, apply
 patient edits through `PATCH /api/ehr/patients/:patientId/profile`, and use the
-`/api/ehr/documents/*` draft/revise/file routes. Do not call the profile or
-mock-EHR services directly from the browser.
+`/api/ehr/documents/*` draft/revise/file routes. Create immutable referral
+snapshots through the Integration API and include `referralSnapshotId` when
+approving the matching referral task. Read delivery state from
+`GET /api/tasks/:taskId/deliveries`. Do not call profile, downstream, or mock-EHR
+services directly from the browser.
 
 ## Reset and recovery
 

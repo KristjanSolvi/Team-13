@@ -35,12 +35,16 @@ its matching task.
 - `GET /api/deliveries/:deliveryId/events` reads its attributed audit trail.
 - `GET /api/pending-readbacks` lists non-terminal provider work.
 - `POST /api/deliveries/:deliveryId/readback` reads and records provider state.
+- `POST /api/deliveries/:deliveryId/acknowledge` marks a completed outcome as
+  durably applied to the source ledger; completed but unacknowledged work stays
+  in the pending-readback list.
 - `POST /api/simulation/deliveries/:deliveryId/status` changes the simulated
   provider state when simulation is enabled.
 
 All `/api` routes require the private bearer. Submission and simulation writes
 require `x-actor-id`; simulation actors must additionally begin with
-`downstream:`. The browser must eventually reach these operations through the
+`downstream:`. Readback acknowledgement requires an actor beginning with
+`system:`. The browser reaches safe operations through the
 Integration API and must never receive the bearer token.
 
 ## Provider adapter contract
