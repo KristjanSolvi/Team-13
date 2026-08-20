@@ -1,34 +1,84 @@
-# Ward Companion
+# Ward Companion UI
 
-design a calm, minimal web app for hospital ward clinicians & nurses. It's a demo using mock data, no backend needed 
+The product shell for Follow-Through: a calm ward rail and bed board that turns
+evidence from clinical conversations into clinician-reviewed, trackable work.
 
-Concept: it sits beside a hospital's EHR and tracks things said in conversation (a symptom, a promised referral) through to verified completion, not just documentation. Each tracked item ("thread") has a status: pending (needs a clinician's yes/no), tracking (confirmed, in progress), verified (done), or escalated (missed deadline).
+This directory began as the Lovable prototype from
+[`YaldesDev/ward-companion`](https://github.com/YaldesDev/ward-companion) and is
+imported into the submission repository with Git subtree history. It is now
+being connected to the real Corti pipeline and the shared integration API. The
+visual shell, patient records, Nervecentre screen, staffing information, tasks,
+and historical activity are synthetic demo fixtures; they are not a live EHR.
 
-with 2 views
+## Current live boundary
 
-Two views, toggled:
+- `Corti Ambient` uses the real browser microphone adapter from
+  `apps/corti-pipeline` and shows transcript and audio-quality events.
+- Final transcript evidence is sent to the pipeline's conservative candidate
+  generator.
+- Evidence-backed candidates are sent to the integration API for record and
+  open-work checks. A candidate is not a task and does not authorize action.
+- If the integration/agent service is unavailable, the UI retains the
+  candidate without creating local work.
+- Existing board rows and activity controls are demo fixtures until they are
+  replaced with the authoritative Agentic/MCP overview and command endpoints.
+- Nervecentre, inbox, district-nursing, and task-system behavior is simulated;
+  no external clinical system is connected.
 
-A background hovering sidebar that can list patients with an active thread, using agentic system (just simulate this) to suggest what was said, why it matters, whats the next action the agent suggests (and allow people to manually input new tasks), offer the action to the right group of people involved who are free, allow people to take on the action/who's assigned, an activity trail with timestamps, then simple actions as one tap buttons, and edit options or write updates to an activity
+## Local development
 
-Ward board — a gallery of beds, grouped into bays, showing every patient (not just active threads), a status count summary at top, and small clickable chips for each open item. A patient with nothing outstanding shows a calm "clear for discharge" line. Never blame a clinician for a delay — just show what's outstanding and who can help. Who's planned for home next day, what are people waiting for, what's happening today for each patient (eg. CT scan at 12pm)
+Use Node.js 22 or newer. Keep all credentials in ignored `.env` files; no Corti
+secret or Agentic bearer token belongs in this browser application.
 
-This project was built with [Lovable](https://lovable.dev).
+```bash
+# Terminal 1 — Corti pipeline (port 8787)
+cd apps/corti-pipeline
+cp .env.example .env  # once, then add the event credentials
+npm install
+npm run dev
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3d2ceb31-d443-4d7a-88dc-c45c4b094061).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+# Terminal 2 — UI (normally port 5173)
+cd apps/ward-companion
+cp .env.example .env  # optional; blank VITE values use same-origin proxies
+npm install
 npm run dev
 ```
+
+For candidate investigation, also run the integration API on port 8790 and the
+Agentic/MCP backend on port 3000. Until the teammate's Agentic HTTP routes are
+implemented, investigation will visibly fail closed; this is expected and is
+safer than manufacturing a task in browser state.
+
+```bash
+# Terminal 3
+cd apps/integration-api
+cp .env.example .env
+npm install
+npm run dev
+
+# Terminal 4
+cd ../..
+npm install
+npm run dev
+```
+
+Checks:
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Updating the Lovable source
+
+The team repository is canonical. Fetch and inspect upstream before importing a
+new Lovable change, then pull it as a squash subtree commit from a clean branch:
+
+```bash
+git fetch ward-ui main
+git subtree pull --prefix apps/ward-companion ward-ui main --squash
+```
+
+Do not push this feature branch to the Lovable repository's `main`. Product
+integration commits belong in the Team-13 repository.

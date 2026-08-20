@@ -24,6 +24,7 @@ export type Thread = {
 
 export type Patient = {
   id: string;
+  pipelinePatientId: string;
   name: string;
   bed: string;
   bay: string;
@@ -67,6 +68,7 @@ export const bays: Bay[] = [
 export const patients: Patient[] = [
   {
     id: "p1",
+    pipelinePatientId: "synthetic-karen",
     name: "Arthur M. Pender",
     bed: "04",
     bay: "Bay A",
@@ -76,6 +78,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p2",
+    pipelinePatientId: "synthetic-sarah",
     name: "Sarah Jenkins",
     bed: "05",
     bay: "Bay A",
@@ -85,6 +88,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p3",
+    pipelinePatientId: "synthetic-ib",
     name: "Robert Chen",
     bed: "06",
     bay: "Bay A",
@@ -94,6 +98,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p4",
+    pipelinePatientId: "synthetic-elena",
     name: "Elena Rodriguez",
     bed: "07",
     bay: "Bay B",
@@ -103,6 +108,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p5",
+    pipelinePatientId: "synthetic-samir",
     name: "Samir Al-Fayed",
     bed: "09",
     bay: "Bay B",
@@ -112,6 +118,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p6",
+    pipelinePatientId: "synthetic-grace",
     name: "Grace Okonkwo",
     bed: "10",
     bay: "Bay C",
@@ -121,6 +128,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p7",
+    pipelinePatientId: "synthetic-tomas",
     name: "Tomas Lindqvist",
     bed: "11",
     bay: "Bay C",
@@ -130,6 +138,7 @@ export const patients: Patient[] = [
   },
   {
     id: "p8",
+    pipelinePatientId: "synthetic-ivy",
     name: "Ivy Doherty",
     bed: "12",
     bay: "Bay C",
@@ -156,9 +165,27 @@ export const initialThreads: Thread[] = [
     ],
     due: "Today 12:45",
     activity: [
-      { id: "a1", at: "09:12", actor: "Ward round", text: "Heard during round and captured as a thread.", kind: "system" },
-      { id: "a2", at: "10:15", actor: "Nurse Kelly O.", text: "\u201cPatient prepped and waiting in chair. Gown changed.\u201d", kind: "note" },
-      { id: "a3", at: "11:02", actor: "Portering", text: "Acknowledged and en route at 12:30.", kind: "action" },
+      {
+        id: "a1",
+        at: "09:12",
+        actor: "Ward round",
+        text: "Heard during round and captured as a thread.",
+        kind: "system",
+      },
+      {
+        id: "a2",
+        at: "10:15",
+        actor: "Nurse Kelly O.",
+        text: "\u201cPatient prepped and waiting in chair. Gown changed.\u201d",
+        kind: "note",
+      },
+      {
+        id: "a3",
+        at: "11:02",
+        actor: "Portering",
+        text: "Acknowledged and en route at 12:30.",
+        kind: "action",
+      },
     ],
   },
   {
@@ -177,7 +204,13 @@ export const initialThreads: Thread[] = [
     ],
     due: "Today 12:00",
     activity: [
-      { id: "a1", at: "07:40", actor: "Night handover", text: "Mentioned in verbal handover, no plan recorded yet.", kind: "system" },
+      {
+        id: "a1",
+        at: "07:40",
+        actor: "Night handover",
+        text: "Mentioned in verbal handover, no plan recorded yet.",
+        kind: "system",
+      },
     ],
   },
   {
@@ -196,8 +229,20 @@ export const initialThreads: Thread[] = [
     ],
     due: "Yesterday 17:00",
     activity: [
-      { id: "a1", at: "Yesterday 11:05", actor: "Ward round", text: "Referral promised during round.", kind: "system" },
-      { id: "a2", at: "Yesterday 17:00", actor: "System", text: "Deadline passed — still open, surfacing to whoever is free.", kind: "system" },
+      {
+        id: "a1",
+        at: "Yesterday 11:05",
+        actor: "Ward round",
+        text: "Referral promised during round.",
+        kind: "system",
+      },
+      {
+        id: "a2",
+        at: "Yesterday 17:00",
+        actor: "System",
+        text: "Deadline passed — still open, surfacing to whoever is free.",
+        kind: "system",
+      },
     ],
   },
   {
@@ -215,8 +260,20 @@ export const initialThreads: Thread[] = [
     ],
     due: "Today 16:00",
     activity: [
-      { id: "a1", at: "08:50", actor: "Ward round", text: "Captured from conversation at the bedside.", kind: "system" },
-      { id: "a2", at: "09:30", actor: "Nurse Ben Adeyemi", text: "Dressing change booked for 11:30.", kind: "note" },
+      {
+        id: "a1",
+        at: "08:50",
+        actor: "Ward round",
+        text: "Captured from conversation at the bedside.",
+        kind: "system",
+      },
+      {
+        id: "a2",
+        at: "09:30",
+        actor: "Nurse Ben Adeyemi",
+        text: "Dressing change booked for 11:30.",
+        kind: "note",
+      },
     ],
   },
   {
@@ -231,8 +288,20 @@ export const initialThreads: Thread[] = [
     candidates: [{ name: "Dr. Neve Halloran", role: "SHO", free: true }],
     due: "Today 09:00",
     activity: [
-      { id: "a1", at: "07:20", actor: "Ward round", text: "Captured from conversation.", kind: "system" },
-      { id: "a2", at: "09:44", actor: "Dr. Neve Halloran", text: "Result 4.1 — reviewed and verified.", kind: "action" },
+      {
+        id: "a1",
+        at: "07:20",
+        actor: "Ward round",
+        text: "Captured from conversation.",
+        kind: "system",
+      },
+      {
+        id: "a2",
+        at: "09:44",
+        actor: "Dr. Neve Halloran",
+        text: "Result 4.1 — reviewed and verified.",
+        kind: "action",
+      },
     ],
   },
   {
@@ -250,7 +319,13 @@ export const initialThreads: Thread[] = [
     ],
     due: "Today 17:00",
     activity: [
-      { id: "a1", at: "10:05", actor: "Ward round", text: "Heard during round and captured as a thread.", kind: "system" },
+      {
+        id: "a1",
+        at: "10:05",
+        actor: "Ward round",
+        text: "Heard during round and captured as a thread.",
+        kind: "system",
+      },
     ],
   },
 ];

@@ -35,9 +35,7 @@ export function Insights({ threads, onOpenPatient }: Props) {
   const maxLoad = Math.max(1, ...load.map((l) => l.count));
 
   const goingHome = patients.filter((p) => p.homeTomorrow);
-  const blocked = goingHome.filter((p) =>
-    open.some((t) => t.patientId === p.id),
-  );
+  const blocked = goingHome.filter((p) => open.some((t) => t.patientId === p.id));
 
   const occupied = bays.flatMap((b) => b.beds).filter((b) => b.patientId).length;
   const totalBeds = bays.flatMap((b) => b.beds).length;

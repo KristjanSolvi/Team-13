@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Clock, Plus, Send, TriangleAlert, UserPlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Clock,
+  Plus,
+  Send,
+  TriangleAlert,
+  UserPlus,
+} from "lucide-react";
 import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, staff, statusDotClass, statusLabels } from "@/data/ward";
 import { LiveStrip } from "./LiveStrip";
@@ -16,7 +25,6 @@ type Props = {
   onAddActivity: (id: string, text: string) => void;
   onAddThread: (patientId: string, title: string) => void;
   onSelectPatient: (id: string) => void;
-  onScribe: (text: string) => void;
   cameFromBoard?: boolean;
   onBackToBoard: () => void;
 };
@@ -39,7 +47,6 @@ export function PatientActivity({
   onAddActivity,
   onAddThread,
   onSelectPatient,
-  onScribe,
   cameFromBoard,
   onBackToBoard,
 }: Props) {
@@ -152,7 +159,7 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} onAddThread={onAddThread} onScribe={onScribe} />
+        <LiveStrip patient={patient} />
 
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -197,7 +204,9 @@ export function PatientActivity({
           )}
 
           <ul className="relative space-y-0.5">
-            {items.length > 0 && <span className="absolute bottom-5 left-[5px] top-5 w-px bg-border" />}
+            {items.length > 0 && (
+              <span className="absolute bottom-5 left-[5px] top-5 w-px bg-border" />
+            )}
             {items.map((thread) => {
               const expanded = thread.id === activeThreadId;
               const done = thread.status === "verified";
@@ -225,7 +234,8 @@ export function PatientActivity({
                             {patientOf(thread.patientId)?.name.split(" ").slice(-1)[0]} ·{" "}
                           </span>
                         )}
-                        {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} · {thread.due}
+                        {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
+                        {thread.due}
                       </span>
                     </span>
                     <ChevronDown

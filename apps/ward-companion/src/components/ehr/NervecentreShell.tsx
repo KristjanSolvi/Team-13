@@ -92,23 +92,33 @@ export function NervecentreShell({ patient, onSelectPatient, notes = [], onAddNo
             nervecentre
           </span>
           <nav className="hidden gap-4 text-[11px] text-ehr-chrome-foreground/80 md:flex">
-            {["Home", "Patient List", "Bed Board", "All Tasks", "e-Observations", "EPMA", "Orders", "Handover", "Flow", "Search"].map(
-              (i) => (
-                <button key={i} type="button" className="hover:text-ehr-chrome-foreground">
-                  {i}
-                </button>
-              ),
-            )}
+            {[
+              "Home",
+              "Patient List",
+              "Bed Board",
+              "All Tasks",
+              "e-Observations",
+              "EPMA",
+              "Orders",
+              "Handover",
+              "Flow",
+              "Search",
+            ].map((i) => (
+              <button key={i} type="button" className="hover:text-ehr-chrome-foreground">
+                {i}
+              </button>
+            ))}
           </nav>
         </div>
-        <span className="text-[11px] text-ehr-chrome-foreground/70">S. Marriott · North Wing L4</span>
+        <span className="text-[11px] text-ehr-chrome-foreground/70">
+          S. Marriott · North Wing L4
+        </span>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ehr-line bg-ehr-banner px-3 py-2">
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="truncate text-[15px] font-bold text-ehr-foreground">
-            {current.name.split(" ").slice(-1)[0]!.toUpperCase()},{" "}
-            {current.name.split(" ")[0]}
+            {current.name.split(" ").slice(-1)[0]!.toUpperCase()}, {current.name.split(" ")[0]}
           </span>
           <span className="text-[11px] text-ehr-muted">NHS 943 476 5919 · 62y</span>
         </div>
@@ -181,7 +191,9 @@ export function NervecentreShell({ patient, onSelectPatient, notes = [], onAddNo
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr className="text-ehr-muted">
-                  <th className="border border-ehr-line px-1 py-[2px] text-left font-medium">Obs</th>
+                  <th className="border border-ehr-line px-1 py-[2px] text-left font-medium">
+                    Obs
+                  </th>
                   {["06:00", "10:00", "14:00", "18:00", "22:00"].map((h) => (
                     <th key={h} className="border border-ehr-line px-1 py-[2px] font-medium">
                       {h}

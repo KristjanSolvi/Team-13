@@ -101,7 +101,7 @@ export function WardBoard({ threads, onOpenPatient, onOpenThread, activePatientI
                     </div>
                   ) : (
                     <p className="text-[11px] font-medium italic text-muted-foreground">
-                      Clear for discharge
+                      No tracked follow-through blockers
                     </p>
                   )}
 

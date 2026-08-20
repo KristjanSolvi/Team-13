@@ -60,7 +60,8 @@ function Index() {
         setView((v) => {
           const order = ["board", "activity", "insights"] as const;
           const i = order.indexOf(v);
-          const next = e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
+          const next =
+            e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
           return order[next]!;
         });
         return;
@@ -141,14 +142,16 @@ function Index() {
         },
       ],
     }));
-  }
+  };
 
   const handleAssign = (id: string, assignee: string | null) => {
     const th = threads.find((t) => t.id === id);
     if (th)
       addNote(
         th.patientId,
-        assignee ? `${th.title} — picked up by ${assignee}.` : `${th.title} — released, open to anyone free.`,
+        assignee
+          ? `${th.title} — picked up by ${assignee}.`
+          : `${th.title} — released, open to anyone free.`,
       );
     updateThread(id, (t) => ({
       ...t,
@@ -303,9 +306,6 @@ function Index() {
                 onAddActivity={handleAddActivity}
                 onAddThread={handleAddThread}
                 onSelectPatient={setEhrPatientId}
-                onScribe={(text) =>
-                  addNote(ehrPatientId, text, "ward-round", "scribe", "Ambient scribe")
-                }
                 cameFromBoard={cameFromBoard}
                 onBackToBoard={() => {
                   setView("board");
@@ -326,9 +326,7 @@ function Index() {
               <div className="flex h-full flex-col">
                 <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border px-5 py-3">
                   <div>
-                    <h1 className="text-[15px] font-medium tracking-tight">
-                      North Wing · Level 4
-                    </h1>
+                    <h1 className="text-[15px] font-medium tracking-tight">North Wing · Level 4</h1>
                     <p className="text-[12.5px] text-muted-foreground">
                       {counts.pending + counts.tracking + counts.escalated} open across the ward
                     </p>
@@ -375,7 +373,7 @@ function Index() {
           </div>
 
           <footer className="flex items-center justify-between border-t border-border bg-background/60 px-6 py-3 text-xs font-medium text-muted-foreground">
-            <span>Ward Threads · connected to Nervecentre</span>
+            <span>Follow-Through · simulated Nervecentre overlay</span>
             <span>← → to switch views · Esc to hide</span>
           </footer>
         </section>
