@@ -18,6 +18,18 @@ export default defineConfig({
           target: process.env["INTEGRATION_API_URL"] ?? "http://127.0.0.1:8790",
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/follow-through-api/, ""),
+          // The grounded-handover endpoint requires the integration bearer.
+          // The dev server attaches it here so the token never reaches the
+          // browser bundle; only the handover path receives it.
+          configure: (proxy) => {
+            const integrationBearer = process.env["INTEGRATION_API_BEARER_TOKEN"];
+            if (integrationBearer === undefined || integrationBearer.length === 0) return;
+            proxy.on("proxyReq", (proxyReq) => {
+              if (/^\/api\/patients\/[^/]+\/handovers$/.test(proxyReq.path ?? "")) {
+                proxyReq.setHeader("authorization", `Bearer ${integrationBearer}`);
+              }
+            });
+          },
         },
       },
     },

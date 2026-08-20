@@ -305,6 +305,52 @@ export async function executeTaskCommand(input: {
   );
 }
 
+export type HandoverStatement = { statement: string; sourceRefs: string[] };
+export type HandoverSection = {
+  sectionId: string;
+  heading: string;
+  statements: HandoverStatement[];
+};
+export type GroundedHandover = {
+  handoverId: string;
+  patientId: string;
+  status: "requested" | "draft" | "rendered" | "failed";
+  sourceSnapshotHash: string;
+  rendered: {
+    title: string;
+    sections: HandoverSection[];
+    creditsConsumed: number;
+  } | null;
+};
+
+/**
+ * Ask the handover Corti agent for a fresh, evidence-linked patient handover.
+ * The integration API refuses stale drafts, so a success is current by
+ * construction. Requires the dev proxy to hold the integration bearer.
+ */
+export async function requestPatientHandover(input: {
+  patientId: string;
+  actorId: string;
+  correlationId: string;
+  focus?: string;
+}): Promise<GroundedHandover> {
+  const focus = input.focus?.trim();
+  return responseJson<GroundedHandover>(
+    await fetch(integrationUrl(`/api/patients/${encodeURIComponent(input.patientId)}/handovers`), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(input.correlationId),
+        "x-actor-id": input.actorId,
+      },
+      body: JSON.stringify({
+        idempotencyKey: `handover-${crypto.randomUUID()}`,
+        reason: "on_demand",
+        focus: focus !== undefined && focus.length > 0 ? focus : null,
+      }),
+    }),
+  );
+}
+
 export async function getWardCompanionOverview(
   patientId: string,
   correlationId: string,

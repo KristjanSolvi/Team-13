@@ -15,6 +15,7 @@ import type { Thread, ThreadStatus } from "@/data/ward";
 import { patients, statusDotClass, statusLabels } from "@/data/ward";
 import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
 import { ChangeRadar } from "./ChangeRadar";
+import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
@@ -157,6 +158,8 @@ export function PatientActivity({
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+
+        {scopeId !== null && <HandoverPanel patient={patient} />}
 
         <ChangeRadar
           patient={patient}
