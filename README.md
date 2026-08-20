@@ -14,6 +14,8 @@ Lovable Ward UI (8080)
           Ambient + Dictation + Text Generation + Medical Coding
       -> Agentic/MCP service (3000)
           evidence registry + approval proof + task/thread ledger
+      -> Patient profile service (8791)
+          versioned manual details + immutable referral snapshots
 ```
 
 The pipeline may propose one source-grounded candidate. It does not assign a
@@ -30,6 +32,7 @@ each app directory. Copy each example environment file to its ignored `.env`:
 cp .env.example .env
 cp apps/corti-pipeline/.env.example apps/corti-pipeline/.env
 cp apps/integration-api/.env.example apps/integration-api/.env
+cp apps/patient-profile/.env.example apps/patient-profile/.env
 cp apps/ward-companion/.env.example apps/ward-companion/.env
 ```
 
@@ -37,6 +40,8 @@ cp apps/ward-companion/.env.example apps/ward-companion/.env
   files. Never place them in the UI environment.
 - Make `apps/integration-api/.env` `AGENTIC_APP_BEARER_TOKEN` exactly match the
   root `.env` `APP_BEARER_TOKEN`.
+- Use a separate private bearer for `apps/patient-profile/.env`; it must never
+  be exposed in a `VITE_*` variable.
 - Use long, independent random values for the application bearer, MCP bearer,
   and approval HMAC secret.
 - Keep `DEMO_MODE=true` only for the synthetic hackathon demo.
@@ -53,11 +58,15 @@ npm run dev
 cd apps/corti-pipeline
 npm run dev
 
-# 3. Browser-facing integration API
+# 3. Patient profile and referral snapshot service
+cd apps/patient-profile
+npm run dev
+
+# 4. Browser-facing integration API
 cd apps/integration-api
 npm run dev
 
-# 4. Lovable Ward Threads UI
+# 5. Lovable Ward Threads UI
 cd apps/ward-companion
 npm run dev
 ```
@@ -90,6 +99,12 @@ npm test
 npm run typecheck
 npm run build
 
+# Patient profiles and referral snapshots
+cd apps/patient-profile
+npm test
+npm run typecheck
+npm run build
+
 # Ward UI
 cd apps/ward-companion
 npm run typecheck
@@ -99,13 +114,13 @@ npm run build
 
 ## Railway deployment
 
-The repository contains Railway configuration for all four services. Deploy
+The repository contains Railway configuration for all five services. Deploy
 the Lovable Ward UI and browser-facing integration API publicly, keep the Corti
-pipeline on Railway's private network, and expose only the Agentic `/mcp`
-service required by Corti. Attach a persistent volume to the Agentic service
-for its SQLite ledger.
+pipeline and patient-profile service on Railway's private network, and expose
+only the Agentic `/mcp` service required by Corti. Attach separate persistent
+volumes to the Agentic and patient-profile services for their SQLite databases.
 
 Follow [`docs/deployment/railway.md`](docs/deployment/railway.md) for the exact
 service roots, variables, bring-up order, and health checks. Do not add
-Supabase during the hackathon: the Agentic service already owns task, thread,
-approval, and audit state.
+Supabase during the hackathon: the Agentic service owns task/thread state and
+the patient-profile service owns its version/audit and referral snapshots.
