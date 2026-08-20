@@ -35,6 +35,16 @@ Medical Coding.
 - `POST /api/tasks/:taskId/:command`: validate and forward the documented task
   commands with actor attribution. Supported commands are `approve`, `correct`,
   `dismiss`, `reopen`, `accept`, `decline`, `complete`, and `verify`.
+- `POST /api/demo/sessions`: create a meeting, discharge-coordination, or ward
+  consultation audience session for solo or duo groups.
+- `GET /api/demo/sessions/:sessionId`: refresh the host's current audience
+  groups and task assignments.
+- `POST /api/demo/join/:joinCode`: join from a QR code and receive a rotated,
+  participant-scoped credential without exposing the Agentic bearer.
+- `POST /api/demo/sessions/:sessionId/assign`: assign an already approved and
+  published team task to one eligible participant in the selected group.
+- `GET /api/demo/participants/me`: read only the assignments belonging to the
+  participant identified by its Bearer token.
 - `GET /api/ehr/patients/:patientId`: compose the current versioned profile and
   mock-EHR documents into one Nervecentre-facing record.
 - `PATCH /api/ehr/patients/:patientId/profile`: apply an attributed profile
@@ -47,7 +57,10 @@ Medical Coding.
 - `GET /api/ehr/documents/:documentId/history`: read immutable version history.
 
 Every response includes `x-correlation-id`. Browser requests are allowed only
-from configured origins. The service binds to loopback by default.
+from configured origins. The participant credential returned by the join route
+belongs in browser session storage and must not appear in URLs or logs. All
+service credentials remain server-side. The service binds to loopback by
+default.
 
 Synthetic consumer examples live in [`fixtures/`](fixtures/). UI work can build
 against those examples and replace only its adapter when the live services are

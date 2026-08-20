@@ -18,6 +18,7 @@ import { createApp } from "../src/http/app.js";
 import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
+import { DemoAudienceService } from "../src/services/demo-audience-service.js";
 import { HandoverService } from "../src/services/handover-service.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 import { RecordService } from "../src/services/record-service.js";
@@ -225,6 +226,7 @@ function scenario(t: TestContext) {
     handovers,
     records: new RecordService(store),
     scheduler: new SchedulerService(store, clock),
+    demoAudience: new DemoAudienceService(store, clock),
     uiOrigin: UI_ORIGIN,
     appBearerToken: APP_TOKEN,
     mcpBearerToken: MCP_TOKEN,

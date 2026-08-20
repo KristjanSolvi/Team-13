@@ -486,6 +486,42 @@ export class IntegrationService {
     return this.agentic.taskCommand(taskId, command, body, meta);
   }
 
+  createDemoSession(
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.agentic.createDemoSession(body, meta);
+  }
+
+  getDemoSession(sessionId: string, correlationId: string): Promise<unknown> {
+    return this.agentic.getDemoSession(sessionId, { correlationId });
+  }
+
+  joinDemoSession(
+    joinCode: string,
+    body: Record<string, unknown>,
+    correlationId: string,
+  ): Promise<unknown> {
+    return this.agentic.joinDemoSession(joinCode, body, { correlationId });
+  }
+
+  assignDemoTask(
+    sessionId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.agentic.assignDemoTask(sessionId, body, meta);
+  }
+
+  demoParticipantView(
+    participantToken: string,
+    correlationId: string,
+  ): Promise<unknown> {
+    return this.agentic.demoParticipantView(participantToken, {
+      correlationId,
+    });
+  }
+
   eventStream(
     lastEventId: string | undefined,
     correlationId: string,

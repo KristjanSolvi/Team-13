@@ -17,6 +17,11 @@ function harness() {
     listThreads: vi.fn(async () => []),
     listTasks: vi.fn(async () => []),
     taskCommand: vi.fn(async () => ({})),
+    createDemoSession: vi.fn(async () => ({})),
+    getDemoSession: vi.fn(async () => ({})),
+    joinDemoSession: vi.fn(async () => ({})),
+    assignDemoTask: vi.fn(async () => ({})),
+    demoParticipantView: vi.fn(async () => ({})),
     eventStream: vi.fn(async () => new ReadableStream<Uint8Array>()),
   };
   const pipeline: PipelineGateway = {

@@ -544,6 +544,7 @@ test("agent-enabled signal route investigates only after source evidence registr
     handovers: harness.handovers,
     records: harness.records,
     scheduler: harness.scheduler,
+    demoAudience: harness.demoAudience,
     uiOrigin: UI_ORIGIN,
     appBearerToken: APP_TOKEN,
     mcpBearerToken: MCP_TOKEN,

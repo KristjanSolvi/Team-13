@@ -9,6 +9,7 @@ import { HandoverService } from "./services/handover-service.js";
 import { LedgerService } from "./services/ledger-service.js";
 import { RecordService } from "./services/record-service.js";
 import { SchedulerService } from "./services/scheduler-service.js";
+import { DemoAudienceService } from "./services/demo-audience-service.js";
 
 const config = parseConfig(process.env);
 const store = new SqliteStore(openDatabase(config.databasePath));
@@ -20,6 +21,7 @@ const ledger = new LedgerService(store, clock, config.approvalHmacSecret);
 const records = new RecordService(store);
 const handovers = new HandoverService(store, clock);
 const scheduler = new SchedulerService(store, clock);
+const demoAudience = new DemoAudienceService(store, clock);
 scheduler.tick();
 setInterval(() => scheduler.tick(), 15_000).unref();
 const runners = createAgentRunners(config, store);
@@ -31,6 +33,7 @@ createApp({
   handovers,
   records,
   scheduler,
+  demoAudience,
   appBearerToken: config.appBearerToken,
   mcpBearerToken: config.mcpBearerToken,
   uiOrigin: config.uiOrigin,
