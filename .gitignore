@@ -1,8 +1,19 @@
-.env
 node_modules/
+dist/
 build/
+coverage/
+.playwright-cli/
+.DS_Store
+
+# Credentials and local overrides
+.env
+.env.*
+!.env.example
+
+# Runtime data, logs, and editor state
 data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
-.DS_Store
 *.log
+.idea/
+.vscode/

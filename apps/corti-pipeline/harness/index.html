@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#b8f818" />
+    <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg'/&gt;" />
+    <meta
+      name="description"
+      content="Developer-only live microphone harness for the Follow-Through Corti pipeline."
+    />
+    <title>Follow-Through · Corti Mic Lab</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <img
+            class="corti-logo"
+            src="https://cdn.prod.website-files.com/679910de24e675a93f045f3b/68417ed4368d812aef21ec5a_corti-logo-black.svg"
+            alt="Corti"
+          />
+          <span class="divider" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Follow-Through</p>
+            <h1>Live microphone lab</h1>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div class="connection-readout" aria-live="polite">
+            <span id="pipeline-indicator" class="status-dot" data-tone="neutral"></span>
+            <span id="pipeline-status">Checking pipeline…</span>
+          </div>
+          <span class="dev-badge">Developer only</span>
+          <button class="button ghost compact" popovertarget="about-popover">
+            About this test
+          </button>
+        </div>
+      </header>
+
+      <main class="lab-grid">
+        <section class="lab-card" aria-labelledby="ambient-heading">
+          <div class="card-header">
+            <div>
+              <p class="step-label">01 · Passive channel</p>
+              <h2 id="ambient-heading">Ambient encounter</h2>
+              <p class="subheading">Continuous ward-round capture with diarization.</p>
+            </div>
+            <span id="ambient-status" class="status-pill" data-tone="neutral">Idle</span>
+          </div>
+
+          <div class="control-strip">
+            <button id="ambient-start" class="button primary">Start ambient</button>
+            <button id="ambient-stop" class="button secondary" disabled>Stop</button>
+            <button id="ambient-reset" class="button ghost">Reset</button>
+            <select id="ambient-device" class="device-select" aria-label="Ambient microphone">
+              <option value="">Default microphone</option>
+            </select>
+            <div class="credit-readout">
+              <span>Credits</span>
+              <strong id="ambient-credits">—</strong>
+            </div>
+          </div>
+
+          <div class="notice" role="note">
+            <span class="recording-mark" aria-hidden="true"></span>
+            <span>
+              Use synthetic details only. A visible recording state remains on screen
+              while the microphone is active.
+            </span>
+            <span id="ambient-audio-quality" class="status-pill" data-tone="neutral">
+              Audio not checked
+            </span>
+          </div>
+
+          <div class="script-block">
+            <span class="script-label">Suggested test phrase</span>
+            <p>
+              “Karen says she has felt dizzy since her medication changed. Her daughter
+              is unsure who is responsible for checking her blood pressure after
+              discharge.”
+            </p>
+          </div>
+
+          <div class="output-pane" aria-labelledby="ambient-output-heading">
+            <div class="output-heading">
+              <h3 id="ambient-output-heading">Canonical transcript</h3>
+              <span id="ambient-segment-count">0 segments</span>
+            </div>
+            <div id="ambient-transcript" class="transcript-list" aria-live="polite">
+              <p class="empty-state">Waiting for audio…</p>
+            </div>
+          </div>
+
+          <p id="ambient-error" class="error-message" role="alert" hidden></p>
+        </section>
+
+        <section class="lab-card" aria-labelledby="dictation-heading">
+          <div class="card-header">
+            <div>
+              <p class="step-label">02 · Intentional channel</p>
+              <h2 id="dictation-heading">Clinician dictation</h2>
+              <p class="subheading">A deliberate edit that always ends in preview.</p>
+            </div>
+            <span id="dictation-status" class="status-pill" data-tone="neutral">
+              Preparing
+            </span>
+          </div>
+
+          <div class="dictation-control-row">
+            <corti-dictation id="dictation-control"></corti-dictation>
+            <span id="dictation-audio-quality" class="status-pill" data-tone="neutral">
+              Audio not checked
+            </span>
+            <div class="credit-readout">
+              <span>Credits</span>
+              <strong id="dictation-credits">—</strong>
+            </div>
+          </div>
+
+          <div class="script-block">
+            <span class="script-label">Suggested test phrase</span>
+            <p>
+              “Route to district nursing within 48 hours and mark medium because Karen
+              needs a blood pressure check.”
+            </p>
+          </div>
+
+          <div class="dictation-results">
+            <div class="output-pane compact-pane">
+              <div class="output-heading">
+                <h3>Final dictation</h3>
+                <button id="dictation-clear" class="text-button">Clear text</button>
+              </div>
+              <p id="dictation-final" class="dictation-copy" aria-live="polite">
+                Final words will appear here. Interim words appear below while speaking.
+              </p>
+              <p id="dictation-interim" class="interim-copy"></p>
+            </div>
+
+            <div class="preview-pane">
+              <div class="preview-header">
+                <div>
+                  <span class="script-label">Safe boundary</span>
+                  <h3>Revision preview</h3>
+                </div>
+                <button id="preview-revision" class="button primary" disabled>
+                  Build preview
+                </button>
+              </div>
+              <div id="revision-preview" class="preview-grid" aria-live="polite">
+                <p class="empty-state">Nothing is applied until a clinician confirms it.</p>
+              </div>
+            </div>
+          </div>
+
+          <p id="dictation-error" class="error-message" role="alert" hidden></p>
+        </section>
+      </main>
+
+      <footer class="safety-bar">
+        <span>Ambient observes.</span>
+        <span>Dictation proposes an edit.</span>
+        <strong>This lab never commits a clinical task.</strong>
+      </footer>
+    </div>
+
+    <div id="about-popover" class="about-popover" popover>
+      <p class="step-label">About this test</p>
+      <h2>Two separate Corti speech paths</h2>
+      <p>
+        Ambient captures a synthetic encounter. Dictation captures an intentional
+        correction. The browser receives short-lived, least-privilege tokens; API
+        credentials remain on the pipeline server.
+      </p>
+      <ul>
+        <li>Use Chrome and allow microphone access.</li>
+        <li>Speak for at least 20–30 seconds during Ambient.</li>
+        <li>Stop each recording before resetting.</li>
+      </ul>
+      <button class="button secondary" popovertarget="about-popover" popovertargetaction="hide">
+        Close
+      </button>
+    </div>
+
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

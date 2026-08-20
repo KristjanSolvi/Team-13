@@ -60,16 +60,17 @@ what was intentionally said, not authorization to write by itself.
 ## What can change
 
 Before approval, the clinician may edit the draft action, receiving team,
-suggested owner role, owner, deadline, priority, or rationale. After routing,
-changes must append an audit event and preserve the previous value.
+deadline, clinical urgency, or rationale. Individual ownership is deliberately
+not part of this draft: the task is offered to the team, then one eligible
+person accepts it. After routing, changes must append an audit event and preserve
+the previous value.
 
 Recommended fields:
 
 - Structured action description
 - Receiving team
-- One accountable owner, possibly empty until accepted
 - Deadline
-- Priority
+- Clinical urgency: `high`, `medium`, or `routine`
 - Clinical rationale or comment
 - Revision reason
 
@@ -99,7 +100,7 @@ boundary.
 
 | Actor | Allowed behavior |
 |---|---|
-| Clinician | Approve/dismiss, change clinical action, routing, owner, deadline, priority, and reopen with a reason |
+| Clinician | Approve/dismiss, change clinical action, team routing, deadline, urgency, explicitly reassign after publication, and reopen with a reason |
 | Receiving team member | Accept/decline, comment, report completion, and propose a clinical change |
 | Thread Resolution Agent | Retrieve context, propose drafts, call approved tools after authorization, verify recorded status, and escalate by policy |
 | Pipeline | Capture and normalize speech, generate previewable drafts, and provide evidence; never commit ledger state |
@@ -108,7 +109,8 @@ boundary.
 ## Karen MVP decision
 
 Use one primary tracked task for the live Karen branch: a district-nursing blood
-pressure check with an approved owner and deadline. A GP message can be a
+pressure check with an approved team route and deadline. A district nurse
+becomes the single accountable owner only after accepting. A GP message can be a
 supporting handoff rather than a second tracked task. This keeps the success
 condition clear.
 
