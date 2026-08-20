@@ -9,7 +9,7 @@ import {
 } from "../src/gateways.js";
 
 describe("HTTP gateways", () => {
-  it("uses the handover timeout only for agent draft generation", async () => {
+  it("uses the long agent timeout for task approval and handover generation", async () => {
     vi.useFakeTimers();
     try {
       const signals: AbortSignal[] = [];
@@ -53,6 +53,24 @@ describe("HTTP gateways", () => {
         code: "UPSTREAM_TIMEOUT",
       });
 
+      const approvalOutcome = gateway
+        .taskCommand(
+          "11111111-1111-4111-8111-111111111111",
+          "approve",
+          {
+            expectedVersion: 1,
+            idempotencyKey: "approve-timeout-1",
+          },
+          meta,
+        )
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(499);
+      expect(signals[1]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(approvalOutcome).resolves.toMatchObject({
+        code: "UPSTREAM_TIMEOUT",
+      });
+
       const draftOutcome = gateway
         .createHandoverDraft(
           "synthetic-karen",
@@ -65,7 +83,7 @@ describe("HTTP gateways", () => {
         )
         .catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(499);
-      expect(signals[1]?.aborted).toBe(false);
+      expect(signals[2]?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       await expect(draftOutcome).resolves.toMatchObject({
         code: "UPSTREAM_TIMEOUT",

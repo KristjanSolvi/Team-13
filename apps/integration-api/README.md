@@ -169,10 +169,10 @@ Agentic/MCP backend's private application token. Set
 `.env`.
 
 Keep ordinary upstream calls on `UPSTREAM_TIMEOUT_MS=8000`. Use
-`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for handover generation, Corti rendering,
-and meeting reconciliation. Agent work can allow up to 60 seconds to send and
+`HANDOVER_UPSTREAM_TIMEOUT_MS=600000` for task approval, handover generation,
+Corti rendering, and meeting reconciliation. Agent work can allow up to 60 seconds to send and
 180 seconds to poll, so the dedicated value cannot be lower than 480000 and may
-be raised to at most 900000. Local ledger-only operations remain on the
+be raised to at most 900000. Local ledger-only task operations remain on the
 ordinary timeout.
 
 The local Lovable UI origins on port `8080` and the pipeline harness origins on

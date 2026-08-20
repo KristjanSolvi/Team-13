@@ -447,6 +447,9 @@ export class HttpAgenticGateway implements AgenticGateway {
         body,
         bearerToken: this.bearerToken,
         meta,
+        ...(command === "approve"
+          ? { timeoutMs: this.handoverTimeoutMs }
+          : {}),
       },
     );
   }
