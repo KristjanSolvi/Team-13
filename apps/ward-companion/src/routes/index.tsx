@@ -293,6 +293,14 @@ function Index() {
                 <Insights
                   threads={threads}
                   initialPatientId={ehrPatientId}
+                  onOpenThread={(threadId) => {
+                    const patientId =
+                      threads.find((thread) => thread.id === threadId)?.patientId ?? ehrPatientId;
+                    setEhrPatientId(patientId);
+                    setScopeId(patientId);
+                    setActiveThreadId(threadId);
+                    setView("activity");
+                  }}
                   onOpenPatient={(patientId) => {
                     setEhrPatientId(patientId);
                     setScopeId(patientId);

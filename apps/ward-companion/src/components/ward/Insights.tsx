@@ -9,6 +9,7 @@ type Props = {
   threads: Thread[];
   initialPatientId?: string;
   onOpenPatient: (id: string) => void;
+  onOpenThread: (id: string) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -394,7 +395,7 @@ function Capacity({ threads }: { threads: Thread[] }) {
 
 /* ------------------------------------------------------------------ */
 
-export function Insights({ threads, initialPatientId, onOpenPatient }: Props) {
+export function Insights({ threads, initialPatientId, onOpenPatient, onOpenThread }: Props) {
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="grid gap-4 lg:grid-cols-2">
@@ -402,6 +403,7 @@ export function Insights({ threads, initialPatientId, onOpenPatient }: Props) {
           threads={threads}
           initialPatientId={initialPatientId}
           onOpenPatient={onOpenPatient}
+          onOpenThread={onOpenThread}
         />
         <BedDaysProtected threads={threads} />
         <TimeReturned />
