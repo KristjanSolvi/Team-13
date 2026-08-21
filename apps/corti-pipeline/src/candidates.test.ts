@@ -336,4 +336,34 @@ describe("normalizeGeneratedCandidates", () => {
 
     expect(result.candidates).toHaveLength(2);
   });
+
+  it("does not combine medication details across separate action clauses", () => {
+    const sourceQuote = "Start IV saline. Start furosemide 80mg daily.";
+    const result = normalizeGeneratedCandidates({
+      generatedValue: [
+        {
+          category: "medication-concern",
+          summary: "Start IV furosemide 80mg daily",
+          sourceQuote,
+        },
+      ],
+      patientId: "synthetic-sarah",
+      interactionId: "interaction-presentation",
+      correlationId: "presentation-cross-clause",
+      segments: [
+        {
+          interactionId: "interaction-presentation",
+          segmentKey: "interaction-presentation:30",
+          text: sourceQuote,
+          startSeconds: 30,
+          endSeconds: 36,
+          speakerId: 1,
+          isFinal: true,
+        },
+      ],
+    });
+
+    expect(result.candidates).toEqual([]);
+    expect(result.rejectedEvidenceCount).toBe(1);
+  });
 });

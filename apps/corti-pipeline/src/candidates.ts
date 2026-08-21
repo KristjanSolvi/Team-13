@@ -106,21 +106,27 @@ const polarityTokens = new Set([
 
 function summaryIsGrounded(summary: string, sourceQuote: string): boolean {
   const summaryTokens = clinicalGroundingTokens(summary);
-  const sourceTokens = clinicalGroundingTokens(sourceQuote);
-  const sourcePolarity = sourceTokens.filter((token) => polarityTokens.has(token));
-  if (
-    sourcePolarity.length > 0 &&
-    !summaryTokens.some((token) => polarityTokens.has(token))
-  ) {
-    return false;
-  }
-  let sourceIndex = 0;
-  for (const token of summaryTokens) {
-    const matchIndex = sourceTokens.indexOf(token, sourceIndex);
-    if (matchIndex === -1) return false;
-    sourceIndex = matchIndex + 1;
-  }
-  return summaryTokens.length > 0;
+  if (summaryTokens.length === 0) return false;
+  return sourceQuote
+    .split(/[.!?;\n]+/u)
+    .map((clause) => clinicalGroundingTokens(clause))
+    .filter((tokens) => tokens.length > 0)
+    .some((sourceTokens) => {
+      const sourcePolarity = sourceTokens.filter((token) => polarityTokens.has(token));
+      if (
+        sourcePolarity.length > 0 &&
+        !summaryTokens.some((token) => polarityTokens.has(token))
+      ) {
+        return false;
+      }
+      let sourceIndex = 0;
+      for (const token of summaryTokens) {
+        const matchIndex = sourceTokens.indexOf(token, sourceIndex);
+        if (matchIndex === -1) return false;
+        sourceIndex = matchIndex + 1;
+      }
+      return true;
+    });
 }
 
 export function normalizeGeneratedCandidates(
