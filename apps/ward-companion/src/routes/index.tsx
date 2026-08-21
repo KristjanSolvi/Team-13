@@ -4,14 +4,8 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
-import { DemoStudio } from "@/components/ward/DemoStudio";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
-import {
-  BoardSkeleton,
-  DemoSkeleton,
-  InsightsSkeleton,
-  ListSkeleton,
-} from "@/components/ward/Loading";
+import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { ViewTabs, type ViewKey } from "@/components/ward/ViewTabs";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
@@ -114,7 +108,7 @@ function Index() {
       }
       if (!typing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         setView((v) => {
-          const order = ["activity", "board", "insights", "demo"] as const;
+          const order = ["activity", "board", "insights"] as const;
           const i = order.indexOf(v);
           const next =
             e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
@@ -252,8 +246,6 @@ function Index() {
                 <BoardSkeleton />
               ) : view === "insights" ? (
                 <InsightsSkeleton />
-              ) : view === "demo" ? (
-                <DemoSkeleton />
               ) : (
                 <ListSkeleton />
               )
@@ -319,19 +311,6 @@ function Index() {
                   onOpenPatient={(patientId) => {
                     setEhrPatientId(patientId);
                     setScopeId(patientId);
-                    setView("activity");
-                  }}
-                />
-              </div>
-            ) : view === "demo" ? (
-              <div key="demo" className="fade-in-view h-full">
-                <DemoStudio
-                  threads={threads}
-                  onRefreshPatient={refreshPatientThreads}
-                  onOpenPatient={(patientId, threadId) => {
-                    setEhrPatientId(patientId);
-                    setScopeId(patientId);
-                    setActiveThreadId(threadId ?? null);
                     setView("activity");
                   }}
                 />
