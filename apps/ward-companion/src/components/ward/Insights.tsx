@@ -399,18 +399,18 @@ export function Insights({ threads, initialPatientId, onOpenPatient, onOpenThrea
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="grid gap-4 lg:grid-cols-2">
-        <PatientJourneyMap
-          threads={threads}
-          initialPatientId={initialPatientId}
-          onOpenPatient={onOpenPatient}
-          onOpenThread={onOpenThread}
-        />
         <BedDaysProtected threads={threads} />
         <TimeReturned />
         <Funnel threads={threads} />
         <Rhythm />
         <Runway threads={threads} onOpenPatient={onOpenPatient} />
         <Capacity threads={threads} />
+        <PatientJourneyMap
+          threads={threads}
+          initialPatientId={initialPatientId}
+          onOpenPatient={onOpenPatient}
+          onOpenThread={onOpenThread}
+        />
       </div>
     </div>
   );
