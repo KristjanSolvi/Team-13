@@ -31,6 +31,26 @@ const ledgerCommandNotes: Record<WardTaskCommand, string> = {
   verify: "completion independently verified.",
 };
 
+const patientEventTypes = [
+  "thread.state_changed",
+  "task.draft_created",
+  "task.draft_corrected",
+  "task.approved",
+  "task.published_to_team",
+  "task.member_assigned",
+  "task.member_accepted",
+  "task.member_declined",
+  "task.completed",
+  "task.completion_verified",
+  "task.draft_dismissed",
+  "task.reopened_to_team",
+  "task.escalated",
+  "change_radar.impact_detected",
+  "record.source_revised",
+  "meeting.draft_task_created",
+  "meeting.reconciliation_saved",
+] as const;
+
 function stamp() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -111,6 +131,40 @@ export function useWardRuntime() {
       setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
     }
   }, []);
+
+  useEffect(() => {
+    const source = new EventSource("/follow-through-api/api/events/stream");
+    const pending = new Map<string, number>();
+    const refreshFromEvent = (event: Event) => {
+      if (!(event instanceof MessageEvent) || typeof event.data !== "string") return;
+      try {
+        const payload = JSON.parse(event.data) as { patientId?: unknown };
+        if (typeof payload.patientId !== "string") return;
+        const patient = patients.find(
+          (candidate) => candidate.pipelinePatientId === payload.patientId,
+        );
+        if (patient === undefined || pending.has(patient.id)) return;
+        const timer = window.setTimeout(() => {
+          pending.delete(patient.id);
+          void refreshPatientThreads(patient.id);
+        }, 100);
+        pending.set(patient.id, timer);
+      } catch {
+        // The next successful event or normal page refresh rehydrates state.
+      }
+    };
+
+    for (const eventType of patientEventTypes) {
+      source.addEventListener(eventType, refreshFromEvent);
+    }
+    return () => {
+      for (const eventType of patientEventTypes) {
+        source.removeEventListener(eventType, refreshFromEvent);
+      }
+      source.close();
+      for (const timer of pending.values()) window.clearTimeout(timer);
+    };
+  }, [refreshPatientThreads]);
 
   const updateThread = useCallback(
     (id: string, update: (thread: Thread) => Thread) =>

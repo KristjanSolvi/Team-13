@@ -398,6 +398,34 @@ export type TaskCommandResult = {
   [key: string]: unknown;
 };
 
+export type DownstreamDelivery = {
+  schemaVersion: "1";
+  deliveryId: string;
+  sourceTaskId: string;
+  patientId: string;
+  targetSystem: string;
+  kind: "team-task" | "referral" | "callback";
+  summary: string;
+  instructions: string | null;
+  dueAt: string;
+  referralSnapshotId: string | null;
+  status:
+    | "pending_submission"
+    | "submission_failed"
+    | "submitted"
+    | "accepted"
+    | "completed"
+    | "rejected";
+  externalReference: string | null;
+  outcomeReference: string | null;
+  sourceAcknowledgedAt: string | null;
+  statusReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  correlationId: string;
+};
+
 /**
  * Demo actor identities seeded by the agentic backend's Karen fixture.
  * Clinician commands (approve/correct/dismiss/reopen) are attributed to the
@@ -423,6 +451,17 @@ export async function executeTaskCommand(input: {
         "x-actor-id": input.actorId,
       },
       body: JSON.stringify(input.body),
+    }),
+  );
+}
+
+export async function getTaskDeliveries(
+  taskId: string,
+  correlationId: string,
+): Promise<{ deliveries: DownstreamDelivery[] }> {
+  return responseJson<{ deliveries: DownstreamDelivery[] }>(
+    await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(taskId)}/deliveries`), {
+      headers: { "x-correlation-id": correlationId },
     }),
   );
 }

@@ -30,6 +30,7 @@ import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
 import { SystemConnectionPanel } from "./SystemConnectionPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
+import { TaskDeliveryStatus } from "./TaskDeliveryStatus";
 import { usePendingAction } from "./useLoading";
 
 type Props = {
@@ -371,6 +372,13 @@ export function PatientActivity({
                         <p className="rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">
                           {ledgerErrors[thread.id]}
                         </p>
+                      )}
+
+                      {thread.backend?.taskId != null && thread.backend.taskVersion != null && (
+                        <TaskDeliveryStatus
+                          taskId={thread.backend.taskId}
+                          taskVersion={thread.backend.taskVersion}
+                        />
                       )}
 
                       {!done && thread.backend !== undefined && (
