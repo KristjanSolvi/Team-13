@@ -17,6 +17,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Thread } from "@/data/ward";
 import { useCortiActivity } from "@/hooks/use-corti-activity";
 import { cortiProductDefinitions, type CortiProductId } from "@/lib/corti-activity";
+import { RoutingReceipt } from "./RoutingReceipt";
 import {
   assignDemoTask,
   createDemoSession,
@@ -162,6 +163,7 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
   const evidencedProducts = cortiProductDefinitions.filter(
     (product) => activity[product.id] !== undefined,
   ).length;
+  const latestAssignment = session?.assignments.at(-1) ?? null;
 
   const refreshSession = useCallback(
     async (sessionId: string, mode: "restore" | "refresh" = "refresh") => {
@@ -581,6 +583,12 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
                       );
                     })}
                   </ul>
+                  {latestAssignment !== null && (
+                    <RoutingReceipt
+                      assignment={latestAssignment}
+                      participants={session.groups.flatMap((group) => group.participants)}
+                    />
+                  )}
                 </div>
               )}
             </div>
