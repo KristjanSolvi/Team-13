@@ -9,6 +9,8 @@ export {
   normalizeSpeechKeyterms,
 } from "./speech.js";
 export type { SpeechQualityWindow } from "./speech.js";
+export { transcriptSpeakerLabels } from "./speakers.js";
+export type { ConversationSpeakerLabel } from "./speakers.js";
 export {
   generateCandidates,
   generateSupportingDocument,

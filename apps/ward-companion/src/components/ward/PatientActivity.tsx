@@ -43,7 +43,6 @@ type Props = {
   onOfferToTeam: (id: string, team: string) => void;
   onEditThread: (id: string, patch: Partial<Thread>) => void;
   onRemoveThread: (id: string, reason: string) => void;
-  onScribe: (text: string) => void;
   staff: WardStaffOption[];
   teams: string[];
   onRefreshPatient: (id: string) => Promise<void>;
@@ -112,7 +111,6 @@ export function PatientActivity({
   onOfferToTeam,
   onEditThread,
   onRemoveThread,
-  onScribe,
   staff,
   teams,
   onRefreshPatient,
@@ -178,12 +176,7 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip
-          patient={patient}
-          onAddThread={onAddThread}
-          onScribe={onScribe}
-          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
-        />
+        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
 
         <div>
           <div className="mb-3 flex items-center justify-between">

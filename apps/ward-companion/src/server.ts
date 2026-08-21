@@ -37,6 +37,30 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   });
 }
 
+/**
+ * Railway serves fingerprinted assets, but the document choosing those assets
+ * must always be revalidated after a deploy. This also covers browser refreshes
+ * that identify the request as a document before SSR has set a content type.
+ */
+function preventStaleDocumentCaching(request: Request, response: Response): Response {
+  const contentType = response.headers.get("content-type") ?? "";
+  const isDocument =
+    contentType.includes("text/html") || request.headers.get("sec-fetch-dest") === "document";
+  if (!isDocument) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store, no-cache, must-revalidate, max-age=0");
+  headers.set("cdn-cache-control", "no-store");
+  headers.set("surrogate-control", "no-store");
+  headers.set("pragma", "no-cache");
+  headers.set("expires", "0");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function isH3SwallowedErrorBody(body: string): boolean {
   try {
     const payload = JSON.parse(body) as { unhandled?: unknown; message?: unknown };
@@ -134,13 +158,16 @@ export default {
       if (proxied !== null) return proxied;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return preventStaleDocumentCaching(request, await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return preventStaleDocumentCaching(
+        request,
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
     }
   },
 };

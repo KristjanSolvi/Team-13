@@ -220,9 +220,6 @@ function Index() {
                       setActiveThreadId((current) => (current === id ? null : current));
                     }
                   }}
-                  onScribe={(text) =>
-                    addNote(ehrPatientId, text, "medical", "scribe", "Ambient scribe")
-                  }
                   staff={staff}
                   teams={teams}
                   onRefreshPatient={refreshPatientThreads}

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleAlert, LoaderCircle, Mic, Radio, Square } from "lucide-react";
 import { AmbientCapture } from "@pipeline/browser/ambient.js";
+import {
+  transcriptSpeakerLabels,
+  type ConversationSpeakerLabel,
+} from "@pipeline/browser/speakers.js";
 import type {
   FollowThroughCandidate,
   PipelineEvent,
@@ -83,6 +87,12 @@ function agentHandoffSummary(handoff: unknown): {
 
 function creditsLabel(credits: number): string {
   return `${credits.toFixed(4)} credits`;
+}
+
+function speakerTone(label: ConversationSpeakerLabel | "Speaker"): string {
+  if (label === "Doctor") return "bg-teal/12 text-teal";
+  if (label === "Patient") return "bg-tracking-soft text-foreground";
+  return "bg-background text-muted-foreground";
 }
 
 export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
@@ -408,6 +418,11 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
   const busy = ["starting", "stopping", "analysing"].includes(state);
   const finalSegments = segments.filter((segment) => segment.isFinal);
   const latestInterim = segments.filter((segment) => !segment.isFinal).at(-1);
+  const speakerLabels = transcriptSpeakerLabels(segments);
+  const labelFor = (segment: TranscriptSegment): ConversationSpeakerLabel | "Speaker" =>
+    segment.speakerId === undefined
+      ? "Speaker"
+      : (speakerLabels.get(segment.speakerId) ?? "Speaker");
 
   return (
     <section className="rounded-xl border border-border bg-panel">
@@ -509,24 +524,32 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
       {(state === "recording" || segments.length > 0) && (
         <div className="max-h-52 space-y-2 overflow-y-auto px-4 py-3">
           {finalSegments.map((segment) => (
-            <p
+            <div
               key={segment.segmentKey}
-              className="fade-in-view text-[13px] leading-snug text-foreground"
+              className="fade-in-view flex items-start gap-2.5 text-[13px] leading-snug text-foreground"
             >
-              <span className="mr-2 text-[11.5px] tabular-nums text-muted-foreground">
-                {timeLabel(segment.startSeconds)}
+              <span
+                className={`mt-px shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${speakerTone(labelFor(segment))}`}
+              >
+                {labelFor(segment)}
               </span>
-              {segment.text}
-              {segment.audioQuality === "uncertain" && (
-                <span className="ml-2 text-[11px] font-medium text-escalated-strong">
-                  audio uncertain
+              <p>
+                <span className="mr-2 text-[11.5px] tabular-nums text-muted-foreground">
+                  {timeLabel(segment.startSeconds)}
                 </span>
-              )}
-            </p>
+                {segment.text}
+                {segment.audioQuality === "uncertain" && (
+                  <span className="ml-2 text-[11px] font-medium text-escalated-strong">
+                    audio uncertain
+                  </span>
+                )}
+              </p>
+            </div>
           ))}
           {latestInterim !== undefined ? (
             <LiveInterimText
               text={latestInterim.text}
+              label={`${labelFor(latestInterim)} · Corti is hearing`}
               timestamp={timeLabel(latestInterim.startSeconds)}
             />
           ) : state === "recording" ? (
