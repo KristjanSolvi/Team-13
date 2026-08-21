@@ -315,7 +315,11 @@ function Index() {
         open={open}
         onToggle={() => {
           setOpen((current) => {
-            if (!current) setMaximized(false);
+            if (!current) {
+              setMaximized(false);
+              setScopeId(ehrPatientId);
+              setActiveThreadId(null);
+            }
             return !current;
           });
         }}
