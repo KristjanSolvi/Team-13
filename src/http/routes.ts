@@ -22,6 +22,51 @@ import { mountMeetingRoutes } from "./meeting-routes.js";
 const EVIDENCE_REFERENCE = /^(encounter|record|dictation):[A-Za-z0-9._-]+$/;
 const SAFE_CORRELATION_ID = /^[A-Za-z0-9._-]{1,100}$/;
 
+type GuardedDraftSpec = {
+  taskType: string;
+  targetTeamId: "ward-medical" | "ward-nursing";
+  requiredCapabilities: ["medication-review"] | ["ward-care"];
+  dueInMs: number;
+};
+
+function guardedDraftSpec(signalText: string): GuardedDraftSpec | null {
+  if (signalText.length > 240) return null;
+  const text = signalText.toLocaleLowerCase("en");
+  if (/\bfurosemide\b/u.test(text)) {
+    return {
+      taskType: "medication-follow-through-furosemide",
+      targetTeamId: "ward-medical",
+      requiredCapabilities: ["medication-review"],
+      dueInMs: 14_400_000,
+    };
+  }
+  if (/\bantibiotics?\b/u.test(text)) {
+    return {
+      taskType: "medication-follow-through-antibiotics",
+      targetTeamId: "ward-medical",
+      requiredCapabilities: ["medication-review"],
+      dueInMs: 14_400_000,
+    };
+  }
+  const wardAction = /\bobservations?\b/u.test(text)
+    ? "observation-monitoring"
+    : /\bweights?\b/u.test(text)
+      ? "daily-weight-monitoring"
+      : /\bfluid\s+balance\b/u.test(text)
+        ? "fluid-balance-monitoring"
+        : /\bbloods?\b/u.test(text)
+          ? "daily-bloods"
+          : null;
+  return wardAction === null
+    ? null
+    : {
+        taskType: wardAction,
+        targetTeamId: "ward-nursing",
+        requiredCapabilities: ["ward-care"],
+        dueInMs: 43_200_000,
+      };
+}
+
 const sourceEvidenceSchema = z
   .object({
     evidenceRef: z.string().regex(EVIDENCE_REFERENCE),
@@ -221,11 +266,39 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
             possibleDraftId === null
               ? null
               : dependencies.store.getTask(possibleDraftId);
-          const draftTaskId =
+          let draftTaskId =
             possibleDraft?.patientId === body.patientId &&
             possibleDraft.state === "draft"
               ? possibleDraft.taskId
               : null;
+          const guardrail = guardedDraftSpec(body.signalText);
+          if (draftTaskId === null && guardrail !== null) {
+            const duplicate = dependencies.store.findOpenDuplicate(
+              body.patientId,
+              guardrail.taskType,
+              guardrail.targetTeamId,
+            );
+            const guardedDraft =
+              duplicate ??
+              dependencies.ledger.createDraft({
+                patientId: body.patientId,
+                interactionId: body.interactionId,
+                contextId: agent.contextId,
+                origin: "agent_suggested",
+                summary: body.signalText,
+                taskType: guardrail.taskType,
+                evidenceRefs: body.evidenceRefs,
+                targetTeamId: guardrail.targetTeamId,
+                requiredCapabilities: guardrail.requiredCapabilities,
+                clinicalUrgency: "medium",
+                dueInMs: guardrail.dueInMs,
+                idempotencyKey: body.idempotencyKey,
+                actor: { type: "agent", id: "corti-agentic-guardrail" },
+              });
+            if (guardedDraft.state === "draft") {
+              draftTaskId = guardedDraft.taskId;
+            }
+          }
           const agentResult = {
             signalEventId: result.signalEventId,
             contextId: agent.contextId,

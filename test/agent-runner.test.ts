@@ -4,6 +4,7 @@ import test, { type TestContext } from "node:test";
 import { FOLLOW_THROUGH_PROMPT } from "../src/agent/prompt.js";
 import { type AgentGateway, AgentRunner } from "../src/agent/runner.js";
 import { seedKaren } from "../src/fixtures/karen.js";
+import { seedSyntheticWard } from "../src/fixtures/ward.js";
 import { createApp } from "../src/http/app.js";
 import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
@@ -552,7 +553,7 @@ test("verification audit failure rolls back its marker and retry recovers withou
 
 test("agent-enabled signal route investigates only after source evidence registration", async (t) => {
   const harness = createAppHarness();
-  let createdDraftId: string | null = null;
+  seedSyntheticWard(harness.store, "2026-08-20T10:00:00.000Z");
   const calls: Array<{
     text: string;
     contextId?: string;
@@ -567,22 +568,6 @@ test("agent-enabled signal route investigates only after source evidence registr
         ]),
         true,
       );
-      const draft = harness.ledger.createDraft({
-        patientId: PATIENT_ID,
-        interactionId: INTERACTION_ID,
-        contextId: "ctx-karen",
-        origin: "agent_suggested",
-        summary: "Review dizziness after the medication change",
-        taskType: "medication-follow-through-dizziness",
-        evidenceRefs: ["encounter:candidate-agent.1"],
-        targetTeamId: "district-nursing",
-        requiredCapabilities: ["blood-pressure"],
-        clinicalUrgency: "medium",
-        dueInMs: 48 * 60 * 60_000,
-        idempotencyKey: String(input.data?.idempotencyKey),
-        actor: { type: "agent", id: "corti" },
-      });
-      createdDraftId = draft.taskId;
       return result("ctx-karen", "corti-investigate", "completed");
     },
     async waitForCompletion(agentResult) {
@@ -630,12 +615,12 @@ test("agent-enabled signal route investigates only after source evidence registr
     body: JSON.stringify({
       patientId: PATIENT_ID,
       interactionId: INTERACTION_ID,
-      signalText: "Dizziness needs follow-through",
+      signalText: "Daily weight monitoring",
       evidenceRefs: ["encounter:candidate-agent.1"],
       sourceEvidence: [
         {
           evidenceRef: "encounter:candidate-agent.1",
-          sourceQuote: "I feel dizzy when I stand up.",
+          sourceQuote: "Daily weight monitoring",
         },
       ],
       idempotencyKey: "candidate-agent-ready",
@@ -645,14 +630,11 @@ test("agent-enabled signal route investigates only after source evidence registr
   assert.equal(investigated.status, 202);
   assert.equal(calls.length, 1);
   const response = await investigated.json();
-  assert.deepEqual(
-    { ...response, signalEventId: "event-id" },
-    {
-      signalEventId: "event-id",
-      contextId: "ctx-karen",
-      cortiTaskId: "corti-investigate",
-      draftTaskId: createdDraftId,
-      agentState: "completed",
-    },
-  );
+  assert.equal(response.contextId, "ctx-karen");
+  assert.equal(response.cortiTaskId, "corti-investigate");
+  assert.equal(response.agentState, "completed");
+  assert.equal(typeof response.draftTaskId, "string");
+  const draft = harness.store.requireTask(response.draftTaskId);
+  assert.equal(draft.taskType, "daily-weight-monitoring");
+  assert.equal(draft.targetTeamId, "ward-nursing");
 });
