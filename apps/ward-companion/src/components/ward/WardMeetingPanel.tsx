@@ -5,6 +5,7 @@ import { transcriptSpeakerLabels } from "@pipeline/browser/speakers.js";
 import type { PipelineEvent, TranscriptSegment } from "@pipeline/contracts.js";
 
 import { recordCortiActivity } from "@/lib/corti-activity";
+import { wardMeetingEncounterIdentifier } from "@/lib/ward-meeting";
 import {
   appendWardMeetingTranscript,
   closeAndReconcileWardMeetingSegment,
@@ -200,7 +201,9 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
     try {
       const started = await startWardMeeting({
         wardId: "north-wing-l4",
-        encounterIdentifier: `north-wing-l4-${patientId}`,
+        // Corti encounter identifiers are unique. The previous patient-only value
+        // collided as soon as someone reconciled the same patient a second time.
+        encounterIdentifier: wardMeetingEncounterIdentifier(correlationId),
         idempotencyKey: keysRef.current.start,
         actorId: demoActors.clinician,
         correlationId,
