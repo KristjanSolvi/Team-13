@@ -3,8 +3,10 @@ import type { TranscriptSegment } from "../contracts.js";
 export type ConversationSpeakerLabel = "Doctor" | "Patient" | `Speaker ${number}`;
 
 /**
- * Corti speaker IDs are identifiers, not clinical roles. Assign display roles
- * from the first chronological appearance of each distinct diarized speaker.
+ * Corti speaker IDs are identifiers, not clinical roles. For the scripted
+ * hackathon demonstration, assign display roles from the first chronological
+ * appearance of each distinct diarized speaker: Doctor, then Patient, then
+ * neutral labels for any additional speakers.
  */
 export function transcriptSpeakerLabels(
   segments: readonly TranscriptSegment[],
