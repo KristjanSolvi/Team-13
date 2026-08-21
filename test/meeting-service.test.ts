@@ -249,7 +249,10 @@ test("meeting completion requires no open segment and is idempotent", (t) => {
   assert.deepEqual(replay.meeting, completed.meeting);
 });
 
-function closedKarenSegment(service: MeetingService) {
+function closedKarenSegment(
+  service: MeetingService,
+  text = "Please ask pharmacy to review the discharge medicines.",
+) {
   const started = start(service);
   const opened = service.openPatientSegment({
     meetingId: started.meeting.meetingId,
@@ -268,7 +271,7 @@ function closedKarenSegment(service: MeetingService) {
     segments: [
       {
         segmentKey: "interaction-meeting-1:3",
-        text: "Please ask pharmacy to review the discharge medicines.",
+        text,
         startSeconds: 3,
         endSeconds: 6,
         speakerId: 1,
@@ -441,6 +444,80 @@ test("save atomically creates a grounded draft and a non-mutating carry-forward"
     store.requirePatientMeetingSegment(closed.segment.segmentId).status,
     "reconciled",
   );
+});
+
+test("reconciliation revises an existing unapproved task instead of duplicating it", (t) => {
+  const { service, ledger, store } = setup(t);
+  store.putTeam({
+    teamId: "ward-pharmacy",
+    name: "Ward Pharmacy",
+    capabilities: ["medicines-review"],
+  });
+  const sourceQuote =
+    "Change the paracetamol dose from 500 milligrams to one gram four times daily.";
+  const closed = closedKarenSegment(service, sourceQuote);
+  const evidenceRef = closed.evidence.sourceRef as string;
+  const existing = ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-existing-medication",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Give paracetamol 500 milligrams four times daily",
+    taskType: "medication-dose-review",
+    evidenceRefs: [evidenceRef],
+    targetTeamId: "ward-pharmacy",
+    requiredCapabilities: ["medicines-review"],
+    clinicalUrgency: "routine",
+    dueInMs: 24 * 60 * 60_000,
+    idempotencyKey: "existing-medication-task",
+    actor: { type: "agent", id: "corti" },
+  });
+  const request = service.beginReconciliation({
+    meetingId: closed.meeting.meetingId,
+    segmentId: closed.segment.segmentId,
+    expectedSegmentVersion: closed.segment.version,
+    idempotencyKey: "reconcile-medication-change",
+    actor,
+    correlationId: "corr-medication-change",
+  });
+  store.putContextMapping(
+    "ctx-meeting",
+    request.reconciliation.interactionId,
+    "synthetic-karen",
+    "2026-08-20T10:03:00.000Z",
+  );
+
+  const input = {
+    reconciliationId: request.reconciliation.reconciliationId,
+    patientId: "synthetic-karen",
+    contextId: "ctx-meeting",
+    expectedVersion: request.reconciliation.version,
+    sourceSnapshotHash: request.reconciliation.sourceSnapshotHash,
+    proposals: [],
+    taskRevisions: [
+      {
+        taskRef: `task:${existing.taskId}@${existing.version}`,
+        summary: "Give paracetamol one gram four times daily",
+        sourceQuote,
+        evidenceRefs: [evidenceRef],
+        clinicalUrgency: "routine" as const,
+        dueInMs: 24 * 60 * 60_000,
+      },
+    ],
+    carryForwards: [],
+    idempotencyKey: "reconcile-save-medication-change",
+    actor: { type: "agent" as const, id: "meeting-agent" },
+    correlationId: "corr-medication-change",
+  };
+  const saved = service.saveReconciliation(input);
+
+  assert.equal(saved.newDraftTasks.length, 1);
+  const revised = saved.newDraftTasks[0];
+  assert.equal(revised?.taskId, existing.taskId);
+  assert.equal(revised?.summary, "Give paracetamol one gram four times daily");
+  assert.equal(revised?.state, "draft");
+  assert.equal(revised?.version, existing.version + 1);
+  assert.equal(store.listPatientTasks("synthetic-karen").length, 1);
 });
 
 test("source changes reject reconciliation without partial drafts", (t) => {

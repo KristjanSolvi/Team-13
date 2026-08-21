@@ -364,8 +364,8 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
           </h2>
           <p className="mt-0.5 max-w-2xl text-[11.5px] leading-relaxed text-muted-foreground">
             Use after a ward-round or handover update. Corti compares the final discussion with
-            existing tasks, drafts missing commitments, and carries unresolved work forward. For a
-            new bedside conversation, use Corti Ambient above.
+            existing tasks, revises changed work, drafts missing commitments, and carries unresolved
+            work forward. For a new bedside conversation, use Corti Ambient above.
           </p>
         </div>
         <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10.5px] font-medium text-foreground">
@@ -448,8 +448,9 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
                 <Check className="size-3.5 text-verified-strong" /> Agent reconciliation saved
               </p>
               <p className="mt-1 text-[10.5px] text-muted-foreground">
-                {result.newDraftTasks.length} new draft task
+                {result.newDraftTasks.length} draft task
                 {result.newDraftTasks.length === 1 ? "" : "s"}
+                {" ready for review"}
                 {" · "}
                 {result.carryForwards.length} unresolved item
                 {result.carryForwards.length === 1 ? "" : "s"} carried forward
@@ -458,7 +459,7 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
                 <ul className="mt-2 space-y-1">
                   {result.newDraftTasks.map((task) => (
                     <li key={task.taskId} className="text-[10.5px] text-foreground">
-                      Draft · {task.summary}
+                      Review · {task.summary}
                     </li>
                   ))}
                 </ul>

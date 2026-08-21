@@ -482,9 +482,12 @@ and previous meeting, latest handover, active tasks and eligible teams, then
 save exactly one grounded reconciliation. It cannot approve, publish, offer,
 assign, accept, complete, verify, or escalate a task. A genuinely new spoken
 commitment becomes an `agent_suggested` draft for clinician review. Existing
+active work that is materially changed is revised in place at its exact task
+version and returned to draft clinician review, regardless of its current
+active lifecycle state. Verified and dismissed tasks remain immutable. Existing
 unresolved or undiscussed work becomes a separate carry-forward warning and is
-never duplicated. Every accepted proposal must quote exact eligible transcript
-and cite its registered `encounter:` reference.
+never duplicated. Every accepted proposal or revision must quote exact eligible
+transcript and cite its registered `encounter:` reference.
 
 The integration close operation derives a stable reconciliation idempotency
 key and calls close before reconciliation. Replays cannot create another draft

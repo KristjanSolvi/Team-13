@@ -57,6 +57,13 @@ export interface CorrectDraftPatch {
   dueInMs?: number;
 }
 
+export interface MeetingTaskRevision {
+  summary: string;
+  evidenceRefs: string[];
+  clinicalUrgency: ClinicalUrgency;
+  dueInMs: number;
+}
+
 export interface ApprovalProof {
   approvalId: string;
   proof: string;
@@ -419,6 +426,102 @@ export class LedgerService {
       "task.draft_corrected",
       { correctedFields: Object.keys(patch).toSorted() },
     );
+  }
+
+  reviseTaskForReview(
+    taskId: string,
+    expectedVersion: number,
+    revision: MeetingTaskRevision,
+    actor: Actor,
+  ): Task {
+    return this.store.transaction(() => {
+      const updated = this.store.updateTask(
+        taskId,
+        expectedVersion,
+        (current) => {
+          if (current.state === "verified" || current.state === "dismissed") {
+            throw new DomainError(
+              "TASK_REVISION_NOT_ALLOWED",
+              "Closed tasks cannot be revised",
+              false,
+              409,
+            );
+          }
+          if (
+            revision.summary.trim().length === 0 ||
+            revision.evidenceRefs.length === 0 ||
+            !revision.evidenceRefs.every((reference) =>
+              EVIDENCE_REFERENCE.test(reference),
+            ) ||
+            !this.store.hasRecordEvidence(
+              current.patientId,
+              revision.evidenceRefs,
+            )
+          ) {
+            throw new DomainError(
+              "INVALID_EVIDENCE",
+              "Task revision requires grounded patient evidence",
+              false,
+              409,
+            );
+          }
+          const now = this.clock.now();
+          const acceptanceWindowMs =
+            ACCEPTANCE_WINDOW_MS[revision.clinicalUrgency];
+          requireDuration(revision.dueInMs);
+          if (revision.dueInMs < acceptanceWindowMs) {
+            throw new DomainError(
+              "INVALID_DEADLINE",
+              "dueInMs cannot be earlier than the team acceptance window",
+            );
+          }
+          const acceptBy = futureIso(now, acceptanceWindowMs);
+          const dueBy = futureIso(now, revision.dueInMs);
+          const candidate: Task = {
+            ...current,
+            summary: revision.summary.trim(),
+            evidenceRefs: [
+              ...new Set([...current.evidenceRefs, ...revision.evidenceRefs]),
+            ],
+            clinicalUrgency: revision.clinicalUrgency,
+            acceptBy,
+            dueBy,
+            state: "draft",
+            assignedMemberId: null,
+            failedOffers: 0,
+            version: current.version + 1,
+            updatedAt: now.toISOString(),
+          };
+          const priorityBreakdown = calculatePriority(candidate, now);
+          return {
+            ...candidate,
+            priorityBreakdown,
+            operationalPriorityScore: priorityBreakdown.total,
+          };
+        },
+        actor,
+        "task.meeting_revision_proposed",
+        { source: "ward_meeting" },
+      );
+      const thread = this.store.requireThread(updated.threadId);
+      if (thread.state !== "awaiting_review") {
+        this.store.setThreadState(
+          thread.threadId,
+          thread.version,
+          "awaiting_review",
+          updated.updatedAt,
+        );
+      }
+      this.store.appendTaskEvent(
+        updated,
+        thread.interactionId,
+        thread.contextId,
+        actor,
+        "task.approval_requested",
+        { draftHash: draftHash(updated), revisionSource: "ward_meeting" },
+      );
+      return updated;
+    });
   }
 
   approveDraft(
