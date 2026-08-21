@@ -17,8 +17,12 @@ import { ViewTabs, type ViewKey } from "@/components/ward/ViewTabs";
 import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
-import type { NewTaskOptions } from "@/data/ward";
-import { patients } from "@/data/ward";
+import type { NewTaskOptions, WardBedAssignments } from "@/data/ward";
+import { bays, patients } from "@/data/ward";
+
+const initialBedAssignments = Object.fromEntries(
+  bays.flatMap((bay) => bay.beds.map((slot) => [slot.bed, slot.patientId])),
+) as WardBedAssignments;
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -73,6 +77,9 @@ function Index() {
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
+  const [bedAssignments, setBedAssignments] = useState<WardBedAssignments>(() => ({
+    ...initialBedAssignments,
+  }));
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId}` : view);
@@ -144,10 +151,36 @@ function Index() {
     setOpen(true);
   };
 
+  const placePatient = (patientId: string, bed: string) => {
+    setBedAssignments((current) => {
+      const next = { ...current };
+      for (const [candidateBed, assignedId] of Object.entries(next)) {
+        if (assignedId === patientId) next[candidateBed] = null;
+      }
+      next[bed] = patientId;
+      return next;
+    });
+  };
+
+  const removePatientFromBed = (bed: string) => {
+    setBedAssignments((current) => ({ ...current, [bed]: null }));
+  };
+
+  const baseEhrPatient = patients.find((patient) => patient.id === ehrPatientId);
+  const currentBed = Object.entries(bedAssignments).find(
+    ([, patientId]) => patientId === ehrPatientId,
+  )?.[0];
+  const currentBay = bays.find((bay) => bay.beds.some((slot) => slot.bed === currentBed));
+  const displayedEhrPatient = baseEhrPatient
+    ? currentBed
+      ? { ...baseEhrPatient, bed: currentBed, bay: currentBay?.name ?? baseEhrPatient.bay }
+      : { ...baseEhrPatient, bed: "Unassigned", bay: "EHR roster" }
+    : undefined;
+
   return (
     <div className="min-h-screen font-sans text-foreground">
       <NervecentreShell
-        patient={patients.find((p) => p.id === ehrPatientId)}
+        patient={displayedEhrPatient}
         notes={notes[ehrPatientId] ?? []}
         activity={threads
           .filter((thread) => thread.patientId === ehrPatientId)
@@ -271,6 +304,14 @@ function Index() {
                 <Insights
                   threads={threads}
                   initialPatientId={ehrPatientId}
+                  onOpenThread={(threadId) => {
+                    const patientId =
+                      threads.find((thread) => thread.id === threadId)?.patientId ?? ehrPatientId;
+                    setEhrPatientId(patientId);
+                    setScopeId(patientId);
+                    setActiveThreadId(threadId);
+                    setView("activity");
+                  }}
                   onOpenPatient={(patientId) => {
                     setEhrPatientId(patientId);
                     setScopeId(patientId);
@@ -304,6 +345,10 @@ function Index() {
                     threads={threads}
                     notes={notes}
                     activePatientId={ehrPatientId}
+                    bedAssignments={bedAssignments}
+                    onPlacePatient={placePatient}
+                    onRemovePatient={removePatientFromBed}
+                    onResetPlacements={() => setBedAssignments({ ...initialBedAssignments })}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
                       setScopeId(pid);
