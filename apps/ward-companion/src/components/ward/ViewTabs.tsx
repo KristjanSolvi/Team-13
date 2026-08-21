@@ -1,13 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BarChart3, LayoutGrid, ListChecks, Users } from "lucide-react";
+import { BarChart3, LayoutGrid, ListChecks } from "lucide-react";
 
-export type ViewKey = "board" | "activity" | "insights" | "demo";
+export type ViewKey = "board" | "activity" | "insights";
 
 const TABS = [
   { key: "activity", label: "Main", Icon: ListChecks },
   { key: "board", label: "Board ward", Icon: LayoutGrid },
   { key: "insights", label: "Insights", Icon: BarChart3 },
-  { key: "demo", label: "Demo", Icon: Users },
 ] as const;
 
 export function ViewTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) => void }) {

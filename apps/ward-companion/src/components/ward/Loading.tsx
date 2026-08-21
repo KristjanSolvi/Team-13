@@ -57,24 +57,6 @@ export function InsightsSkeleton() {
   );
 }
 
-export function DemoSkeleton() {
-  return (
-    <div className="space-y-4 p-5" aria-busy="true" aria-label="Loading demo studio">
-      <div className="rounded-2xl border border-border bg-panel p-5">
-        <Shimmer className="h-3 w-28" />
-        <Shimmer className="mt-3 h-6 w-2/3" />
-        <Shimmer className="mt-2 h-3 w-full" />
-        <div className="mt-5 grid gap-2 sm:grid-cols-4">
-          {[0, 1, 2, 3].map((index) => (
-            <Shimmer key={index} className="h-24 w-full rounded-xl" />
-          ))}
-        </div>
-      </div>
-      <Shimmer className="h-64 w-full rounded-2xl" />
-    </div>
-  );
-}
-
 export function Spinner({ className = "" }: { className?: string }) {
   return (
     <span
