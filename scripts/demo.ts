@@ -6,8 +6,7 @@ const appToken = process.env.APP_BEARER_TOKEN;
 if (!appToken) throw new Error("APP_BEARER_TOKEN is required");
 
 const base = (
-  process.env.API_BASE_URL ??
-  `http://127.0.0.1:${process.env.PORT ?? "3000"}`
+  process.env.API_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`
 ).replace(/\/+$/, "");
 const runId = Date.now().toString(36);
 const failure = process.argv.includes("--failure");
@@ -28,9 +27,7 @@ async function request<T>(
   });
   const body: unknown = await response.json();
   if (!response.ok) {
-    throw new Error(
-      `${path}: ${response.status} ${JSON.stringify(body)}`,
-    );
+    throw new Error(`${path}: ${response.status} ${JSON.stringify(body)}`);
   }
   return body as T;
 }
@@ -73,9 +70,7 @@ const patientTasks = await request<{ tasks: Task[] }>(
 );
 const draft = patientTasks.tasks
   .toReversed()
-  .find(
-    (task) => task.state === "draft" && !existingTaskIds.has(task.taskId),
-  );
+  .find((task) => task.state === "draft" && !existingTaskIds.has(task.taskId));
 if (!draft) {
   throw new Error(
     "The signal was retained, but no new draft exists. Configure CORTI_AGENT_ID or create the clinician task through /api/tasks/manual.",

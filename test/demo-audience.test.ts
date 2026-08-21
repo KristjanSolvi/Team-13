@@ -187,7 +187,10 @@ test("assignment durably explains why an available capable participant won", (t)
     actorId: "clinician:demo-host",
   });
 
-  assert.equal(result.participant.participantId, second.participant.participantId);
+  assert.equal(
+    result.participant.participantId,
+    second.participant.participantId,
+  );
   assert.equal(
     result.assignment.routingDecision?.selectedMemberId,
     second.participant.memberId,

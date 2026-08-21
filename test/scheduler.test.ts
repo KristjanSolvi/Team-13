@@ -160,11 +160,13 @@ test("an offered task past due escalates before acceptance timeout can assign it
   assert.equal(escalated.state, "escalated");
   assert.equal(escalated.assignedMemberId, null);
   assert.equal(escalated.clinicalUrgency, "medium");
-  const events = store.listEvents(0).filter((event) =>
-    ["task.team_acceptance_timed_out", "task.member_assigned"].includes(
-      event.eventType,
-    ),
-  );
+  const events = store
+    .listEvents(0)
+    .filter((event) =>
+      ["task.team_acceptance_timed_out", "task.member_assigned"].includes(
+        event.eventType,
+      ),
+    );
   assert.deepEqual(events, []);
 });
 
@@ -262,7 +264,9 @@ test("priority refresh changes state once and is stable at the same clock time",
     .filter(
       (event) => event.eventType === "task.operational_priority_recalculated",
     ).length;
-  assert.ok(refreshed.operationalPriorityScore > offered.operationalPriorityScore);
+  assert.ok(
+    refreshed.operationalPriorityScore > offered.operationalPriorityScore,
+  );
   assert.equal(recalculations, 1);
 
   scheduler.tick();
@@ -271,8 +275,7 @@ test("priority refresh changes state once and is stable at the same clock time",
     store
       .listEvents(0)
       .filter(
-        (event) =>
-          event.eventType === "task.operational_priority_recalculated",
+        (event) => event.eventType === "task.operational_priority_recalculated",
       ).length,
     1,
   );
@@ -320,8 +323,7 @@ test("only the current assigned member can decline and a failed decline is atomi
   const eventCount = store.listEvents(0).length;
 
   assertDomainError(
-    () =>
-      scheduler.decline(assigned.taskId, assigned.version, "nurse-b"),
+    () => scheduler.decline(assigned.taskId, assigned.version, "nurse-b"),
     "VERSION_CONFLICT",
     409,
   );

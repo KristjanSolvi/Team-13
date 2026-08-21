@@ -3,7 +3,9 @@ const patientId = process.env.HANDOVER_PATIENT_ID ?? "synthetic-karen";
 const actorId = process.env.HANDOVER_ACTOR_ID ?? "clinician:demo";
 const bearerToken = process.env.INTEGRATION_API_BEARER_TOKEN;
 if (bearerToken === undefined || bearerToken.length < 8) {
-  throw new Error("INTEGRATION_API_BEARER_TOKEN must contain at least 8 characters");
+  throw new Error(
+    "INTEGRATION_API_BEARER_TOKEN must contain at least 8 characters",
+  );
 }
 
 const response = await fetch(

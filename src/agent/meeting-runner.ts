@@ -20,6 +20,13 @@ function requireCompletedInContext(
   contextId: string,
 ): void {
   if (result.contextId !== contextId) {
+    console.error(
+      JSON.stringify({
+        event: "corti.meeting_agent.context_mismatch",
+        taskId: result.taskId,
+        state: result.state,
+      }),
+    );
     throw new DomainError(
       "AGENT_CONTEXT_MISMATCH",
       "Corti returned a different meeting context",
@@ -28,6 +35,17 @@ function requireCompletedInContext(
     );
   }
   if (result.state !== "completed") {
+    // Keep production diagnostics deliberately free of transcript, patient,
+    // prompt, and credential data. The opaque task ID and terminal state are
+    // sufficient to inspect the failed Corti task through the authenticated
+    // operator tooling.
+    console.error(
+      JSON.stringify({
+        event: "corti.meeting_agent.task_incomplete",
+        taskId: result.taskId,
+        state: result.state,
+      }),
+    );
     throw new DomainError(
       "AGENT_TASK_INCOMPLETE",
       "Corti did not complete meeting reconciliation",
@@ -105,6 +123,15 @@ export class MeetingAgentRunner {
       input.reconciliationId,
     );
     if (persisted.status !== "saved" || persisted.contextId !== contextId) {
+      console.error(
+        JSON.stringify({
+          event: "corti.meeting_agent.save_unconfirmed",
+          taskId: completed.taskId,
+          state: completed.state,
+          persistedStatus: persisted.status,
+          contextMatched: persisted.contextId === contextId,
+        }),
+      );
       throw new DomainError(
         "MEETING_RECONCILIATION_UNCONFIRMED",
         "Corti completed without saving one meeting reconciliation",

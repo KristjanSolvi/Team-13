@@ -1104,7 +1104,10 @@ test("patient lists, approval commands, and errors match the integration gateway
 
 test("patient task list omits terminal work whose closed thread is absent from the active list", async (t) => {
   const harness = createAppHarness();
-  const draft = harness.ledger.createKarenDraft("ctx-karen", "terminal-list-draft");
+  const draft = harness.ledger.createKarenDraft(
+    "ctx-karen",
+    "terminal-list-draft",
+  );
   const approval = harness.ledger.approveDraft(
     draft.taskId,
     draft.version,
@@ -1143,9 +1146,12 @@ test("patient task list omits terminal work whose closed thread is absent from t
     harness.store.close();
   });
 
-  const threads = await fetch(`${baseUrl}/api/patients/synthetic-karen/threads`, {
-    headers: appHeaders(),
-  });
+  const threads = await fetch(
+    `${baseUrl}/api/patients/synthetic-karen/threads`,
+    {
+      headers: appHeaders(),
+    },
+  );
   const tasks = await fetch(`${baseUrl}/api/patients/synthetic-karen/tasks`, {
     headers: appHeaders(),
   });
