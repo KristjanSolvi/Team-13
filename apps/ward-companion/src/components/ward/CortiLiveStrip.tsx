@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, LoaderCircle, Mic, Radio, Square } from "lucide-react";
+import { Check, CircleAlert, FileText, LoaderCircle, Mic, Radio, Square } from "lucide-react";
 import { AmbientCapture } from "@pipeline/browser/ambient.js";
 import {
   transcriptSpeakerLabels,
@@ -51,11 +51,14 @@ type CandidateView = {
   state: InvestigationState;
   message: string;
   agentCredits: number | null;
+  taskId: string | null;
 };
 
 type Props = {
   patient: Patient;
   onAuthoritativeChange: () => Promise<void>;
+  onReviewTask: (taskId: string) => void;
+  onMoveToDocument: (text: string) => void;
 };
 
 function timeLabel(seconds: number): string {
@@ -84,12 +87,14 @@ function agentHandoffSummary(handoff: unknown): {
   completed: boolean;
   retained: boolean;
   credits: number | null;
+  taskId: string | null;
 } {
   const value = asRecord(handoff);
   return {
     completed: value?.["agentState"] === "completed",
     retained: value?.["status"] === "retained",
     credits: typeof value?.["credits"] === "number" ? value["credits"] : null,
+    taskId: typeof value?.["draftTaskId"] === "string" ? value["draftTaskId"] : null,
   };
 }
 
@@ -103,11 +108,18 @@ function speakerTone(label: ConversationSpeakerLabel | "Speaker"): string {
   return "bg-background text-muted-foreground";
 }
 
-export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
+export function CortiLiveStrip({
+  patient,
+  onAuthoritativeChange,
+  onReviewTask,
+  onMoveToDocument,
+}: Props) {
   const [state, setState] = useState<CaptureState>("checking");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [facts, setFacts] = useState<AmbientFact[]>([]);
   const [candidateViews, setCandidateViews] = useState<CandidateView[]>([]);
+  const [documentSegments, setDocumentSegments] = useState<TranscriptSegment[]>([]);
+  const [documentMoved, setDocumentMoved] = useState(false);
   const [message, setMessage] = useState("Checking the Corti pipeline…");
   const [audioMessage, setAudioMessage] = useState("Audio not checked");
   const [ambientCredits, setAmbientCredits] = useState<number | null>(null);
@@ -199,6 +211,8 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     setSegments([]);
     setFacts([]);
     setCandidateViews([]);
+    setDocumentSegments([]);
+    setDocumentMoved(false);
     setAmbientCredits(null);
     setGenerationCredits(null);
     setReviewCredits(null);
@@ -322,6 +336,8 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     setSegments([]);
     setFacts([]);
     setCandidateViews([]);
+    setDocumentSegments([]);
+    setDocumentMoved(false);
     setAmbientCredits(null);
     setGenerationCredits(null);
     setReviewCredits(null);
@@ -358,7 +374,10 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
 
   const updateCandidate = (
     candidateId: string,
-    update: Pick<CandidateView, "state" | "message"> & { agentCredits?: number | null },
+    update: Pick<CandidateView, "state" | "message"> & {
+      agentCredits?: number | null;
+      taskId?: string | null;
+    },
   ) => {
     setCandidateViews((current) =>
       current.map((view) =>
@@ -384,6 +403,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
         interactionId,
         correlationId,
         segments: finalSegments,
+        facts,
       }));
     if (correlationIdRef.current !== correlationId) return;
     recordCortiActivity({
@@ -400,6 +420,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
         state: "checking" as const,
         message: "Corti Agentic is checking the patient record, open threads, and eligible teams…",
         agentCredits: null,
+        taskId: null,
       })),
     );
     setState("complete");
@@ -415,42 +436,43 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
       `${generated.candidates.length} evidence-backed candidate${generated.candidates.length === 1 ? "" : "s"} sent for context checks`,
     );
     let investigationAccepted = false;
-    await Promise.allSettled(
-      generated.candidates.map(async (candidate) => {
-        try {
-          const result = await investigateCandidate(candidate);
-          if (correlationIdRef.current !== correlationId) return;
-          const handoff = agentHandoffSummary(result.handoff);
-          recordCortiActivity({
-            product: "agentic",
-            status: "completed",
-            action: "Patient context and open work checked through scoped MCP",
-            ...(handoff.credits === null ? {} : { credits: handoff.credits }),
-          });
-          investigationAccepted = true;
-          updateCandidate(candidate.candidateId, {
-            state: "sent",
-            message: handoff.completed
-              ? "Corti Agentic completed the context check · any proposed work remains clinician-controlled"
-              : handoff.retained
-                ? "Signal retained with its evidence · no autonomous task was created"
-                : "Context check accepted · no autonomous task was created",
-            agentCredits: handoff.credits,
-          });
-        } catch {
-          if (correlationIdRef.current !== correlationId) return;
-          recordCortiActivity({
-            product: "agentic",
-            status: "unavailable",
-            action: "Agentic/MCP context check unavailable; candidate retained safely",
-          });
-          updateCandidate(candidate.candidateId, {
-            state: "failed",
-            message: "Context check unavailable · candidate retained without action",
-          });
-        }
-      }),
-    );
+    // Run scoped investigations in order so each duplicate check sees drafts
+    // created by earlier, distinct actions from the same recording.
+    for (const candidate of generated.candidates) {
+      try {
+        const result = await investigateCandidate(candidate);
+        if (correlationIdRef.current !== correlationId) return;
+        const handoff = agentHandoffSummary(result.handoff);
+        recordCortiActivity({
+          product: "agentic",
+          status: "completed",
+          action: "Patient context and open work checked through scoped MCP",
+          ...(handoff.credits === null ? {} : { credits: handoff.credits }),
+        });
+        investigationAccepted = true;
+        updateCandidate(candidate.candidateId, {
+          state: "sent",
+          message: handoff.completed
+            ? "Corti Agentic completed the context check · any proposed work remains clinician-controlled"
+            : handoff.retained
+              ? "Signal retained with its evidence · no autonomous task was created"
+              : "Context check accepted · no autonomous task was created",
+          agentCredits: handoff.credits,
+          taskId: handoff.taskId,
+        });
+      } catch {
+        if (correlationIdRef.current !== correlationId) return;
+        recordCortiActivity({
+          product: "agentic",
+          status: "unavailable",
+          action: "Agentic/MCP context check unavailable; candidate retained safely",
+        });
+        updateCandidate(candidate.candidateId, {
+          state: "failed",
+          message: "Context check unavailable · candidate retained without action",
+        });
+      }
+    }
     if (investigationAccepted && correlationIdRef.current === correlationId) {
       await onAuthoritativeChange();
     }
@@ -466,6 +488,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
       const finalSegments = capture.segments.filter((segment) => segment.isFinal);
       captureRef.current = null;
       setSegments([...capture.segments]);
+      setDocumentSegments(finalSegments);
       setState("analysing");
       setMessage("Reviewing final wording while checking conservative follow-through evidence…");
       const interactionId = finalSegments[0]?.interactionId;
@@ -479,6 +502,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
         interactionId,
         correlationId: reviewCorrelationId,
         segments: finalSegments,
+        facts,
       });
       pendingGenerationRef.current = generationPromise;
       void generationPromise.catch(() => undefined);
@@ -544,6 +568,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     const correlationId = correlationIdRef.current;
     try {
       const reviewed = buildReviewedTranscript(rawSegments, reviewSuggestions, reviewDecisions);
+      setDocumentSegments(reviewed.segments);
       setReviewState("confirmed");
       setMessage(
         reviewed.appliedSuggestionIds.length > 0
@@ -583,6 +608,9 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     segment.speakerId === undefined
       ? "Speaker"
       : (speakerLabels.get(segment.speakerId) ?? "Speaker");
+  const documentText = documentSegments
+    .map((segment) => `${labelFor(segment)}: ${segment.text}`)
+    .join("\n");
 
   return (
     <section className="rounded-xl border border-border bg-panel">
@@ -601,6 +629,20 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">{message}</p>
         </div>
         <div className="flex items-center gap-2">
+          {state === "complete" && documentText.length > 0 && (
+            <button
+              type="button"
+              disabled={documentMoved}
+              onClick={() => {
+                onMoveToDocument(documentText);
+                setDocumentMoved(true);
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-[12.5px] font-medium text-foreground disabled:opacity-55"
+            >
+              <FileText className="size-3.5" />
+              {documentMoved ? "Moved to Medical notes" : "Move to document"}
+            </button>
+          )}
           <select
             value={deviceId}
             onChange={(event) => setDeviceId(event.target.value)}
@@ -776,38 +818,44 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
 
       {candidateViews.length > 0 && (
         <div className="space-y-2 border-t border-border px-4 py-3">
-          {candidateViews.map(({ candidate, state: candidateState, message, agentCredits }) => (
-            <article key={candidate.candidateId} className="rounded-lg bg-background p-3">
-              <div className="flex items-start gap-2.5">
-                {candidateState === "checking" ? (
-                  <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin text-teal" />
-                ) : candidateState === "failed" ? (
-                  <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-escalated-strong" />
-                ) : (
-                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-pending" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-[13.5px] font-medium text-foreground">{candidate.summary}</p>
-                  <blockquote className="mt-1 border-l-2 border-teal/30 pl-2 text-[12.5px] italic text-muted-foreground">
-                    “{candidate.evidence[0]?.sourceQuote}”
-                  </blockquote>
-                  <p className="mt-1.5 text-[11.5px] text-muted-foreground">{message}</p>
-                  {agentCredits !== null && (
-                    <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-                      Agentic usage: {creditsLabel(agentCredits)}
-                    </p>
+          {candidateViews.map(
+            ({ candidate, state: candidateState, message, agentCredits, taskId }) => (
+              <article key={candidate.candidateId} className="rounded-lg bg-background p-3">
+                <div className="flex items-start gap-2.5">
+                  {candidateState === "checking" ? (
+                    <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin text-teal" />
+                  ) : candidateState === "failed" ? (
+                    <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-escalated-strong" />
+                  ) : (
+                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-pending" />
                   )}
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-medium text-foreground">{candidate.summary}</p>
+                    <blockquote className="mt-1 border-l-2 border-teal/30 pl-2 text-[12.5px] italic text-muted-foreground">
+                      “{candidate.evidence[0]?.sourceQuote}”
+                    </blockquote>
+                    <p className="mt-1.5 text-[11.5px] text-muted-foreground">{message}</p>
+                    {agentCredits !== null && (
+                      <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+                        Agentic usage: {creditsLabel(agentCredits)}
+                      </p>
+                    )}
+                    {candidateState === "sent" && taskId !== null && (
+                      <button
+                        type="button"
+                        onClick={() => onReviewTask(taskId)}
+                        className="mt-2 flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-[11.5px] font-medium text-background"
+                      >
+                        <Check className="size-3.5" /> Review & confirm task
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ),
+          )}
         </div>
       )}
-
-      <footer className="border-t border-border px-4 py-2.5 text-[11.5px] text-muted-foreground">
-        Ambient evidence may suggest a candidate. Only an attributed clinician approval can create
-        tracked work.
-      </footer>
     </section>
   );
 }

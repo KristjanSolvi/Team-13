@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, LoaderCircle, ShieldCheck } from "lucide-react";
+import { Check, Copy, Download, FileText, LoaderCircle, ShieldCheck } from "lucide-react";
 import type { Patient } from "@/data/ward";
 import {
   demoActors,
@@ -27,6 +27,26 @@ function errorMessage(error: unknown): string {
   return "The handover could not be generated; nothing was saved.";
 }
 
+function handoverDocument(patient: Patient, handover: GroundedHandover): string {
+  if (handover.rendered == null) return "";
+  return [
+    "FLUENCE PATIENT HANDOVER",
+    `Patient: ${patient.name}`,
+    "Status: Saved draft — not sent automatically",
+    `Handover ID: ${handover.handoverId}`,
+    "",
+    handover.rendered.title,
+    ...handover.rendered.sections
+      .filter((section) => section.statements.length > 0)
+      .flatMap((section) => [
+        `\n${section.heading}`,
+        ...section.statements.map((statement) => `- ${statement.statement}`),
+      ]),
+    "",
+    `Source snapshot: ${handover.sourceSnapshotHash}`,
+  ].join("\n");
+}
+
 /**
  * On-demand grounded handover: a fresh Corti Agentic context gathers the
  * record, open threads, and task state through MCP, saves an evidence-linked
@@ -37,11 +57,13 @@ export function HandoverPanel({ patient }: Props) {
   const [busy, setBusy] = useState(false);
   const [handover, setHandover] = useState<GroundedHandover | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setHandover(null);
     setError(null);
     setBusy(false);
+    setCopied(false);
   }, [patient.id]);
 
   const generate = async () => {
@@ -82,17 +104,47 @@ export function HandoverPanel({ patient }: Props) {
     }
   };
 
+  const copyForHandover = async () => {
+    if (handover?.rendered == null) return;
+    try {
+      await navigator.clipboard.writeText(handoverDocument(patient, handover));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_500);
+    } catch {
+      setError("The draft is saved, but it could not be copied from this browser.");
+    }
+  };
+
+  const downloadHandover = () => {
+    if (handover?.rendered == null) return;
+    const blob = new Blob([handoverDocument(patient, handover)], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const patientSlug = patient.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    link.href = url;
+    link.download = `fluence-handover-${patientSlug || patient.id}.txt`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <section className="rounded-xl border border-border bg-panel">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div>
           <span className="flex items-center gap-2 text-[13px] font-medium text-foreground">
             <FileText className="size-3.5 text-teal" />
-            Grounded handover · Corti agent
+            Patient handover
           </span>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            A fresh agent context reads the record and open work through MCP, then Corti Text
-            Generation writes the handover. Every statement keeps its evidence.
+            Corti creates an evidence-linked draft from the current record and open work, then saves
+            it to this patient&apos;s Follow-Through record for clinician review.
           </p>
         </div>
         <button
@@ -106,8 +158,8 @@ export function HandoverPanel({ patient }: Props) {
             : patient.agenticLinked !== true
               ? "Agentic not connected"
               : handover === null
-                ? `Generate for ${patient.name.split(" ").slice(-1)[0]}`
-                : "Regenerate"}
+                ? "Generate & save draft"
+                : "Regenerate draft"}
         </button>
       </header>
 
@@ -161,9 +213,33 @@ export function HandoverPanel({ patient }: Props) {
             ))}
           <p className="flex items-start gap-1.5 border-t border-border pt-2 text-[10.5px] text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-3 shrink-0 text-teal" />
-            Draft for the receiving clinician · refused if sources changed while generating ·
-            snapshot {handover.sourceSnapshotHash.slice(0, 19)}…
+            Saved as a patient-scoped draft · refused if sources changed while generating · snapshot{" "}
+            {handover.sourceSnapshotHash.slice(0, 19)}…
           </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-pending-soft px-3 py-2">
+            <p className="text-[10.5px] leading-relaxed text-pending-strong">
+              <span className="font-semibold">Saved draft · not sent.</span> Copy it into the
+              receiving team&apos;s existing handover channel; no notification is sent
+              automatically.
+            </p>
+            <div className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                onClick={() => void copyForHandover()}
+                className="flex items-center gap-1.5 rounded-md border border-pending/25 bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground"
+              >
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadHandover}
+                className="flex items-center gap-1.5 rounded-md border border-pending/25 bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground"
+              >
+                <Download className="size-3.5" /> Download .txt
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -12,6 +12,7 @@ import {
   candidateSchema,
   demoAssignmentSchema,
   demoJoinSchema,
+  demoRouteNowSchema,
   demoSessionCreateSchema,
   downstreamSimulationSchema,
   ehrCreateDocumentSchema,
@@ -473,6 +474,32 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
       response.json(
         await options.service.demoParticipantView(
           participantToken(request),
+          correlationId(response),
+        ),
+      );
+    }),
+  );
+
+  app.post(
+    "/api/demo/tasks/:taskId/route-now",
+    requireIntegrationBearer(options.integrationApiBearerToken),
+    route(async (request, response) => {
+      response.json(
+        await options.service.routeDemoTaskNow(
+          ehrIdentifier(request, "taskId"),
+          demoRouteNowSchema.parse(request.body),
+          requestMeta(request, response),
+        ),
+      );
+    }),
+  );
+
+  app.get(
+    "/api/tasks/:taskId/routing-receipt",
+    route(async (request, response) => {
+      response.json(
+        await options.service.getTaskRoutingReceipt(
+          ehrIdentifier(request, "taskId"),
           correlationId(response),
         ),
       );

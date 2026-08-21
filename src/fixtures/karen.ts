@@ -37,6 +37,8 @@ export function seedKaren(store: SqliteStore, now: string): void {
   store.transaction(() => {
     store.putPatient(KAREN_PATIENT_ID, "Karen Jensen", {
       synthetic: true,
+      bed: "5",
+      bay: "Bay B",
       followThroughOwner: null,
     });
     store.putRecordItem({

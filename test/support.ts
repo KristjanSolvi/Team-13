@@ -22,6 +22,7 @@ export const UI_ORIGIN = "http://127.0.0.1:5173";
 
 export function createAppHarness(
   options: {
+    demoMode?: boolean;
     handoverRunner?: {
       generate(input: GenerateHandoverInput): Promise<HandoverRecord>;
     };
@@ -40,7 +41,10 @@ export function createAppHarness(
     "synthetic-karen",
     "2026-08-20T10:00:00.000Z",
   );
-  const clock = new DemoClock(new Date("2026-08-20T10:00:00.000Z"), true);
+  const clock = new DemoClock(
+    new Date("2026-08-20T10:00:00.000Z"),
+    options.demoMode ?? true,
+  );
   const ledger = new LedgerService(
     store,
     clock,

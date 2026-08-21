@@ -43,6 +43,20 @@ const candidateRequestSchema = z.object({
   patientId: z.string().min(1).max(120),
   interactionId: z.string().min(1),
   segments: z.array(transcriptSegmentSchema).min(1).max(500),
+  facts: z
+    .array(
+      z
+        .object({
+          factId: z.string().min(1).max(160),
+          text: z.string().min(1).max(1_000),
+          group: z.string().min(1).max(120),
+          source: z.string().min(1).max(160),
+          createdAt: z.string().min(1).max(160),
+        })
+        .strict(),
+    )
+    .max(100)
+    .default([]),
 });
 
 const transcriptReviewRequestSchema = z
@@ -286,6 +300,7 @@ export function createPipelineApp(options: CreatePipelineAppOptions) {
           interactionId: input.interactionId,
           correlationId: correlationId(response),
           segments: input.segments.map(transcriptSegment),
+          facts: input.facts,
         }),
       );
     }),

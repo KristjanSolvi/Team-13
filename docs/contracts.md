@@ -310,6 +310,26 @@ participant's assignments. On the Agentic backend itself, participant lookup
 is a server-to-server `POST /api/demo/participants/lookup`; browsers must not
 call that protected endpoint directly.
 
+## Explainable smart assignment demo
+
+An expanded `offered_to_team` task may expose the demo-only
+`POST /api/demo/tasks/:taskId/route-now` control. It accepts only an idempotency
+key, requires a signed presenter session plus CSRF token at the UI boundary,
+and uses the server-held integration bearer upstream. The presenter unlocks
+that session with `DEMO_HOST_ACCESS_KEY`, which is never bundled into client
+code. The control advances the backend's synthetic clock to the task's existing
+team acceptance deadline. It is rejected without mutation when demo mode is
+disabled, nobody is eligible, or the team deadline collides with the clinical
+deadline. The normal scheduler still makes the decision; the UI cannot nominate
+an owner or bypass team, shift, availability, capacity, or capability checks.
+
+The result contains the newly assigned task and a durable routing receipt. The
+same receipt remains available from
+`GET /api/tasks/:taskId/routing-receipt`, including the trigger, selected
+member, required capabilities, ranked eligible candidates, workloads, and
+explicit exclusion reasons. The browser must present this as operational
+routing after clinician approval—not as a clinical decision made by the agent.
+
 ## Grounded on-demand patient handovers
 
 The UI has one public operation through the integration API:

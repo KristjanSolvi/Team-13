@@ -353,15 +353,16 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
     patientSegmentRef.current !== null;
 
   return (
-    <section className="mt-4 rounded-2xl border border-border bg-panel">
+    <section className="rounded-2xl border border-border bg-panel">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-3.5">
         <div>
           <h2 className="flex items-center gap-2 text-[14px] font-medium text-foreground">
-            <Mic className="size-4 text-teal" /> Ward meeting reconciliation
+            <Mic className="size-4 text-teal" /> Reconcile existing work
           </h2>
           <p className="mt-0.5 max-w-2xl text-[11.5px] leading-relaxed text-muted-foreground">
-            One live Corti Ambient interaction, one explicitly selected patient, then one fresh
-            Agentic context reads only that patient&apos;s record and open work through MCP.
+            Use after a ward-round or handover update. Corti compares the final discussion with
+            existing tasks, drafts missing commitments, and carries unresolved work forward. For a
+            new bedside conversation, use Corti Ambient above.
           </p>
         </div>
         <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10.5px] font-medium text-foreground">
@@ -385,7 +386,7 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
                 onClick={() => void start()}
                 className="flex items-center gap-1.5 rounded-md bg-teal px-3.5 py-2 text-[12px] font-medium text-panel"
               >
-                <Mic className="size-3.5" /> Start live segment
+                <Mic className="size-3.5" /> Start reconciliation capture
               </button>
             )}
             {state === "recording" && (

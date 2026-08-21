@@ -270,6 +270,15 @@ describe("pipeline HTTP contract", () => {
       .send({
         patientId: "synthetic-karen",
         interactionId: "interaction-1",
+        facts: [
+          {
+            factId: "fact-1",
+            text: "The patient reports dizziness after a medication change.",
+            group: "symptom",
+            source: "ambient",
+            createdAt: "2026-08-21T10:05:30.000Z",
+          },
+        ],
         segments: [
           {
             interactionId: "interaction-1",
@@ -285,7 +294,18 @@ describe("pipeline HTTP contract", () => {
       .expect(200);
 
     expect(mockGateway.generateCandidates).toHaveBeenCalledWith(
-      expect.objectContaining({ correlationId: "corr-karen-1" }),
+      expect.objectContaining({
+        correlationId: "corr-karen-1",
+        facts: [
+          {
+            factId: "fact-1",
+            text: "The patient reports dizziness after a medication change.",
+            group: "symptom",
+            source: "ambient",
+            createdAt: "2026-08-21T10:05:30.000Z",
+          },
+        ],
+      }),
     );
   });
 

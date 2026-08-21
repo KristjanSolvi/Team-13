@@ -1820,6 +1820,45 @@ export class SqliteStore {
     }));
   }
 
+  getTaskRoutingReceipt(taskId: string): {
+    schemaVersion: "1";
+    taskId: string;
+    assignedMemberId: string;
+    routedAt: string;
+    trigger: "team_acceptance_timeout" | "member_declined" | "audience_demo";
+    routingDecision: RoutingDecision;
+  } | null {
+    this.requireTask(taskId);
+    const events = this.listEvents(0).toReversed();
+    for (const event of events) {
+      if (
+        event.eventType !== "task.member_assigned" ||
+        event.payload.taskId !== taskId ||
+        typeof event.payload.memberId !== "string" ||
+        typeof event.payload.routingDecision !== "object" ||
+        event.payload.routingDecision === null
+      ) {
+        continue;
+      }
+      const trigger =
+        event.actor.id === "demo-audience-router"
+          ? "audience_demo"
+          : event.actor.id === "decline-router"
+            ? "member_declined"
+            : "team_acceptance_timeout";
+      return {
+        schemaVersion: "1",
+        taskId,
+        assignedMemberId: event.payload.memberId,
+        routedAt: event.occurredAt,
+        trigger,
+        routingDecision: event.payload
+          .routingDecision as unknown as RoutingDecision,
+      };
+    }
+    return null;
+  }
+
   putThread(thread: Thread): void {
     this.database
       .prepare(`

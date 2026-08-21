@@ -963,6 +963,21 @@ export class IntegrationService {
     return this.agentic.assignDemoTask(sessionId, body, meta);
   }
 
+  routeDemoTaskNow(
+    taskId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.agentic.routeDemoTaskNow(taskId, body, meta);
+  }
+
+  getTaskRoutingReceipt(
+    taskId: string,
+    correlationId: string,
+  ): Promise<unknown> {
+    return this.agentic.getTaskRoutingReceipt(taskId, { correlationId });
+  }
+
   demoParticipantView(
     participantToken: string,
     correlationId: string,

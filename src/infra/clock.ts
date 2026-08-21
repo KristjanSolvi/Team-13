@@ -24,7 +24,7 @@ export class DemoClock implements Clock {
     return this.enabled ? new Date(this.current) : new Date();
   }
 
-  advance(milliseconds: number): Date {
+  assertDemoEnabled(): void {
     if (!this.enabled) {
       throw new DomainError(
         "DEMO_CLOCK_DISABLED",
@@ -33,6 +33,10 @@ export class DemoClock implements Clock {
         403,
       );
     }
+  }
+
+  advance(milliseconds: number): Date {
+    this.assertDemoEnabled();
     if (!Number.isSafeInteger(milliseconds) || milliseconds <= 0) {
       throw new DomainError(
         "INVALID_CLOCK_ADVANCE",

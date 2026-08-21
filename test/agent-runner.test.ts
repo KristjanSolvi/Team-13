@@ -35,6 +35,34 @@ test("task agent prompt pins the canonical MVP routing arguments", () => {
   assert.match(FOLLOW_THROUGH_PROMPT, /dueInMs: 172800000/);
 });
 
+test("task agent prompt turns an explicit antibiotic commitment into reviewable work", () => {
+  assert.match(FOLLOW_THROUGH_PROMPT, /let(?:'|’)s get you antibiotics/i);
+  assert.match(
+    FOLLOW_THROUGH_PROMPT,
+    /taskType: "medication-follow-through-antibiotics"/,
+  );
+  assert.match(
+    FOLLOW_THROUGH_PROMPT,
+    /taskType: "medication-follow-through-furosemide"/,
+  );
+  assert.match(FOLLOW_THROUGH_PROMPT, /targetTeamId: "ward-medical"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /requiredCapabilities: \["medication-review"\]/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /do not infer a drug, dose, route, or duration/i);
+});
+
+test("task agent prompt maps the presentation plan to eligible ward teams", () => {
+  assert.match(FOLLOW_THROUGH_PROMPT, /monitor observations/i);
+  assert.match(FOLLOW_THROUGH_PROMPT, /daily weight monitoring/i);
+  assert.match(FOLLOW_THROUGH_PROMPT, /accurate fluid balance chart/i);
+  assert.match(FOLLOW_THROUGH_PROMPT, /order daily bloods/i);
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "observation-monitoring"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "daily-weight-monitoring"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "fluid-balance-monitoring"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /taskType: "daily-bloods"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /targetTeamId: "ward-nursing"/);
+  assert.match(FOLLOW_THROUGH_PROMPT, /requiredCapabilities: \["ward-care"\]/);
+});
+
 function result(contextId: string, taskId: string, state: string) {
   return { contextId, taskId, state };
 }
@@ -524,6 +552,7 @@ test("verification audit failure rolls back its marker and retry recovers withou
 
 test("agent-enabled signal route investigates only after source evidence registration", async (t) => {
   const harness = createAppHarness();
+  let createdDraftId: string | null = null;
   const calls: Array<{
     text: string;
     contextId?: string;
@@ -538,6 +567,22 @@ test("agent-enabled signal route investigates only after source evidence registr
         ]),
         true,
       );
+      const draft = harness.ledger.createDraft({
+        patientId: PATIENT_ID,
+        interactionId: INTERACTION_ID,
+        contextId: "ctx-karen",
+        origin: "agent_suggested",
+        summary: "Review dizziness after the medication change",
+        taskType: "medication-follow-through-dizziness",
+        evidenceRefs: ["encounter:candidate-agent.1"],
+        targetTeamId: "district-nursing",
+        requiredCapabilities: ["blood-pressure"],
+        clinicalUrgency: "medium",
+        dueInMs: 48 * 60 * 60_000,
+        idempotencyKey: String(input.data?.idempotencyKey),
+        actor: { type: "agent", id: "corti" },
+      });
+      createdDraftId = draft.taskId;
       return result("ctx-karen", "corti-investigate", "completed");
     },
     async waitForCompletion(agentResult) {
@@ -606,6 +651,7 @@ test("agent-enabled signal route investigates only after source evidence registr
       signalEventId: "event-id",
       contextId: "ctx-karen",
       cortiTaskId: "corti-investigate",
+      draftTaskId: createdDraftId,
       agentState: "completed",
     },
   );

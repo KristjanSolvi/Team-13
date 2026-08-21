@@ -14,11 +14,14 @@ import {
 } from "@/components/ward/Loading";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { ViewTabs, type ViewKey } from "@/components/ward/ViewTabs";
-import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
-import type { NewTaskOptions } from "@/data/ward";
-import { patients } from "@/data/ward";
+import type { NewTaskOptions, WardBedAssignments } from "@/data/ward";
+import { bays, patients } from "@/data/ward";
+
+const initialBedAssignments = Object.fromEntries(
+  bays.flatMap((bay) => bay.beds.map((slot) => [slot.bed, slot.patientId])),
+) as WardBedAssignments;
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,6 +54,10 @@ function Index() {
     ledgerErrors,
     ehrRevision,
     refreshPatientThreads,
+    loadTaskRoutingReceipt,
+    demoHostUnlocked,
+    unlockDemoHost,
+    routeTaskNow,
     addNote,
     runLedgerCommand,
     changeStatus,
@@ -69,6 +76,10 @@ function Index() {
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
+  const [openNotesRequest, setOpenNotesRequest] = useState(0);
+  const [bedAssignments, setBedAssignments] = useState<WardBedAssignments>(() => ({
+    ...initialBedAssignments,
+  }));
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId}` : view);
@@ -115,7 +126,10 @@ function Index() {
         const now = Date.now();
         if (now - lastShift.current < 400) {
           setOpen((current) => {
-            if (!current) setMaximized(true);
+            if (!current) {
+              setMaximized(true);
+              setScopeId(ehrPatientId);
+            }
             return !current;
           });
           lastShift.current = 0;
@@ -126,7 +140,7 @@ function Index() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [ehrPatientId]);
 
   const handleAddThread = (patientId: string, title: string, options?: NewTaskOptions) => {
     const id = createThread(patientId, title, options);
@@ -137,10 +151,36 @@ function Index() {
     setOpen(true);
   };
 
+  const placePatient = (patientId: string, bed: string) => {
+    setBedAssignments((current) => {
+      const next = { ...current };
+      for (const [candidateBed, assignedId] of Object.entries(next)) {
+        if (assignedId === patientId) next[candidateBed] = null;
+      }
+      next[bed] = patientId;
+      return next;
+    });
+  };
+
+  const removePatientFromBed = (bed: string) => {
+    setBedAssignments((current) => ({ ...current, [bed]: null }));
+  };
+
+  const baseEhrPatient = patients.find((patient) => patient.id === ehrPatientId);
+  const currentBed = Object.entries(bedAssignments).find(
+    ([, patientId]) => patientId === ehrPatientId,
+  )?.[0];
+  const currentBay = bays.find((bay) => bay.beds.some((slot) => slot.bed === currentBed));
+  const displayedEhrPatient = baseEhrPatient
+    ? currentBed
+      ? { ...baseEhrPatient, bed: currentBed, bay: currentBay?.name ?? baseEhrPatient.bay }
+      : { ...baseEhrPatient, bed: "Unassigned", bay: "EHR roster" }
+    : undefined;
+
   return (
     <div className="min-h-screen font-sans text-foreground">
       <NervecentreShell
-        patient={patients.find((p) => p.id === ehrPatientId)}
+        patient={displayedEhrPatient}
         notes={notes[ehrPatientId] ?? []}
         activity={threads
           .filter((thread) => thread.patientId === ehrPatientId)
@@ -151,6 +191,7 @@ function Index() {
             })),
           )}
         recordRefreshKey={ehrRevision}
+        openNotesRequest={openNotesRequest}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
@@ -171,7 +212,7 @@ function Index() {
           }`}
         >
           <header className="flex items-center border-b border-white/25 bg-white/12 px-4 py-3">
-            <div className="flex flex-1 justify-start">
+            <div className="flex flex-1 items-center justify-start gap-2.5">
               <button
                 type="button"
                 onClick={() => setMaximized((current) => !current)}
@@ -182,6 +223,19 @@ function Index() {
               >
                 {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
+              <div className="hidden items-center gap-2 sm:flex" aria-label="Fluence">
+                <span className="flex size-7 items-center justify-center rounded-full border border-white/30 bg-white/70 shadow-sm">
+                  <img
+                    src="/corti-hack-logo.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="size-5 object-contain"
+                  />
+                </span>
+                <span className="text-[13px] font-semibold tracking-tight text-foreground">
+                  Fluence
+                </span>
+              </div>
             </div>
             <ViewTabs
               value={view}
@@ -191,8 +245,6 @@ function Index() {
             />
             <div className="flex-1" />
           </header>
-
-          <CortiActivityReceipt />
 
           <div className="min-h-0 flex-1">
             {loadingView ? (
@@ -235,7 +287,16 @@ function Index() {
                   }}
                   staff={staff}
                   teams={teams}
+                  onLoadTaskRoutingReceipt={loadTaskRoutingReceipt}
+                  demoHostUnlocked={demoHostUnlocked}
+                  onUnlockDemoHost={unlockDemoHost}
+                  onRouteTaskNow={routeTaskNow}
                   onRefreshPatient={refreshPatientThreads}
+                  onMoveToDocument={(text) => {
+                    addNote(ehrPatientId, text, "medical", "scribe", "Corti Ambient draft");
+                    setOpenNotesRequest((current) => current + 1);
+                    setOpen(false);
+                  }}
                   onBackToBoard={() => {
                     setView("board");
                     setScopeId(ehrPatientId);
@@ -247,6 +308,14 @@ function Index() {
                 <Insights
                   threads={threads}
                   initialPatientId={ehrPatientId}
+                  onOpenThread={(threadId) => {
+                    const patientId =
+                      threads.find((thread) => thread.id === threadId)?.patientId ?? ehrPatientId;
+                    setEhrPatientId(patientId);
+                    setScopeId(patientId);
+                    setActiveThreadId(threadId);
+                    setView("activity");
+                  }}
                   onOpenPatient={(patientId) => {
                     setEhrPatientId(patientId);
                     setScopeId(patientId);
@@ -280,6 +349,10 @@ function Index() {
                     threads={threads}
                     notes={notes}
                     activePatientId={ehrPatientId}
+                    bedAssignments={bedAssignments}
+                    onPlacePatient={placePatient}
+                    onRemovePatient={removePatientFromBed}
+                    onResetPlacements={() => setBedAssignments({ ...initialBedAssignments })}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
                       setScopeId(pid);

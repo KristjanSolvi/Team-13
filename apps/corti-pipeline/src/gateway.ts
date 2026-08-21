@@ -1,4 +1,5 @@
 import type {
+  AmbientFact,
   AmbientSession,
   CodingResult,
   CodingSystem,
@@ -17,6 +18,7 @@ export interface GenerateCandidatesInput {
   interactionId: string;
   correlationId: string;
   segments: TranscriptSegment[];
+  facts: AmbientFact[];
 }
 
 export interface GenerateCandidatesResult {

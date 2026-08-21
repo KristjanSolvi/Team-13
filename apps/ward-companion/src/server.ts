@@ -2,12 +2,20 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import {
+  authorizeDemoHostAccessRequest,
+  authorizeDemoHostMutation,
+  createDemoHostSession,
+  demoHostCookieHeader,
+} from "./lib/demo-host-session";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 const integrationProxyPrefix = "/follow-through-api";
+const demoHostSessionPath = "/api/demo/host/session";
+const demoRouteNowPath = /^\/api\/demo\/tasks\/[^/]+\/route-now$/;
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
@@ -98,6 +106,39 @@ async function proxyIntegrationRequest(request: Request): Promise<Response | nul
     return null;
   }
 
+  const upstreamPath = incoming.pathname.slice(integrationProxyPrefix.length) || "/";
+  const integrationBearer = process.env["INTEGRATION_API_BEARER_TOKEN"]?.trim() ?? "";
+  if (upstreamPath === demoHostSessionPath) {
+    const accessError = await authorizeDemoHostAccessRequest(
+      request,
+      process.env["DEMO_HOST_ACCESS_KEY"]?.trim() ?? "",
+    );
+    if (accessError !== null) return accessError;
+    if (integrationBearer.length < 8) {
+      return proxyConfigurationError("The server-side integration credential is not configured.");
+    }
+    const session = await createDemoHostSession(integrationBearer);
+    return Response.json(
+      { authorized: true, csrfToken: session.csrfToken, expiresAt: session.expiresAt },
+      {
+        headers: {
+          "cache-control": "no-store",
+          "set-cookie": demoHostCookieHeader(
+            session.token,
+            incoming.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
+          ),
+        },
+      },
+    );
+  }
+  if (demoRouteNowPath.test(upstreamPath)) {
+    if (integrationBearer.length < 8) {
+      return proxyConfigurationError("The server-side integration credential is not configured.");
+    }
+    const authorizationError = await authorizeDemoHostMutation(request, integrationBearer);
+    if (authorizationError !== null) return authorizationError;
+  }
+
   const configuredTarget = process.env["INTEGRATION_API_URL"]?.trim();
   if (!configuredTarget) {
     return proxyConfigurationError("The server-side Integration API target is not configured.");
@@ -114,16 +155,18 @@ async function proxyIntegrationRequest(request: Request): Promise<Response | nul
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
+  headers.delete("cookie");
+  headers.delete("x-demo-csrf");
+  headers.delete("x-demo-host-key");
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.slice(0, -1));
 
-  const upstreamPath = incoming.pathname.slice(integrationProxyPrefix.length) || "/";
   const requiresIntegrationBearer =
     /^\/api\/patients\/[^/]+\/handovers$/.test(upstreamPath) ||
-    /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath);
+    /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath) ||
+    demoRouteNowPath.test(upstreamPath);
   if (requiresIntegrationBearer) {
-    const integrationBearer = process.env["INTEGRATION_API_BEARER_TOKEN"]?.trim();
-    if (!integrationBearer) {
+    if (integrationBearer.length < 8) {
       return proxyConfigurationError("The server-side integration credential is not configured.");
     }
     headers.set("authorization", `Bearer ${integrationBearer}`);

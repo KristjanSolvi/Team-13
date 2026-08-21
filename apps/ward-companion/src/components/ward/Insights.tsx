@@ -8,6 +8,7 @@ type Props = {
   threads: Thread[];
   initialPatientId?: string;
   onOpenPatient: (id: string) => void;
+  onOpenThread: (id: string) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -35,6 +36,76 @@ function Card({
       </div>
       {children}
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* live ward follow-through momentum                                  */
+/* ------------------------------------------------------------------ */
+
+function FollowThroughMomentum({ threads }: { threads: Thread[] }) {
+  const captured = threads.length;
+  const moving = threads.filter(
+    (thread) => thread.status === "tracking" || thread.status === "verified",
+  ).length;
+  const owned = threads.filter((thread) => thread.assignee !== null).length;
+  const verified = threads.filter((thread) => thread.status === "verified").length;
+  const movingPercent = captured === 0 ? 0 : Math.round((moving / captured) * 100);
+
+  return (
+    <Card
+      title="Ward follow-through today"
+      hint="Live from current commitments"
+      className="follow-through-insight overflow-hidden lg:col-span-2"
+    >
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0">
+          <p className="text-[44px] font-medium leading-none tracking-tight tabular-nums text-foreground">
+            {moving}
+            <span className="ml-2 text-[17px] font-normal tracking-normal text-muted-foreground">
+              moving or complete
+            </span>
+          </p>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">
+            {moving} of {captured} commitments captured on the ward have progressed into active
+            follow-through or verified closure.
+          </p>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-background">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-tracking to-verified transition-[width] duration-500"
+              style={{ width: `${movingPercent}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[10.5px] font-medium tabular-nums text-tracking-strong">
+            {movingPercent}% of today&apos;s captured work is moving
+          </p>
+        </div>
+        <div className="grid min-w-[220px] grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/70 bg-white/45 px-3 py-2.5 shadow-sm backdrop-blur-md">
+            <p className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+              With an owner
+            </p>
+            <p className="mt-1 text-[20px] font-medium tabular-nums text-tracking-strong">
+              {owned}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                {owned === 1 ? "item" : "items"}
+              </span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/70 bg-white/45 px-3 py-2.5 shadow-sm backdrop-blur-md">
+            <p className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Verified closed
+            </p>
+            <p className="mt-1 text-[20px] font-medium tabular-nums text-verified-strong">
+              {verified}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                {verified === 1 ? "item" : "items"}
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -358,20 +429,22 @@ function Capacity({ threads }: { threads: Thread[] }) {
 
 /* ------------------------------------------------------------------ */
 
-export function Insights({ threads, initialPatientId, onOpenPatient }: Props) {
+export function Insights({ threads, initialPatientId, onOpenPatient, onOpenThread }: Props) {
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="grid gap-4 lg:grid-cols-2">
-        <PatientJourneyMap
-          threads={threads}
-          initialPatientId={initialPatientId}
-          onOpenPatient={onOpenPatient}
-        />
+        <FollowThroughMomentum threads={threads} />
         <TimeReturned />
         <Funnel threads={threads} />
         <Rhythm />
         <Runway threads={threads} onOpenPatient={onOpenPatient} />
         <Capacity threads={threads} />
+        <PatientJourneyMap
+          threads={threads}
+          initialPatientId={initialPatientId}
+          onOpenPatient={onOpenPatient}
+          onOpenThread={onOpenThread}
+        />
       </div>
     </div>
   );

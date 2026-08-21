@@ -24,6 +24,7 @@ and each authoritative workflow boundary:
 | --- | --- |
 | Ambient, FactsR, transcript review and task-agent investigation | Activity → live Corti strip |
 | Clinician task approval and the authoritative ledger lifecycle | Activity → expanded backend task |
+| Availability-, capability-, and workload-aware owner selection | Expanded offered task → Demo smart assignment → durable decision receipt |
 | Dictation correction with preview-before-mutation | Expanded backend task → correction panel |
 | Grounded handover Agentic/MCP run plus Text Generation | Agent and record tools → grounded handover |
 | Source-revision dependencies | Agent and record tools → Change Radar |
@@ -97,9 +98,13 @@ Then exercise the browser path and confirm:
 5. Agentic visibly reaches the authenticated patient-scoped MCP tools;
 6. task correction exposes Corti Dictation and requires preview plus explicit
    apply;
-7. Medical Coding requires accept/reject and the saved EHR history retains the
+7. an offered Karen task shows **Smart assignment is armed**; triggering the
+   presenter-key unlock and then the demo selects an eligible authoritative
+   roster member while displaying the five routing checks, workload ranking,
+   and durable receipt;
+8. Medical Coding requires accept/reject and the saved EHR history retains the
    attributed outcome; and
-8. the live receipt reflects only the products actually exercised.
+9. the live receipt reflects only the products actually exercised.
 
 Current local limitation: the clean finalization worktree has no restored
 Corti, Agentic, MCP, integration, or ngrok environment values, so the paid v1

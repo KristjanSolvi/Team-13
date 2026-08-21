@@ -1,4 +1,5 @@
 import type {
+  AmbientFact,
   AmbientSession,
   CodingResult,
   CodingSystem,
@@ -103,6 +104,26 @@ export type DemoRoutingDecision = {
   selectedMemberId: string | null;
   requiredCapabilities: string[];
   candidates: DemoRoutingCandidate[];
+};
+
+export type TaskRoutingReceipt = {
+  schemaVersion: "1";
+  taskId: string;
+  assignedMemberId: string;
+  routedAt: string;
+  trigger: "team_acceptance_timeout" | "member_declined" | "audience_demo";
+  routingDecision: DemoRoutingDecision;
+};
+
+export type DemoRouteNowResult = {
+  advancedByMs: number;
+  task: {
+    taskId: string;
+    state: string;
+    assignedMemberId: string | null;
+    version: number;
+  };
+  receipt: TaskRoutingReceipt;
 };
 
 export type DemoAssignment = {
@@ -336,6 +357,7 @@ export async function generateCandidates(input: {
   interactionId: string;
   correlationId: string;
   segments: TranscriptSegment[];
+  facts: AmbientFact[];
 }): Promise<CandidateGenerationResult> {
   return responseJson<CandidateGenerationResult>(
     await fetch(integrationUrl("/api/corti/candidates/generate"), {
@@ -345,6 +367,7 @@ export async function generateCandidates(input: {
         patientId: input.patientId,
         interactionId: input.interactionId,
         segments: input.segments,
+        facts: input.facts,
       }),
     }),
   );
@@ -462,6 +485,53 @@ export async function getTaskDeliveries(
   return responseJson<{ deliveries: DownstreamDelivery[] }>(
     await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(taskId)}/deliveries`), {
       headers: { "x-correlation-id": correlationId },
+    }),
+  );
+}
+
+export async function getTaskRoutingReceipt(
+  taskId: string,
+  correlationId: string,
+): Promise<{ receipt: TaskRoutingReceipt | null }> {
+  return responseJson<{ receipt: TaskRoutingReceipt | null }>(
+    await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(taskId)}/routing-receipt`), {
+      headers: jsonHeaders(correlationId),
+    }),
+  );
+}
+
+export async function createDemoHostBrowserSession(
+  accessKey: string,
+  correlationId: string,
+): Promise<{ authorized: true; csrfToken: string; expiresAt: number }> {
+  return responseJson<{ authorized: true; csrfToken: string; expiresAt: number }>(
+    await fetch(integrationUrl("/api/demo/host/session"), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(correlationId),
+        "x-demo-host-key": accessKey,
+      },
+      body: "{}",
+    }),
+  );
+}
+
+export async function routeDemoTaskNow(input: {
+  taskId: string;
+  actorId: string;
+  idempotencyKey: string;
+  correlationId: string;
+  csrfToken: string;
+}): Promise<DemoRouteNowResult> {
+  return responseJson<DemoRouteNowResult>(
+    await fetch(integrationUrl(`/api/demo/tasks/${encodeURIComponent(input.taskId)}/route-now`), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(input.correlationId),
+        "x-actor-id": input.actorId,
+        "x-demo-csrf": input.csrfToken,
+      },
+      body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
     }),
   );
 }

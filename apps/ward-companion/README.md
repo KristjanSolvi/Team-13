@@ -59,6 +59,7 @@ npm run dev
 # Terminal 3 — UI (Lovable config currently selects port 8080)
 cd apps/ward-companion
 cp .env.example .env  # optional; blank VITE value uses the same-origin proxy
+# Set DEMO_HOST_ACCESS_KEY to unlock presenter-only synthetic-time controls.
 npm install
 npm run dev
 
@@ -71,6 +72,11 @@ npm run dev
 Without the Agentic HTTP service, Ambient and Dictation remain available through
 the integration proxy, while context checks and ledger reads fail closed. This
 is safer than manufacturing a task in browser state.
+
+The smart-routing time control is locked by default. The presenter enters
+`DEMO_HOST_ACCESS_KEY` once per browser tab; the server exchanges it for a
+short-lived signed HttpOnly session and a CSRF token. The Integration API bearer
+never enters the browser, and public proxy callers cannot trigger the control.
 
 Checks:
 

@@ -23,15 +23,18 @@ import type {
 } from "@/data/ward";
 import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
 import type { WardStaffOption } from "@/data/demo-staff";
-import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
+import type { ChangeImpact, TaskRoutingReceipt, WardTaskCommand } from "@/lib/follow-through-api";
+import { memberLabel } from "@/lib/member-label";
+import { wardTimestampLabel } from "@/lib/ward-time-label";
 import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
-import { SystemConnectionPanel } from "./SystemConnectionPanel";
+import { SmartRoutingPanel } from "./SmartRoutingPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 import { TaskDeliveryStatus } from "./TaskDeliveryStatus";
 import { usePendingAction } from "./useLoading";
+import { WardMeetingPanel } from "./WardMeetingPanel";
 
 type Props = {
   threads: Thread[];
@@ -54,7 +57,12 @@ type Props = {
   onRemoveThread: (id: string, reason: string) => void;
   staff: WardStaffOption[];
   teams: string[];
+  onLoadTaskRoutingReceipt: (taskId: string) => Promise<TaskRoutingReceipt | null>;
+  demoHostUnlocked: boolean;
+  onUnlockDemoHost: (accessKey: string) => Promise<void>;
+  onRouteTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRefreshPatient: (id: string) => Promise<void>;
+  onMoveToDocument: (text: string) => void;
   onBackToBoard: () => void;
 };
 
@@ -75,8 +83,8 @@ const ledgerCommandMeta: Record<
   },
   correct: { label: "Correct", Icon: Check, tone: "border border-border bg-panel" },
   dismiss: {
-    label: "Dismiss · already covered",
-    Icon: CircleSlash,
+    label: "Remove task",
+    Icon: Trash2,
     tone: "border border-border bg-panel text-muted-foreground",
   },
   reopen: {
@@ -123,7 +131,12 @@ export function PatientActivity({
   onRemoveThread,
   staff,
   teams,
+  onLoadTaskRoutingReceipt,
+  demoHostUnlocked,
+  onUnlockDemoHost,
+  onRouteTaskNow,
   onRefreshPatient,
+  onMoveToDocument,
   onBackToBoard,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -186,7 +199,23 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+        <LiveStrip
+          patient={patient}
+          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+          onReviewTask={(taskId) => {
+            void onRefreshPatient(patient.id).then(() => {
+              onSelect(taskId);
+              window.setTimeout(
+                () =>
+                  document
+                    .getElementById(`task-${taskId}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+                0,
+              );
+            });
+          }}
+          onMoveToDocument={onMoveToDocument}
+        />
 
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -291,7 +320,7 @@ export function PatientActivity({
               const assignmentCandidates = thread.candidates.length > 0 ? thread.candidates : staff;
               const last = thread.activity[thread.activity.length - 1];
               return (
-                <li key={thread.id} className="relative pl-6">
+                <li id={`task-${thread.id}`} key={thread.id} className="relative pl-6">
                   <span
                     className={`absolute left-0 top-[15px] size-[11px] rounded-full ring-4 ring-panel ${statusDotClass[thread.status]}`}
                   />
@@ -306,8 +335,9 @@ export function PatientActivity({
                         {thread.title}
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                        {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due}
+                        {statusLabels[thread.status]} ·{" "}
+                        {thread.assignee === null ? "no owner" : memberLabel(thread.assignee)} ·{" "}
+                        {wardTimestampLabel(thread.due)}
                       </span>
                     </span>
                     <ChevronDown
@@ -317,7 +347,7 @@ export function PatientActivity({
 
                   {!expanded && last && (
                     <p className="truncate px-2 pb-2 text-[12.5px] text-muted-foreground/80">
-                      {last.at} — {last.text}
+                      {wardTimestampLabel(last.at)} — {last.text}
                     </p>
                   )}
 
@@ -359,6 +389,35 @@ export function PatientActivity({
                           </p>
                         )}
 
+                      {thread.backend?.taskId != null &&
+                        thread.backend.taskVersion != null &&
+                        thread.backend.taskState != null &&
+                        [
+                          "offered_to_team",
+                          "assigned_to_member",
+                          "accepted",
+                          "completed",
+                          "verified",
+                        ].includes(thread.backend.taskState) && (
+                          <SmartRoutingPanel
+                            taskId={thread.backend.taskId}
+                            taskVersion={thread.backend.taskVersion}
+                            taskState={
+                              thread.backend.taskState as
+                                | "offered_to_team"
+                                | "assigned_to_member"
+                                | "accepted"
+                                | "completed"
+                                | "verified"
+                            }
+                            loadReceipt={onLoadTaskRoutingReceipt}
+                            presenterUnlocked={demoHostUnlocked}
+                            unlockPresenter={onUnlockDemoHost}
+                            routeTaskNow={onRouteTaskNow}
+                            onRouted={() => onRefreshPatient(thread.patientId)}
+                          />
+                        )}
+
                       {!done &&
                         (thread.backend === undefined ||
                           thread.backend.availableCommands.includes("correct")) && (
@@ -393,7 +452,11 @@ export function PatientActivity({
                                   key={command}
                                   type="button"
                                   disabled={ledgerBusy !== null}
-                                  onClick={() => onLedgerCommand(thread, command)}
+                                  onClick={() =>
+                                    command === "dismiss"
+                                      ? setConfirmRemove(thread.id)
+                                      : onLedgerCommand(thread, command)
+                                  }
                                   className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium hover:opacity-85 disabled:opacity-45 ${meta.tone}`}
                                 >
                                   {busy ? (
@@ -407,6 +470,34 @@ export function PatientActivity({
                             })}
                         </div>
                       )}
+
+                      {!done &&
+                        thread.backend !== undefined &&
+                        confirmRemove === thread.id &&
+                        thread.backend.availableCommands.includes("dismiss") && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">
+                            <span>Remove this draft task from Activity?</span>
+                            <span className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmRemove(null);
+                                  onLedgerCommand(thread, "dismiss");
+                                }}
+                                className="rounded-md bg-escalated-strong px-2.5 py-1 font-medium text-white"
+                              >
+                                Yes, remove task
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmRemove(null)}
+                                className="rounded-md px-2.5 py-1 font-medium text-muted-foreground"
+                              >
+                                Keep task
+                              </button>
+                            </span>
+                          </div>
+                        )}
 
                       {!done && thread.backend === undefined && (
                         <div className="flex flex-wrap gap-2">
@@ -602,7 +693,7 @@ export function PatientActivity({
                             />
                             <p className="text-[13.5px] leading-snug text-foreground">{a.text}</p>
                             <span className="text-[11.5px] text-muted-foreground">
-                              {a.actor} · {a.at}
+                              {a.actor} · {wardTimestampLabel(a.at)}
                             </span>
                           </li>
                         ))}
@@ -679,13 +770,19 @@ export function PatientActivity({
           </ul>
         </div>
 
+        <HandoverPanel patient={patient} />
+
         <details className="rounded-xl border border-border bg-panel/70 px-4 py-3">
           <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
-            Agent and record tools
+            Continuity and record checks
           </summary>
           <div className="mt-3 space-y-3">
-            <SystemConnectionPanel />
-            <HandoverPanel patient={patient} />
+            <WardMeetingPanel
+              key={patient.pipelinePatientId}
+              patientId={patient.pipelinePatientId}
+              patientName={patient.name}
+              onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+            />
             <ChangeRadar
               patient={patient}
               threads={scoped}

@@ -15,7 +15,7 @@ const generatedCandidateSchema = z.object({
   sourceQuote: z.string().min(1).max(500),
 });
 
-const generatedCandidatesSchema = z.array(generatedCandidateSchema).max(3);
+const generatedCandidatesSchema = z.array(generatedCandidateSchema).max(8);
 
 export interface NormalizeGeneratedCandidatesInput {
   generatedValue: unknown;
@@ -24,6 +24,109 @@ export interface NormalizeGeneratedCandidatesInput {
   correlationId: string;
   segments: readonly TranscriptSegment[];
   createId?: () => string;
+}
+
+function canonicalClinicalText(text: string): string {
+  return text
+    .normalize("NFKC")
+    .toLocaleLowerCase("en")
+    .replace(/(\d)\s+(mcg|mg|g|ml)\b/g, "$1$2")
+    .replace(/\b(?:once\s+(?:a|per)\s+day|once\s+daily|o\.?d\.?)\b/g, "daily")
+    .replace(/\bdizziness\b/g, "dizzy")
+    .replace(/\bchanged\b/g, "change")
+    .replace(/\bmonitoring\b/g, "monitor")
+    .replace(/\bobservations\b/g, "observation")
+    .replace(/\bbloods\b/g, "blood")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function normalizedActionKey(text: string): string {
+  return canonicalClinicalText(
+    text
+      .replace(
+        /\s+to\s+offload\b.*$/i,
+        "",
+      )
+      .replace(/\blet(?:'|’)s\b|\blet\s+us\b/gi, "")
+      .replace(/\b(?:we|i)\s+(?:also\s+)?(?:need|will|should|must|plan)\s+to\b/gi, "")
+      .replace(/\b(?:need|needs)\s+to\b/gi, "")
+      .replace(/\b(?:you|your|the|a|an|please)\b/gi, ""),
+  );
+}
+
+const nonClinicalGroundingWords = new Set([
+  "a",
+  "an",
+  "the",
+  "we",
+  "i",
+  "you",
+  "your",
+  "to",
+  "on",
+  "for",
+  "of",
+  "and",
+  "also",
+  "was",
+  "were",
+  "is",
+  "are",
+  "be",
+  "been",
+  "need",
+  "needs",
+  "explicitly",
+  "reported",
+  "followed",
+  "following",
+  "symptom",
+  "maintain",
+]);
+
+function clinicalGroundingTokens(text: string): string[] {
+  return canonicalClinicalText(text)
+    .split(" ")
+    .filter((token) => token.length > 0 && !nonClinicalGroundingWords.has(token));
+}
+
+const polarityTokens = new Set([
+  "no",
+  "not",
+  "never",
+  "without",
+  "cancel",
+  "cancelled",
+  "defer",
+  "deferred",
+  "withhold",
+  "withheld",
+]);
+
+function summaryIsGrounded(summary: string, sourceQuote: string): boolean {
+  const summaryTokens = clinicalGroundingTokens(summary);
+  if (summaryTokens.length === 0) return false;
+  return sourceQuote
+    .split(/[.!?;\n]+/u)
+    .map((clause) => clinicalGroundingTokens(clause))
+    .filter((tokens) => tokens.length > 0)
+    .some((sourceTokens) => {
+      const sourcePolarity = sourceTokens.filter((token) => polarityTokens.has(token));
+      if (
+        sourcePolarity.length > 0 &&
+        !summaryTokens.some((token) => polarityTokens.has(token))
+      ) {
+        return false;
+      }
+      let sourceIndex = 0;
+      for (const token of summaryTokens) {
+        const matchIndex = sourceTokens.indexOf(token, sourceIndex);
+        if (matchIndex === -1) return false;
+        sourceIndex = matchIndex + 1;
+      }
+      return true;
+    });
 }
 
 export function normalizeGeneratedCandidates(
@@ -36,6 +139,7 @@ export function normalizeGeneratedCandidates(
   const generated = generatedCandidatesSchema.parse(input.generatedValue);
   const createId = input.createId ?? randomUUID;
   const candidates: FollowThroughCandidate[] = [];
+  const actionIndexes = new Map<string, number>();
   let rejectedEvidenceCount = 0;
   let rejectedAudioQualityCount = 0;
 
@@ -49,13 +153,12 @@ export function normalizeGeneratedCandidates(
       rejectedAudioQualityCount += 1;
       continue;
     }
-    if (candidates.length > 0) {
-      // The product surfaces one quiet review item at a natural pause. The
-      // schema asks Corti for one; this guard keeps the normalized boundary
-      // conservative if an upstream response ever exceeds that instruction.
+    if (!summaryIsGrounded(item.summary, evidence.sourceQuote)) {
+      rejectedEvidenceCount += 1;
       continue;
     }
-    candidates.push({
+    const actionKey = normalizedActionKey(item.summary);
+    const candidate: FollowThroughCandidate = {
       schemaVersion: "1",
       candidateId: createId(),
       correlationId: input.correlationId,
@@ -65,7 +168,23 @@ export function normalizeGeneratedCandidates(
       summary: item.summary,
       evidence: [evidence],
       status: "candidate",
-    });
+    };
+    const existingIndex = actionIndexes.get(actionKey);
+    if (existingIndex !== undefined) {
+      const existing = candidates[existingIndex] as FollowThroughCandidate;
+      const existingQuoteLength = existing.evidence[0]?.sourceQuote.length ?? Number.MAX_SAFE_INTEGER;
+      const candidateQuoteLength = candidate.evidence[0]?.sourceQuote.length ?? Number.MAX_SAFE_INTEGER;
+      if (
+        candidate.summary.length < existing.summary.length ||
+        (candidate.summary.length === existing.summary.length &&
+          candidateQuoteLength < existingQuoteLength)
+      ) {
+        candidates[existingIndex] = candidate;
+      }
+      continue;
+    }
+    actionIndexes.set(actionKey, candidates.length);
+    candidates.push(candidate);
   }
 
   return { candidates, rejectedEvidenceCount, rejectedAudioQualityCount };
