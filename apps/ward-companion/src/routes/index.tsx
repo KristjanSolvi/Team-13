@@ -246,6 +246,7 @@ function Index() {
               <div key="insights" className="fade-in-view h-full">
                 <Insights
                   threads={threads}
+                  initialPatientId={ehrPatientId}
                   onOpenPatient={(patientId) => {
                     setEhrPatientId(patientId);
                     setScopeId(patientId);

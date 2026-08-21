@@ -2,8 +2,13 @@ import { useCallback, useMemo } from "react";
 import type { Thread } from "@/data/ward";
 import { patients } from "@/data/ward";
 import { demoStaff } from "@/data/demo-staff";
+import { PatientJourneyMap } from "./PatientJourneyMap";
 
-type Props = { threads: Thread[]; onOpenPatient: (id: string) => void };
+type Props = {
+  threads: Thread[];
+  initialPatientId?: string;
+  onOpenPatient: (id: string) => void;
+};
 
 /* ------------------------------------------------------------------ */
 /* primitives                                                          */
@@ -353,10 +358,15 @@ function Capacity({ threads }: { threads: Thread[] }) {
 
 /* ------------------------------------------------------------------ */
 
-export function Insights({ threads, onOpenPatient }: Props) {
+export function Insights({ threads, initialPatientId, onOpenPatient }: Props) {
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="grid gap-4 lg:grid-cols-2">
+        <PatientJourneyMap
+          threads={threads}
+          initialPatientId={initialPatientId}
+          onOpenPatient={onOpenPatient}
+        />
         <TimeReturned />
         <Funnel threads={threads} />
         <Rhythm />
