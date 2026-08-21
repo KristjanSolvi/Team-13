@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LoaderCircle, Mic2, ShieldCheck } from "lucide-react";
+import { ChevronDown, LoaderCircle, Mic2, Pencil, ShieldCheck } from "lucide-react";
 import type { CortiDictation } from "@corti/dictation-web";
 import type { PipelineEvent, TaskRevisionPreview } from "@pipeline/contracts.js";
 import type { Thread } from "@/data/ward";
@@ -11,9 +11,11 @@ import {
   FollowThroughApiError,
   getDictationToken,
 } from "@/lib/follow-through-api";
+import type { TaskCorrectionPatch } from "@/lib/follow-through-api";
 import { LiveInterimText } from "./LiveInterimText";
 
 const recipientTeams = [
+  { id: "ward-medical", label: "Ward Medical Team", aliases: ["ward medical", "doctors"] },
   { id: "ward-nursing", label: "Ward Nursing Team", aliases: ["ward nursing", "nurses"] },
   {
     id: "district-nursing",
@@ -55,9 +57,14 @@ function previewFields(preview: TaskRevisionPreview) {
   ].filter((field): field is string[] => field !== null);
 }
 
-type Props = { thread: Thread; onApplied?: () => void };
+type Props = {
+  thread: Thread;
+  busy?: boolean;
+  onManualSave: (patch: TaskCorrectionPatch) => void;
+  onApplied?: () => void;
+};
 
-export function TaskCorrectionPanel({ thread, onApplied }: Props) {
+export function TaskCorrectionPanel({ thread, busy = false, onManualSave, onApplied }: Props) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [message, setMessage] = useState("Voice is optional; typing always remains available.");
@@ -247,9 +254,9 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-[12.5px] font-medium text-teal"
+        className="flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-2 text-[12.5px] font-medium text-foreground hover:bg-background"
       >
-        <Mic2 className="size-3.5" /> Step 4 · Corti Dictation — edit by voice or text
+        <Pencil className="size-3.5 text-teal" /> Edit task
       </button>
     );
   }
@@ -262,16 +269,12 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
         <div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
-              <Mic2 className="size-3.5 text-teal" /> Corti Dictation correction
+              <Pencil className="size-3.5 text-teal" /> Edit task
             </p>
-            <span className="text-[10.5px] text-muted-foreground">
-              Usage:{" "}
-              {dictationCredits === null
-                ? "shown when complete"
-                : `${dictationCredits.toFixed(4)} credits`}
-            </span>
           </div>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">{message}</p>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+            Review the Agentic draft and manually change any field before approval.
+          </p>
         </div>
         <button
           type="button"
@@ -282,6 +285,122 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
           <ChevronDown className="size-4" />
         </button>
       </header>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const summary = String(data.get("summary") ?? "").trim();
+          const targetTeamId = String(data.get("targetTeamId") ?? "").trim();
+          const clinicalUrgency = String(data.get("clinicalUrgency") ?? "").trim();
+          const dueHours = Number(String(data.get("dueHours") ?? "").trim());
+          const patch: TaskCorrectionPatch = { summary };
+          if (targetTeamId.length > 0 && targetTeamId !== thread.backend?.targetTeamId) {
+            patch.targetTeamId = targetTeamId;
+          }
+          if (["high", "medium", "routine"].includes(clinicalUrgency)) {
+            patch.clinicalUrgency = clinicalUrgency as "high" | "medium" | "routine";
+          }
+          if (Number.isFinite(dueHours) && dueHours > 0) {
+            patch.dueInMs = Math.round(dueHours * 3_600_000);
+          }
+          onManualSave(patch);
+          setOpen(false);
+        }}
+        className="space-y-2 rounded-md border border-border bg-background p-3"
+      >
+        <label className="block">
+          <span className="mb-1 block text-[11.5px] font-medium text-muted-foreground">
+            Task action
+          </span>
+          <input
+            name="summary"
+            defaultValue={thread.title}
+            minLength={5}
+            maxLength={240}
+            required
+            className="w-full rounded-md border border-border bg-panel px-3 py-2 text-[13px] text-foreground"
+          />
+        </label>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-1 block text-[11.5px] font-medium text-muted-foreground">Team</span>
+            <select
+              name="targetTeamId"
+              defaultValue={thread.backend?.targetTeamId ?? ""}
+              className="w-full rounded-md border border-border bg-panel px-2.5 py-2 text-[12.5px] text-foreground"
+            >
+              <option value="">Keep current team</option>
+              {recipientTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11.5px] font-medium text-muted-foreground">
+              Urgency
+            </span>
+            <select
+              name="clinicalUrgency"
+              defaultValue=""
+              className="w-full rounded-md border border-border bg-panel px-2.5 py-2 text-[12.5px] text-foreground"
+            >
+              <option value="">Keep current</option>
+              <option value="high">Urgent</option>
+              <option value="medium">Soon</option>
+              <option value="routine">Routine</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11.5px] font-medium text-muted-foreground">
+              New deadline
+            </span>
+            <input
+              name="dueHours"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Hours"
+              aria-label="New deadline in hours"
+              className="w-full rounded-md border border-border bg-panel px-2.5 py-2 text-[12.5px] text-foreground"
+            />
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <p className="text-[11.5px] text-muted-foreground">
+            Blank urgency and deadline fields keep the current values.
+          </p>
+          <button
+            type="submit"
+            disabled={busy}
+            className="flex shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 py-2 text-[12.5px] font-medium text-background disabled:opacity-45"
+          >
+            {busy ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <ShieldCheck className="size-3.5" />
+            )}
+            Save task changes
+          </button>
+        </div>
+      </form>
+
+      <div className="border-t border-border pt-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
+            <Mic2 className="size-3.5 text-teal" /> Optional · edit using Corti Dictation
+          </p>
+          <span className="text-[10.5px] text-muted-foreground">
+            Usage:{" "}
+            {dictationCredits === null
+              ? "shown when complete"
+              : `${dictationCredits.toFixed(4)} credits`}
+          </span>
+        </div>
+        <p className="mb-2 text-[11.5px] text-muted-foreground">{message}</p>
+      </div>
 
       <div className="flex min-h-12 items-center rounded-md border border-border bg-background px-2">
         {status === "loading" && <LoaderCircle className="mr-2 size-3.5 animate-spin text-teal" />}

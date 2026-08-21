@@ -406,6 +406,14 @@ export async function investigateCandidate(
 
 export type WardTaskCommand = NonNullable<Thread["backend"]>["availableCommands"][number];
 
+export type TaskCorrectionPatch = {
+  summary?: string;
+  targetTeamId?: string;
+  requiredCapabilities?: string[];
+  clinicalUrgency?: "high" | "medium" | "routine";
+  dueInMs?: number;
+};
+
 export type TaskCommandResult = {
   agentState?: string;
   credits?: number;

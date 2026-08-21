@@ -23,7 +23,12 @@ import type {
 } from "@/data/ward";
 import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
 import type { WardStaffOption } from "@/data/demo-staff";
-import type { ChangeImpact, TaskRoutingReceipt, WardTaskCommand } from "@/lib/follow-through-api";
+import type {
+  ChangeImpact,
+  TaskCorrectionPatch,
+  TaskRoutingReceipt,
+  WardTaskCommand,
+} from "@/lib/follow-through-api";
 import { memberLabel } from "@/lib/member-label";
 import { wardTimestampLabel } from "@/lib/ward-time-label";
 import { ChangeRadar } from "./ChangeRadar";
@@ -50,7 +55,7 @@ type Props = {
   onLedgerCommand: (
     thread: Thread,
     command: WardTaskCommand,
-    options?: { reason?: string },
+    options?: { reason?: string; patch?: TaskCorrectionPatch },
   ) => void;
   ledgerBusy: string | null;
   ledgerErrors: Record<string, string>;
@@ -423,14 +428,14 @@ export function PatientActivity({
                           />
                         )}
 
-                      {!done &&
-                        (thread.backend === undefined ||
-                          thread.backend.availableCommands.includes("correct")) && (
-                          <TaskCorrectionPanel
-                            thread={thread}
-                            onApplied={() => void onRefreshPatient(thread.patientId)}
-                          />
-                        )}
+                      {!done && thread.backend?.availableCommands.includes("correct") && (
+                        <TaskCorrectionPanel
+                          thread={thread}
+                          busy={ledgerBusy !== null}
+                          onManualSave={(patch) => onLedgerCommand(thread, "correct", { patch })}
+                          onApplied={() => void onRefreshPatient(thread.patientId)}
+                        />
+                      )}
 
                       {ledgerErrors[thread.id] !== undefined && (
                         <p className="rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">

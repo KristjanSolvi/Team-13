@@ -10,6 +10,10 @@ const patientActivity = readFileSync(
   new URL("../src/components/ward/PatientActivity.tsx", import.meta.url),
   "utf8",
 );
+const taskCorrectionPanel = readFileSync(
+  new URL("../src/components/ward/TaskCorrectionPanel.tsx", import.meta.url),
+  "utf8",
+);
 const wardRuntime = readFileSync(
   new URL("../src/features/ward-runtime/useWardRuntime.ts", import.meta.url),
   "utf8",
@@ -26,6 +30,13 @@ test("a backend draft has a confirmed remove action", () => {
   assert.match(patientActivity, /Why is this task being removed\?/);
   assert.match(patientActivity, /removeReason\.trim\(\)\.length < 3/);
   assert.match(wardRuntime, /reason: options\.reason\?\.trim\(\)/);
+});
+
+test("an Agentic draft has an explicit prefilled manual task editor", () => {
+  assert.match(taskCorrectionPanel, /Edit task/);
+  assert.match(taskCorrectionPanel, /defaultValue=\{thread\.title\}/);
+  assert.match(taskCorrectionPanel, /Save task changes/);
+  assert.match(taskCorrectionPanel, /command: "correct"/);
 });
 
 test("ledger commands refresh and retry once after a concurrent version change", () => {
