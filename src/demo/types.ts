@@ -1,3 +1,5 @@
+import type { RoutingDecision } from "../domain/routing.js";
+
 export const demoScenarios = [
   "meeting",
   "discharge_coordination",
@@ -37,4 +39,5 @@ export interface DemoAssignment {
   taskId: string;
   assignedBy: string;
   assignedAt: string;
+  routingDecision: RoutingDecision | null;
 }

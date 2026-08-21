@@ -117,7 +117,34 @@ function harness() {
       participantToken: "participant-token-value-with-enough-length",
     })),
     assignDemoTask: vi.fn(async () => ({
-      assignment: { assignmentId: "assignment-1" },
+      assignment: {
+        assignmentId: "assignment-1",
+        routingDecision: {
+          policyVersion: "availability-capability-load-v1",
+          selectedMemberId: "audience:participant-1",
+          requiredCapabilities: ["blood-pressure"],
+          candidates: [
+            {
+              memberId: "audience:participant-1",
+              teamId: "district-nursing",
+              eligible: true,
+              rank: 1,
+              openTaskCount: 0,
+              capacity: 100,
+              capabilities: ["blood-pressure"],
+              missingCapabilities: [],
+              checks: {
+                teamMatch: true,
+                onShift: true,
+                available: true,
+                hasCapacity: true,
+                capabilitiesMatch: true,
+              },
+              exclusionReasons: [],
+            },
+          ],
+        },
+      },
       task: { taskId: "11111111-1111-4111-8111-111111111111" },
     })),
     demoParticipantView: vi.fn(async () => ({
@@ -225,6 +252,24 @@ describe("integration API", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/demo/sessions/{sessionId}/assign",
     );
+    expect(
+      response.body.paths["/api/demo/sessions/{sessionId}/assign"].post
+        .responses["200"].content["application/json"].schema,
+    ).toEqual({ $ref: "#/components/schemas/DemoAssignmentResult" });
+    expect(
+      response.body.components.schemas.DemoRoutingDecision.properties
+        .policyVersion.enum,
+    ).toEqual(["availability-capability-load-v1"]);
+    expect(
+      response.body.components.schemas.DemoRoutingCandidate.properties
+        .exclusionReasons.items.enum,
+    ).toEqual([
+      "wrong_team",
+      "off_shift",
+      "unavailable",
+      "at_capacity",
+      "missing_capability",
+    ]);
     expect(response.body.paths).toHaveProperty("/api/demo/join/{joinCode}");
     expect(response.body.paths).toHaveProperty("/api/demo/participants/me");
     expect(response.body.components.securitySchemes).toHaveProperty(
@@ -1137,7 +1182,7 @@ describe("integration API", () => {
       { correlationId: "corr-demo-join" },
     );
 
-    await request(app)
+    const assigned = await request(app)
       .post("/api/demo/sessions/session-1/assign")
       .set("x-actor-id", "clinician:demo-host")
       .send({
@@ -1147,6 +1192,10 @@ describe("integration API", () => {
         idempotencyKey: "demo-task-assign-001",
       })
       .expect(200);
+    expect(assigned.body.assignment.routingDecision).toMatchObject({
+      policyVersion: "availability-capability-load-v1",
+      selectedMemberId: "audience:participant-1",
+    });
 
     await request(app)
       .get("/api/demo/participants/me")

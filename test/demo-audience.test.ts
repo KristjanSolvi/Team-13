@@ -165,6 +165,67 @@ test("an approved published task is assigned to one audience participant in the 
   assert.deepEqual(semanticRetry, result);
 });
 
+test("assignment durably explains why an available capable participant won", (t) => {
+  const harness = createAppHarness();
+  t.after(() => harness.store.close());
+  const session = createSession(harness);
+  const first = join(harness, session.joinCode, "Alex", "browser-key-alex");
+  const second = join(harness, session.joinCode, "Blair", "browser-key-blair");
+  const firstMember = harness.store
+    .listMembers("district-nursing")
+    .find((member) => member.memberId === first.participant.memberId);
+  assert.ok(firstMember);
+  harness.store.putMember({ ...firstMember, available: false });
+  const offered = publishTask(harness);
+
+  const result = harness.demoAudience.assignTask({
+    sessionId: session.sessionId,
+    groupId: "group-1",
+    taskId: offered.taskId,
+    expectedVersion: offered.version,
+    idempotencyKey: "assign-with-routing-receipt-001",
+    actorId: "clinician:demo-host",
+  });
+
+  assert.equal(result.participant.participantId, second.participant.participantId);
+  assert.equal(
+    result.assignment.routingDecision?.selectedMemberId,
+    second.participant.memberId,
+  );
+  assert.deepEqual(
+    result.assignment.routingDecision?.candidates.map((candidate) => ({
+      memberId: candidate.memberId,
+      eligible: candidate.eligible,
+      rank: candidate.rank,
+      reasons: candidate.exclusionReasons,
+    })),
+    [
+      {
+        memberId: second.participant.memberId,
+        eligible: true,
+        rank: 1,
+        reasons: [],
+      },
+      {
+        memberId: first.participant.memberId,
+        eligible: false,
+        rank: null,
+        reasons: ["unavailable"],
+      },
+    ],
+  );
+  assert.deepEqual(
+    harness.demoAudience.getSession(session.sessionId).assignments[0]
+      ?.routingDecision,
+    result.assignment.routingDecision,
+  );
+  assert.deepEqual(
+    harness.demoAudience.participantView(second.participantToken).assignments[0]
+      ?.assignment.routingDecision,
+    result.assignment.routingDecision,
+  );
+});
+
 test("assignment rejects draft tasks and tasks for a different team", (t) => {
   const harness = createAppHarness();
   t.after(() => harness.store.close());
