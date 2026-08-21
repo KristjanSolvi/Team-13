@@ -120,7 +120,8 @@ async function proxyIntegrationRequest(request: Request): Promise<Response | nul
   const upstreamPath = incoming.pathname.slice(integrationProxyPrefix.length) || "/";
   const requiresIntegrationBearer =
     /^\/api\/patients\/[^/]+\/handovers$/.test(upstreamPath) ||
-    /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath);
+    /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath) ||
+    /^\/api\/demo\/tasks\/[^/]+\/route-now$/.test(upstreamPath);
   if (requiresIntegrationBearer) {
     const integrationBearer = process.env["INTEGRATION_API_BEARER_TOKEN"]?.trim();
     if (!integrationBearer) {

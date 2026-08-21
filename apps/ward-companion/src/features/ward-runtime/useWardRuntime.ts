@@ -13,8 +13,11 @@ import {
   demoActors,
   executeTaskCommand,
   FollowThroughApiError,
+  getTaskRoutingReceipt,
   getWardCompanionOverview,
+  routeDemoTaskNow,
   type ChangeImpact,
+  type TaskRoutingReceipt,
   type WardTaskCommand,
 } from "@/lib/follow-through-api";
 import { loadWardState, saveWardState } from "@/lib/ward-persistence";
@@ -131,6 +134,24 @@ export function useWardRuntime() {
       setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
     }
   }, []);
+
+  const loadTaskRoutingReceipt = useCallback(async (taskId: string) => {
+    const result = await getTaskRoutingReceipt(taskId, crypto.randomUUID());
+    return result.receipt;
+  }, []);
+
+  const routeTaskNow = useCallback(
+    async (taskId: string, idempotencyKey: string): Promise<TaskRoutingReceipt> => {
+      const result = await routeDemoTaskNow({
+        taskId,
+        actorId: demoActors.clinician,
+        idempotencyKey,
+        correlationId: crypto.randomUUID(),
+      });
+      return result.receipt;
+    },
+    [],
+  );
 
   useEffect(() => {
     const source = new EventSource("/follow-through-api/api/events/stream");
@@ -490,6 +511,8 @@ export function useWardRuntime() {
     ledgerErrors,
     ehrRevision,
     refreshPatientThreads,
+    loadTaskRoutingReceipt,
+    routeTaskNow,
     addNote,
     runLedgerCommand,
     changeStatus,

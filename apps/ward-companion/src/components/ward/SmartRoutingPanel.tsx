@@ -1,18 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CircleAlert, LoaderCircle, Route, ShieldCheck, TimerReset } from "lucide-react";
 
-import {
-  demoActors,
-  getTaskRoutingReceipt,
-  routeDemoTaskNow,
-  type TaskRoutingReceipt,
-} from "@/lib/follow-through-api";
+import type { TaskRoutingReceipt } from "@/lib/follow-through-api";
 import { RoutingReceipt } from "./RoutingReceipt";
 
 type Props = {
   taskId: string;
   taskVersion: number;
   taskState: "offered_to_team" | "assigned_to_member" | "accepted" | "completed" | "verified";
+  loadReceipt: (taskId: string) => Promise<TaskRoutingReceipt | null>;
+  routeTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRouted: () => Promise<void>;
 };
 
@@ -30,11 +27,20 @@ const triggerLabels: Record<TaskRoutingReceipt["trigger"], string> = {
   audience_demo: "Chosen from the clinician-selected audience group",
 };
 
-export function SmartRoutingPanel({ taskId, taskVersion, taskState, onRouted }: Props) {
+export function SmartRoutingPanel({
+  taskId,
+  taskVersion,
+  taskState,
+  loadReceipt,
+  routeTaskNow,
+  onRouted,
+}: Props) {
   const [receipt, setReceipt] = useState<TaskRoutingReceipt | null>(null);
   const [loading, setLoading] = useState(taskState !== "offered_to_team");
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const idempotencyKey = useMemo(() => `smart-route-${crypto.randomUUID()}`, [taskId]);
+  const currentReceipt = receipt?.taskId === taskId ? receipt : null;
 
   useEffect(() => {
     if (taskState === "offered_to_team") {
@@ -44,10 +50,10 @@ export function SmartRoutingPanel({ taskId, taskVersion, taskState, onRouted }: 
     }
     let active = true;
     setLoading(true);
-    void getTaskRoutingReceipt(taskId, crypto.randomUUID())
+    void loadReceipt(taskId)
       .then((result) => {
         if (!active) return;
-        setReceipt(result.receipt);
+        setReceipt(result);
         setError(null);
       })
       .catch(() => {
@@ -59,26 +65,44 @@ export function SmartRoutingPanel({ taskId, taskVersion, taskState, onRouted }: 
     return () => {
       active = false;
     };
-  }, [taskId, taskState, taskVersion]);
+  }, [loadReceipt, taskId, taskState, taskVersion]);
 
   const routeNow = async () => {
     setRouting(true);
     setError(null);
+    let routedReceipt: TaskRoutingReceipt;
     try {
-      const result = await routeDemoTaskNow({
-        taskId,
-        actorId: demoActors.clinician,
-        idempotencyKey: `smart-route-${crypto.randomUUID()}`,
-        correlationId: crypto.randomUUID(),
-      });
-      setReceipt(result.receipt);
-      await onRouted();
+      routedReceipt = await routeTaskNow(taskId, idempotencyKey);
     } catch {
       setError("Smart assignment could not run. Refresh the task and try once more.");
-    } finally {
       setRouting(false);
+      return;
+    }
+    setReceipt(routedReceipt);
+    setRouting(false);
+    try {
+      await onRouted();
+    } catch {
+      setError("Assignment saved. The surrounding task view is taking longer to refresh.");
     }
   };
+
+  if (currentReceipt !== null) {
+    return (
+      <div>
+        <RoutingReceipt
+          decision={currentReceipt.routingDecision}
+          title="Why Fluence chose this owner"
+          triggerLabel={triggerLabels[currentReceipt.trigger]}
+        />
+        {error !== null && (
+          <p className="mt-1 flex items-center gap-1.5 text-[10.5px] text-pending-strong">
+            <CircleAlert className="size-3" /> {error}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (taskState === "offered_to_team") {
     return (
@@ -137,7 +161,7 @@ export function SmartRoutingPanel({ taskId, taskVersion, taskState, onRouted }: 
     );
   }
 
-  if (receipt === null) {
+  if (currentReceipt === null) {
     return error === null ? null : (
       <p className="flex items-center gap-1.5 text-[10.5px] text-escalated-strong">
         <CircleAlert className="size-3" /> {error}
@@ -145,11 +169,5 @@ export function SmartRoutingPanel({ taskId, taskVersion, taskState, onRouted }: 
     );
   }
 
-  return (
-    <RoutingReceipt
-      decision={receipt.routingDecision}
-      title="Why Fluence chose this owner"
-      triggerLabel={triggerLabels[receipt.trigger]}
-    />
-  );
+  return null;
 }

@@ -311,6 +311,12 @@ describe("integration API", () => {
     expect(response.body.paths).toHaveProperty(
       "/api/demo/tasks/{taskId}/route-now",
     );
+    expect(
+      response.body.paths["/api/demo/tasks/{taskId}/route-now"].post.security,
+    ).toEqual([{ integrationBearer: [] }]);
+    expect(
+      response.body.paths["/api/demo/tasks/{taskId}/route-now"].post.responses,
+    ).toHaveProperty("401");
     expect(response.body.paths).toHaveProperty(
       "/api/tasks/{taskId}/routing-receipt",
     );
@@ -1269,8 +1275,17 @@ describe("integration API", () => {
   it("proxies the demo smart-routing trigger and its durable receipt", async () => {
     const { agentic, app } = harness();
 
+    const denied = await request(app)
+      .post("/api/demo/tasks/task-1/route-now")
+      .set("x-actor-id", "clinician:demo-host")
+      .send({ idempotencyKey: "smart-route-001" })
+      .expect(401);
+    expect(denied.body.error.code).toBe("UNAUTHORIZED");
+    expect(agentic.routeDemoTaskNow).not.toHaveBeenCalled();
+
     const routed = await request(app)
       .post("/api/demo/tasks/task-1/route-now")
+      .set("authorization", `Bearer ${integrationApiBearerToken}`)
       .set("x-actor-id", "clinician:demo-host")
       .set("x-correlation-id", "corr-smart-route")
       .send({ idempotencyKey: "smart-route-001" })

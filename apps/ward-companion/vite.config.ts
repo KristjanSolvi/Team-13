@@ -28,7 +28,8 @@ export default defineConfig({
               const upstreamPath = proxyReq.path ?? "";
               if (
                 /^\/api\/patients\/[^/]+\/handovers$/.test(upstreamPath) ||
-                /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath)
+                /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath) ||
+                /^\/api\/demo\/tasks\/[^/]+\/route-now$/.test(upstreamPath)
               ) {
                 proxyReq.setHeader("authorization", `Bearer ${integrationBearer}`);
               }

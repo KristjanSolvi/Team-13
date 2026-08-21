@@ -23,7 +23,12 @@ import type {
 } from "@/data/ward";
 import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
 import type { WardStaffOption } from "@/data/demo-staff";
-import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
+import type {
+  ChangeImpact,
+  TaskRoutingReceipt,
+  WardTaskCommand,
+} from "@/lib/follow-through-api";
+import { memberLabel } from "@/lib/member-label";
 import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
@@ -55,6 +60,8 @@ type Props = {
   onRemoveThread: (id: string, reason: string) => void;
   staff: WardStaffOption[];
   teams: string[];
+  onLoadTaskRoutingReceipt: (taskId: string) => Promise<TaskRoutingReceipt | null>;
+  onRouteTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRefreshPatient: (id: string) => Promise<void>;
   onBackToBoard: () => void;
 };
@@ -63,11 +70,6 @@ const kindDot: Record<string, string> = {
   system: "bg-border",
   note: "bg-tracking",
   action: "bg-verified",
-};
-
-const backendAssigneeLabels: Record<string, string> = {
-  "nurse-a": "Nurse Kelly O.",
-  "nurse-b": "Nurse Ben Adeyemi",
 };
 
 const ledgerCommandMeta: Record<
@@ -129,6 +131,8 @@ export function PatientActivity({
   onRemoveThread,
   staff,
   teams,
+  onLoadTaskRoutingReceipt,
+  onRouteTaskNow,
   onRefreshPatient,
   onBackToBoard,
 }: Props) {
@@ -315,7 +319,7 @@ export function PatientActivity({
                         {statusLabels[thread.status]} ·{" "}
                         {thread.assignee === null
                           ? "no owner"
-                          : (backendAssigneeLabels[thread.assignee] ?? thread.assignee)}{" "}
+                          : memberLabel(thread.assignee)}{" "}
                         · {thread.due}
                       </span>
                     </span>
@@ -389,6 +393,8 @@ export function PatientActivity({
                                 | "completed"
                                 | "verified"
                             }
+                            loadReceipt={onLoadTaskRoutingReceipt}
+                            routeTaskNow={onRouteTaskNow}
                             onRouted={() => onRefreshPatient(thread.patientId)}
                           />
                         )}

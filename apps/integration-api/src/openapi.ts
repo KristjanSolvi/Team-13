@@ -271,6 +271,7 @@ export const integrationOpenApi = {
         summary: "Advance synthetic time to the team deadline and run smart assignment",
         description:
           "Demo-mode control only. The authoritative scheduler still applies the live availability, capability, capacity, and workload policy.",
+        security: [{ integrationBearer: [] }],
         parameters: [
           { $ref: "#/components/parameters/TaskId" },
           { $ref: "#/components/parameters/ActorId" },
@@ -294,6 +295,7 @@ export const integrationOpenApi = {
             },
           },
           "400": { $ref: "#/components/responses/Error" },
+          "401": { $ref: "#/components/responses/Error" },
           "403": { $ref: "#/components/responses/Error" },
           "404": { $ref: "#/components/responses/Error" },
           "409": { $ref: "#/components/responses/Error" },

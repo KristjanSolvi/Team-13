@@ -5,6 +5,7 @@ import type {
   DemoRoutingCandidate,
   DemoRoutingDecision,
 } from "@/lib/follow-through-api";
+import { memberLabel } from "@/lib/member-label";
 
 type Props = {
   decision: DemoRoutingDecision;
@@ -22,17 +23,9 @@ const exclusionLabels: Record<DemoRoutingCandidate["exclusionReasons"][number], 
 };
 
 function participantName(memberId: string, participants: DemoParticipant[]): string {
-  const knownStaff: Record<string, string> = {
-    "nurse-a": "Nurse Kelly O.",
-    "nurse-b": "Nurse Ben Adeyemi",
-  };
   return (
     participants.find((participant) => participant.memberId === memberId)?.displayName ??
-    knownStaff[memberId] ??
-    memberId
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ")
+    memberLabel(memberId)
   );
 }
 
@@ -117,18 +110,23 @@ export function RoutingReceipt({
               <span className="truncate font-medium text-foreground">
                 {participantName(candidate.memberId, participants)}
               </span>
-              {candidate.eligible ? (
-                <span className="flex shrink-0 items-center gap-1 text-verified-strong">
-                  <Check className="size-3" />
-                  {candidate.memberId === decision.selectedMemberId ? "Selected" : "Eligible"} ·
-                  rank {candidate.rank}
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-muted-foreground">
+                  {candidate.openTaskCount}/{candidate.capacity} active
                 </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1 text-escalated-strong">
-                  <CircleSlash2 className="size-3" />
-                  {candidate.exclusionReasons.map((reason) => exclusionLabels[reason]).join(", ")}
-                </span>
-              )}
+                {candidate.eligible ? (
+                  <span className="flex items-center gap-1 text-verified-strong">
+                    <Check className="size-3" />
+                    {candidate.memberId === decision.selectedMemberId ? "Selected" : "Eligible"} ·
+                    rank {candidate.rank}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-escalated-strong">
+                    <CircleSlash2 className="size-3" />
+                    {candidate.exclusionReasons.map((reason) => exclusionLabels[reason]).join(", ")}
+                  </span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

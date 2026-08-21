@@ -578,6 +578,12 @@ test("disabled DemoClock reads real time and rejects advance with a forbidden er
     retryable: false,
     status: 403,
   });
+  assertDomainError(() => clock.assertDemoEnabled(), {
+    code: "DEMO_CLOCK_DISABLED",
+    message: "Demo clock is disabled",
+    retryable: false,
+    status: 403,
+  });
 });
 
 test("DemoClock rejects every non-positive or non-finite advance with defaults", () => {

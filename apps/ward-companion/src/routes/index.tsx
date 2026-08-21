@@ -51,6 +51,8 @@ function Index() {
     ledgerErrors,
     ehrRevision,
     refreshPatientThreads,
+    loadTaskRoutingReceipt,
+    routeTaskNow,
     addNote,
     runLedgerCommand,
     changeStatus,
@@ -235,6 +237,8 @@ function Index() {
                   }}
                   staff={staff}
                   teams={teams}
+                  onLoadTaskRoutingReceipt={loadTaskRoutingReceipt}
+                  onRouteTaskNow={routeTaskNow}
                   onRefreshPatient={refreshPatientThreads}
                   onBackToBoard={() => {
                     setView("board");

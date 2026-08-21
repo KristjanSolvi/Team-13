@@ -1515,3 +1515,110 @@ test("demo smart routing advances an offered task and exposes its durable decisi
   assert.equal(replayResponse.status, 200);
   assert.deepEqual(await replayResponse.json(), routed);
 });
+
+test("demo smart routing is unavailable when demo mode is disabled", async (t) => {
+  const harness = createAppHarness({ demoMode: false });
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const draft = harness.ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-karen-1",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Check blood pressure within 48 hours",
+    taskType: "demo-smart-routing-disabled",
+    evidenceRefs: ["encounter:sentence-42"],
+    targetTeamId: "district-nursing",
+    requiredCapabilities: ["blood-pressure"],
+    clinicalUrgency: "medium",
+    dueInMs: 48 * 60 * 60_000,
+    idempotencyKey: "demo-smart-routing-disabled-draft",
+    actor: { type: "agent", id: "corti" },
+  });
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "demo-smart-routing-disabled-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "demo-smart-routing-disabled-publish",
+  );
+
+  const response = await fetch(
+    `${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-disabled-now" }),
+    },
+  );
+  assert.equal(response.status, 403);
+  assert.equal(
+    ((await response.json()) as { error: { code: string } }).error.code,
+    "DEMO_CLOCK_DISABLED",
+  );
+  assert.equal(harness.ledger.getTask(offered.taskId).state, "offered_to_team");
+});
+
+test("demo smart routing rejects a team deadline that collides with the clinical deadline", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const draft = harness.ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-karen-1",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Check blood pressure within 30 minutes",
+    taskType: "demo-smart-routing-deadline-collision",
+    evidenceRefs: ["encounter:sentence-42"],
+    targetTeamId: "district-nursing",
+    requiredCapabilities: ["blood-pressure"],
+    clinicalUrgency: "medium",
+    dueInMs: 30 * 60_000,
+    idempotencyKey: "demo-smart-routing-collision-draft",
+    actor: { type: "agent", id: "corti" },
+  });
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "demo-smart-routing-collision-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "demo-smart-routing-collision-publish",
+  );
+  assert.equal(offered.acceptBy, offered.dueBy);
+
+  const route = () =>
+    fetch(`${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`, {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-collision-now" }),
+    });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await route();
+    assert.equal(response.status, 409);
+    assert.equal(
+      ((await response.json()) as { error: { code: string } }).error.code,
+      "DEMO_TASK_DEADLINE_COLLISION",
+    );
+  }
+  assert.equal(harness.ledger.getTask(offered.taskId).state, "offered_to_team");
+  assert.equal(harness.store.getTaskRoutingReceipt(offered.taskId), null);
+});

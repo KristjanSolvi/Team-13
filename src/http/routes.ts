@@ -721,6 +721,7 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
         .object({ idempotencyKey: z.string().min(8).max(200) })
         .strict()
         .parse(request.body);
+      dependencies.clock.assertDemoEnabled();
       const taskId = pathParam(request, "taskId");
       const commandScope = `demo-route-now:${taskId}`;
       const replay = dependencies.store.getProcessedCommand(
@@ -736,6 +737,14 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
         throw new DomainError(
           "DEMO_TASK_NOT_ROUTABLE",
           "Demo routing requires a task currently offered to a team",
+          false,
+          409,
+        );
+      }
+      if (Date.parse(offered.dueBy) <= Date.parse(offered.acceptBy)) {
+        throw new DomainError(
+          "DEMO_TASK_DEADLINE_COLLISION",
+          "This task reaches its clinical deadline before smart assignment can run",
           false,
           409,
         );

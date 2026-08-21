@@ -482,6 +482,7 @@ export function createIntegrationApp(options: CreateIntegrationAppOptions) {
 
   app.post(
     "/api/demo/tasks/:taskId/route-now",
+    requireIntegrationBearer(options.integrationApiBearerToken),
     route(async (request, response) => {
       response.json(
         await options.service.routeDemoTaskNow(
