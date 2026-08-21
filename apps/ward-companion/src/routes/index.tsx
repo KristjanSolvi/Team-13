@@ -1,26 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
+import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
-import { BoardSkeleton, ListSkeleton } from "@/components/ward/Loading";
-import { ViewTabs } from "@/components/ward/ViewTabs";
+import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
 import { useFirstLoad } from "@/components/ward/useLoading";
+import { ViewTabs } from "@/components/ward/ViewTabs";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
-import type { NewTaskOptions, ThreadStatus } from "@/data/ward";
+import type { NewTaskOptions } from "@/data/ward";
 import { patients } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ward Threads — follow-through for hospital wards" },
+      { title: "Fluence — follow-through for hospital wards" },
       {
         name: "description",
         content:
           "A calm ward companion that tracks what was said on the round through to verified completion, with a live thread panel and a bed-by-bed ward board.",
       },
-      { property: "og:title", content: "Ward Threads — follow-through for hospital wards" },
+      { property: "og:title", content: "Fluence — follow-through for hospital wards" },
       {
         property: "og:description",
         content:
@@ -52,11 +54,11 @@ function Index() {
     staff,
     teams,
   } = runtime;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [view, setView] = useState<"board" | "activity">("board");
+  const [view, setView] = useState<"board" | "activity" | "insights">("activity");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
@@ -72,7 +74,7 @@ function Index() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       const launcherClicked =
-        target instanceof Element && target.closest("[data-ward-launcher]") !== null;
+        target instanceof Element && target.closest('[data-ward-threads-launcher="true"]') !== null;
       if (!launcherClicked && !panelRef.current?.contains(target)) {
         setOpen(false);
       }
@@ -92,7 +94,7 @@ function Index() {
       }
       if (!typing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         setView((v) => {
-          const order = ["activity", "board"] as const;
+          const order = ["activity", "board", "insights"] as const;
           const i = order.indexOf(v);
           const next =
             e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
@@ -103,7 +105,10 @@ function Index() {
       if (e.key === "Shift") {
         const now = Date.now();
         if (now - lastShift.current < 400) {
-          setOpen((v) => !v);
+          setOpen((current) => {
+            if (!current) setMaximized(true);
+            return !current;
+          });
           lastShift.current = 0;
         } else {
           lastShift.current = now;
@@ -113,17 +118,6 @@ function Index() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  const counts = useMemo(() => {
-    const base: Record<ThreadStatus, number> = {
-      pending: 0,
-      tracking: 0,
-      verified: 0,
-      escalated: 0,
-    };
-    for (const t of threads) base[t.status] += 1;
-    return base;
-  }, [threads]);
 
   const handleAddThread = (patientId: string, title: string, options?: NewTaskOptions) => {
     const id = createThread(patientId, title, options);
@@ -150,32 +144,50 @@ function Index() {
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
-          setScopeId(id);
-          setView("activity");
-          setOpen(true);
+          if (open) {
+            setScopeId(id);
+            setView("activity");
+          }
         }}
       />
 
       {open && (
         <section
           ref={panelRef}
-          className={`liquid-glass fixed bottom-4 right-4 top-4 z-40 flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[28px] transition-[left,max-width] duration-300 ${
-            maximized ? "left-4 max-w-none" : "max-w-[52rem]"
+          className={`liquid-glass fixed z-40 flex flex-col overflow-hidden transition-all duration-300 ${
+            maximized
+              ? "inset-0 rounded-none"
+              : "bottom-4 right-4 top-4 w-[calc(100%-2rem)] max-w-[52rem] rounded-[28px]"
           }`}
         >
-          <header className="border-b border-white/25 bg-white/12 px-4 py-3">
+          <header className="flex items-center border-b border-white/25 bg-white/12 px-4 py-3">
+            <div className="flex flex-1 justify-start">
+              <button
+                type="button"
+                onClick={() => setMaximized((current) => !current)}
+                onPointerDown={(event) => event.stopPropagation()}
+                className="liquid-press flex size-8 items-center justify-center rounded-full border border-white/20 bg-white/50 text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:bg-white/80 hover:text-foreground"
+                aria-label={maximized ? "Restore window" : "Maximize window"}
+                title={maximized ? "Restore" : "Maximize"}
+              >
+                {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </button>
+            </div>
             <ViewTabs
               value={view}
               onChange={(key) => {
                 setView(key);
               }}
             />
+            <div className="flex-1" />
           </header>
 
           <div className="min-h-0 flex-1">
             {loadingView ? (
               view === "board" ? (
                 <BoardSkeleton />
+              ) : view === "insights" ? (
+                <InsightsSkeleton />
               ) : (
                 <ListSkeleton />
               )
@@ -206,6 +218,9 @@ function Index() {
                       setActiveThreadId((current) => (current === id ? null : current));
                     }
                   }}
+                  onScribe={(text) =>
+                    addNote(ehrPatientId, text, "medical", "scribe", "Ambient scribe")
+                  }
                   staff={staff}
                   teams={teams}
                   onRefreshPatient={refreshPatientThreads}
@@ -215,25 +230,24 @@ function Index() {
                   }}
                 />
               </div>
+            ) : view === "insights" ? (
+              <div key="insights" className="fade-in-view h-full">
+                <Insights
+                  threads={threads}
+                  onOpenPatient={(patientId) => {
+                    setEhrPatientId(patientId);
+                    setScopeId(patientId);
+                    setView("activity");
+                  }}
+                />
+              </div>
             ) : (
               <div key="board" className="fade-in-view flex h-full flex-col">
-                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border px-5 py-3">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border px-5 py-3">
                   <div>
                     <h1 className="text-[15px] font-medium tracking-tight">North Wing · Level 4</h1>
-                    <p className="text-[12.5px] text-muted-foreground">
-                      {counts.pending + counts.tracking + counts.escalated} open across the ward
-                    </p>
+                    <p className="text-[12.5px] text-muted-foreground">Board ward</p>
                   </div>
-                  <dl className="flex gap-6 text-[12.5px] text-muted-foreground">
-                    <div>
-                      <dt>Patients</dt>
-                      <dd className="text-foreground">{patients.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Past deadline</dt>
-                      <dd className="text-foreground">{counts.escalated}</dd>
-                    </div>
-                  </dl>
                 </div>
                 <div className="flex-1 overflow-y-auto p-5">
                   <WardBoard
@@ -259,7 +273,13 @@ function Index() {
           </div>
 
           <footer className="flex items-center justify-between border-t border-white/25 bg-white/12 px-6 py-3 text-xs font-medium text-muted-foreground">
-            <span>Ward Threads · connected to Nervecentre</span>
+            <span className="flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-verified" />
+              Live · connected to NerveCentre
+              <span className="rounded-full bg-pending-soft px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-pending-strong">
+                Demo data
+              </span>
+            </span>
             <span>← → to switch views · Esc to hide</span>
           </footer>
         </section>
@@ -267,10 +287,12 @@ function Index() {
 
       <FloatingLauncher
         open={open}
-        maximized={maximized}
-        onToggle={() => setOpen((current) => !current)}
-        onMaximize={() => setMaximized((current) => !current)}
-        onClose={() => setOpen(false)}
+        onToggle={() => {
+          setOpen((current) => {
+            if (!current) setMaximized(false);
+            return !current;
+          });
+        }}
       />
     </div>
   );

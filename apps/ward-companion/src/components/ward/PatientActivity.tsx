@@ -43,6 +43,7 @@ type Props = {
   onOfferToTeam: (id: string, team: string) => void;
   onEditThread: (id: string, patch: Partial<Thread>) => void;
   onRemoveThread: (id: string, reason: string) => void;
+  onScribe: (text: string) => void;
   staff: WardStaffOption[];
   teams: string[];
   onRefreshPatient: (id: string) => Promise<void>;
@@ -111,6 +112,7 @@ export function PatientActivity({
   onOfferToTeam,
   onEditThread,
   onRemoveThread,
+  onScribe,
   staff,
   teams,
   onRefreshPatient,
@@ -143,10 +145,10 @@ export function PatientActivity({
       <div className="space-y-3 border-b border-border px-5 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
+            <p className="truncate text-[17px] font-medium tracking-tight text-foreground">
               {patientOf(scopeId)?.name ?? "Activity"}
             </p>
-            <p className="text-[12.5px] text-muted-foreground">
+            <p className="text-[12.5px] tabular-nums text-muted-foreground">
               Bed {patientOf(scopeId)?.bed} · {patientOf(scopeId)?.bay}
               {" · "}
               {openCount} open · {doneCount} done
@@ -176,15 +178,11 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
-
-        {scopeId !== null && <HandoverPanel patient={patient} />}
-
-        <ChangeRadar
+        <LiveStrip
           patient={patient}
-          threads={scoped}
-          impacts={changeImpacts}
-          onRefresh={() => onRefreshPatient(patient.id)}
+          onAddThread={onAddThread}
+          onScribe={onScribe}
+          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
         />
 
         <div>
@@ -287,7 +285,6 @@ export function PatientActivity({
             {items.map((thread) => {
               const expanded = thread.id === activeThreadId;
               const done = thread.status === "verified";
-              const suggested = thread.candidates.find((c) => c.free) ?? thread.candidates[0];
               const assignmentCandidates = thread.candidates.length > 0 ? thread.candidates : staff;
               const last = thread.activity[thread.activity.length - 1];
               return (
@@ -307,12 +304,7 @@ export function PatientActivity({
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
                         {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due} ·{" "}
-                        {thread.backend !== undefined
-                          ? "ledger"
-                          : thread.fixture === "demo"
-                            ? "demo task"
-                            : "local task"}
+                        {thread.due}
                       </span>
                     </span>
                     <ChevronDown
@@ -423,24 +415,8 @@ export function PatientActivity({
                             ) : (
                               <UserPlus className="size-3.5" />
                             )}
-                            {pending === `assign-you-${thread.id}` ? "Assigning…" : "Assign to you"}
+                            {pending === `assign-you-${thread.id}` ? "Assigning…" : "I'll do this"}
                           </button>
-                          {suggested && (
-                            <button
-                              disabled={pending === `assign-suggested-${thread.id}`}
-                              onClick={() =>
-                                run(`assign-suggested-${thread.id}`, () =>
-                                  onAssign(thread.id, suggested.name),
-                                )
-                              }
-                              className="flex items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-[13.5px] font-medium text-foreground hover:bg-background"
-                            >
-                              {pending === `assign-suggested-${thread.id}` && (
-                                <Spinner className="size-3" />
-                              )}
-                              Assign to {suggested.name.split(" ")[0]}
-                            </button>
-                          )}
                           <select
                             value=""
                             aria-label="Offer to a team"
@@ -472,7 +448,7 @@ export function PatientActivity({
                                 setPickerFor(pickerFor === thread.id ? null : thread.id)
                               }
                               className="rounded-md border border-border bg-panel px-2.5 py-2 text-[13.5px] font-medium text-muted-foreground hover:bg-background"
-                              aria-label="Choose someone else"
+                              aria-label="Choose a specific person"
                             >
                               …
                             </button>
@@ -692,6 +668,21 @@ export function PatientActivity({
             })}
           </ul>
         </div>
+
+        <details className="rounded-xl border border-border bg-panel/70 px-4 py-3">
+          <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
+            Agent and record tools
+          </summary>
+          <div className="mt-3 space-y-3">
+            <HandoverPanel patient={patient} />
+            <ChangeRadar
+              patient={patient}
+              threads={scoped}
+              impacts={changeImpacts}
+              onRefresh={() => onRefreshPatient(patient.id)}
+            />
+          </div>
+        </details>
       </div>
     </div>
   );

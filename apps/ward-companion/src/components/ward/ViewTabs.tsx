@@ -1,54 +1,52 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LayoutGrid, ListChecks } from "lucide-react";
+import { BarChart3, LayoutGrid, ListChecks } from "lucide-react";
 
-export type ViewKey = "board" | "activity";
+export type ViewKey = "board" | "activity" | "insights";
 
-const tabs = [
+const TABS = [
   { key: "activity", label: "Main", Icon: ListChecks },
-  { key: "board", label: "Ward", Icon: LayoutGrid },
+  { key: "board", label: "Board ward", Icon: LayoutGrid },
+  { key: "insights", label: "Insights", Icon: BarChart3 },
 ] as const;
 
-export function ViewTabs({
-  value,
-  onChange,
-}: {
-  value: ViewKey;
-  onChange: (value: ViewKey) => void;
-}) {
+export function ViewTabs({ value, onChange }: { value: ViewKey; onChange: (v: ViewKey) => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [rect, setRect] = useState<{ left: number; width: number } | null>(null);
   const [ready, setReady] = useState(false);
 
   useLayoutEffect(() => {
     const measure = () => {
-      const tab = tabRefs.current[value];
+      const el = refs.current[value];
       const track = trackRef.current;
-      if (!tab || !track) return;
-      setRect({ left: tab.offsetLeft, width: tab.offsetWidth });
+      if (!el || !track) return;
+      setRect({
+        left: el.offsetLeft,
+        width: el.offsetWidth,
+      });
     };
     measure();
-    const frame = requestAnimationFrame(() => setReady(true));
-    const observer = new ResizeObserver(measure);
-    if (trackRef.current) observer.observe(trackRef.current);
+    const raf = requestAnimationFrame(() => setReady(true));
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
     window.addEventListener("resize", measure);
     return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
+      cancelAnimationFrame(raf);
+      ro.disconnect();
       window.removeEventListener("resize", measure);
     };
   }, [value]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setReady(true), 120);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setReady(true), 120);
+    return () => clearTimeout(t);
   }, []);
 
   return (
     <div
       ref={trackRef}
       role="tablist"
-      aria-label="Ward Threads views"
+      aria-label="Fluence views"
       className="liquid-glass-track relative flex items-center gap-1 rounded-full p-1"
     >
       {rect && (
@@ -64,13 +62,13 @@ export function ViewTabs({
           }}
         />
       )}
-      {tabs.map(({ key, label, Icon }) => {
+      {TABS.map(({ key, label, Icon }) => {
         const active = value === key;
         return (
           <button
             key={key}
-            ref={(element) => {
-              tabRefs.current[key] = element;
+            ref={(el) => {
+              refs.current[key] = el;
             }}
             role="tab"
             aria-selected={active}
