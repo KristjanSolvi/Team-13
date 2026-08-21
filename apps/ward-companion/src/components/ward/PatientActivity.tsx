@@ -217,8 +217,6 @@ export function PatientActivity({
           onMoveToDocument={onMoveToDocument}
         />
 
-        <HandoverPanel patient={patient} />
-
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -771,6 +769,8 @@ export function PatientActivity({
             })}
           </ul>
         </div>
+
+        <HandoverPanel patient={patient} />
 
         <details className="rounded-xl border border-border bg-panel/70 px-4 py-3">
           <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground hover:text-foreground">

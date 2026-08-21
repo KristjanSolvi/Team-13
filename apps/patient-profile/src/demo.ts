@@ -15,8 +15,8 @@ export const syntheticKarenProfile: PatientProfileData = {
     pronouns: "she/her",
   },
   location: {
-    bed: "04",
-    bay: "Bay A",
+    bed: "5",
+    bay: "Bay B",
   },
   flow: {
     todaySchedule: "Medication and blood-pressure review",
@@ -83,7 +83,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Arthur M. Pender",
       medicalRecordNumber: "MRN-DEMO-ARTHUR",
-      bed: "04",
+      bed: "1",
       bay: "Bay A",
       todaySchedule: "CT chest — 12:45",
       waitingFor: "Radiology slot confirmation",
@@ -95,7 +95,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Sarah Jenkins",
       medicalRecordNumber: "MRN-SYN-SARAH",
-      bed: "05",
+      bed: "2",
       bay: "Bay A",
       todaySchedule: null,
       waitingFor: null,
@@ -107,7 +107,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Robert Chen",
       medicalRecordNumber: "MRN-SYN-ROBERT",
-      bed: "06",
+      bed: "3",
       bay: "Bay A",
       todaySchedule: "Physio review — 15:00",
       waitingFor: "Ortho team response",
@@ -119,7 +119,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Elena Rodriguez",
       medicalRecordNumber: "MRN-SYN-ELENA",
-      bed: "07",
+      bed: "4",
       bay: "Bay B",
       todaySchedule: "Wound dressing — 11:30",
       waitingFor: "Surgical review",
@@ -131,7 +131,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Samir Al-Fayed",
       medicalRecordNumber: "MRN-SYN-SAMIR",
-      bed: "09",
+      bed: "6",
       bay: "Bay B",
       todaySchedule: null,
       waitingFor: null,
@@ -143,7 +143,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Grace Okonkwo",
       medicalRecordNumber: "MRN-SYN-GRACE",
-      bed: "10",
+      bed: "7",
       bay: "Bay C",
       todaySchedule: "Bloods — 09:00",
       waitingFor: "Potassium result",
@@ -155,7 +155,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Tomas Lindqvist",
       medicalRecordNumber: "MRN-SYN-TOMAS",
-      bed: "11",
+      bed: "8",
       bay: "Bay C",
       todaySchedule: null,
       waitingFor: "Pharmacy TTOs",
@@ -167,7 +167,7 @@ export const syntheticWardProfiles: readonly WardProfileFixture[] = [
     profile: wardProfile({
       displayName: "Ivy Doherty",
       medicalRecordNumber: "MRN-SYN-IVY",
-      bed: "12",
+      bed: "9",
       bay: "Bay C",
       todaySchedule: null,
       waitingFor: null,
