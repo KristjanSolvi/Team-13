@@ -83,6 +83,12 @@ export function NervecentreShell({
   useEffect(() => {
     let currentRequest = true;
     setEhrDocuments([]);
+    if (current.backendLinked !== true) {
+      setEhrConnected(false);
+      return () => {
+        currentRequest = false;
+      };
+    }
     setEhrConnected(null);
     void getEhrPatientRecord(current.pipelinePatientId, crypto.randomUUID())
       .then((record) => {
@@ -96,7 +102,7 @@ export function NervecentreShell({
     return () => {
       currentRequest = false;
     };
-  }, [current.pipelinePatientId]);
+  }, [current.backendLinked, current.pipelinePatientId]);
 
   const handleDocumentChange = (document: ClinicalDocument) => {
     setEhrConnected(true);
@@ -109,8 +115,8 @@ export function NervecentreShell({
     <div className="min-h-screen bg-ehr-bg text-ehr-foreground">
       <div className="flex items-center justify-between bg-ehr-chrome px-3 py-1.5">
         <div className="flex items-center gap-6">
-          <span className="text-[13px] font-semibold lowercase tracking-tight text-ehr-chrome-foreground">
-            nervecentre
+          <span className="text-[13px] font-semibold tracking-tight text-ehr-chrome-foreground">
+            NerveCenter
           </span>
         </div>
         <span className="text-[11px] text-ehr-chrome-foreground/70">
@@ -120,9 +126,7 @@ export function NervecentreShell({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ehr-line bg-ehr-banner px-3 py-2">
         <div className="flex min-w-0 items-baseline gap-3">
-          <span className="truncate text-[15px] font-bold text-ehr-foreground">
-            {current.name.split(" ").slice(-1)[0]!.toUpperCase()}, {current.name.split(" ")[0]}
-          </span>
+          <span className="truncate text-[15px] font-bold text-ehr-foreground">{current.name}</span>
           <span className="text-[11px] text-ehr-muted">NHS 943 476 5919 · 62y</span>
         </div>
       </div>
@@ -174,7 +178,7 @@ export function NervecentreShell({
       ) : (
         <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_1.6fr_1fr]">
           <div className="space-y-2">
-            <Panel title="ED Clinical">
+            <Panel title="Overview">
               <Row left="Triage category" right="Amber" />
               <Row left="Presenting complaint" right="Breathlessness" />
               <Row left="Allergies" right="Penicillin" />

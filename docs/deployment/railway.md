@@ -97,12 +97,13 @@ integration-api:
   UI_ORIGINS=https://<ward-ui-domain>
 
 ward-ui:
-  VITE_INTEGRATION_API_URL=https://<integration-api-domain>
+  INTEGRATION_API_URL=http://integration-api.railway.internal:8790
+  INTEGRATION_API_BEARER_TOKEN=${{integration-api.INTEGRATION_API_BEARER_TOKEN}}
 ```
 
-`VITE_INTEGRATION_API_URL` is embedded during the UI build, so redeploy the UI
-after changing it. Never put Corti credentials or bearer tokens in a `VITE_*`
-variable.
+The UI proxies `/follow-through-api` on the server, so the Integration API
+location and privileged handover bearer are never embedded in the browser
+bundle. Never put Corti credentials or bearer tokens in a `VITE_*` variable.
 
 ## Secrets and service variables
 

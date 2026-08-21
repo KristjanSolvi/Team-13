@@ -137,6 +137,40 @@ export const demoThreads: Thread[] = [
     fixture: "demo",
   },
   {
+    id: "demo-t7",
+    patientId: "p9",
+    title: "Review dizziness after medication change",
+    status: "pending",
+    heard:
+      "“I've been dizzy since the medication changed, and my daughter doesn't know who's checking my blood pressure.”",
+    matters:
+      "This is a new symptom after a medication change and no owner is recorded for the blood pressure follow-up.",
+    suggestion: "GP medication review and a district nurse blood pressure check within 48 hours.",
+    assignee: null,
+    candidates: [
+      { name: "Dr. Neve Halloran", role: "SHO", free: true },
+      { name: "District nurse rota", role: "Community nurse", free: true },
+      { name: "Discharge coordinator", role: "Coordinator", free: true },
+    ],
+    due: "Today 16:00",
+    team: "Community nursing",
+    urgency: "soon",
+    detail: "Confirm an accountable owner and timeframe before discharge.",
+    offerState: "none",
+    offeredTo: null,
+    source: "agent",
+    activity: [
+      {
+        id: "demo-a12",
+        at: "09:32",
+        actor: "Ambient round",
+        text: "Candidate captured from Karen's own words; awaiting clinician review.",
+        kind: "system",
+      },
+    ],
+    fixture: "demo",
+  },
+  {
     id: "demo-t5",
     patientId: "p6",
     title: "Repeat potassium",

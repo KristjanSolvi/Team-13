@@ -1,36 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { WardBoard } from "@/components/ward/WardBoard";
 import { PatientActivity } from "@/components/ward/PatientActivity";
 import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
 import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
+import { useFirstLoad } from "@/components/ward/useLoading";
 import { ViewTabs } from "@/components/ward/ViewTabs";
 import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
-import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
-import {
-  demoActors,
-  executeTaskCommand,
-  FollowThroughApiError,
-  getWardCompanionOverview,
-  type ChangeImpact,
-  type WardTaskCommand,
-} from "@/lib/follow-through-api";
-import { loadWardState, saveWardState } from "@/lib/ward-persistence";
-import type { CaseNote, DocId, Thread, ThreadStatus } from "@/data/ward";
-import { initialNotes, initialThreads, patients, statusLabels } from "@/data/ward";
+import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
+import type { NewTaskOptions } from "@/data/ward";
+import { patients } from "@/data/ward";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ward Threads — follow-through for hospital wards" },
+      { title: "Fluence — follow-through for hospital wards" },
       {
         name: "description",
         content:
           "A calm ward companion that tracks what was said on the round through to verified completion, with a live thread panel and a bed-by-bed ward board.",
       },
-      { property: "og:title", content: "Ward Threads — follow-through for hospital wards" },
+      { property: "og:title", content: "Fluence — follow-through for hospital wards" },
       {
         property: "og:description",
         content:
@@ -41,57 +34,36 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const ledgerCommandNotes: Record<WardTaskCommand, string> = {
-  approve: "approved and sent to the receiving team.",
-  correct: "corrected before approval.",
-  dismiss: "dismissed as already covered.",
-  reopen: "reopened with a fresh deadline.",
-  accept: "accepted by the receiving team.",
-  decline: "declined by the receiving team.",
-  complete: "reported complete, awaiting verification.",
-  verify: "completion independently verified.",
-};
-
 function Index() {
-  const [threads, setThreads] = useState<Thread[]>(initialThreads);
-  const [changeImpacts, setChangeImpacts] = useState<Record<string, ChangeImpact[]>>({});
-  const [notes, setNotes] = useState<Record<string, CaseNote[]>>(initialNotes);
-  const [open, setOpen] = useState(true);
+  const runtime = useWardRuntime();
+  const {
+    threads,
+    changeImpacts,
+    notes,
+    ledgerBusy,
+    ledgerErrors,
+    refreshPatientThreads,
+    addNote,
+    runLedgerCommand,
+    changeStatus,
+    assignThread,
+    addActivity,
+    createThread,
+    offerThreadToTeam,
+    editThread,
+    removeThread,
+    staff,
+    teams,
+  } = runtime;
+  const [open, setOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [view, setView] = useState<"board" | "activity" | "insights">("board");
+  const [view, setView] = useState<"board" | "activity" | "insights">("activity");
   const [ehrPatientId, setEhrPatientId] = useState("p1");
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
-  const [persistenceReady, setPersistenceReady] = useState(false);
   const lastShift = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const loadingView = useFirstLoad(view === "activity" ? `activity:${scopeId}` : view);
-
-  const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
-    const patient = patients.find((candidate) => candidate.id === uiPatientId);
-    if (patient === undefined) return;
-    try {
-      const overview = await getWardCompanionOverview(
-        patient.pipelinePatientId,
-        crypto.randomUUID(),
-      );
-      if (overview.patientId !== patient.pipelinePatientId) return;
-      const authoritative = overview.threads.map((thread) => ({
-        ...thread,
-        patientId: uiPatientId,
-      }));
-      setThreads((current) => [
-        ...current.filter((thread) => thread.patientId !== uiPatientId),
-        ...authoritative,
-      ]);
-      setChangeImpacts((current) => ({
-        ...current,
-        [uiPatientId]: overview.changeImpacts,
-      }));
-    } catch {
-      // Retain current local work when authoritative services are unavailable.
-    }
-  }, []);
 
   useEffect(() => {
     if (open && view === "activity") void refreshPatientThreads(scopeId);
@@ -103,7 +75,7 @@ function Index() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       const launcherClicked =
-        target instanceof Element && target.closest("[data-ward-launcher]") !== null;
+        target instanceof Element && target.closest('[data-ward-threads-launcher="true"]') !== null;
       if (!launcherClicked && !panelRef.current?.contains(target)) {
         setOpen(false);
       }
@@ -111,22 +83,6 @@ function Index() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
-
-  useEffect(() => {
-    const persisted = loadWardState(window.localStorage);
-    if (persisted !== null) {
-      // Preserve real saved work. An empty state from the earlier fixture-free
-      // phase is reseeded so the hackathon demo is useful again after refresh.
-      setThreads(persisted.threads.length > 0 ? persisted.threads : initialThreads);
-      setNotes(persisted.notes);
-    }
-    setPersistenceReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!persistenceReady) return;
-    saveWardState(window.localStorage, { threads, notes });
-  }, [notes, persistenceReady, threads]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,7 +95,7 @@ function Index() {
       }
       if (!typing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         setView((v) => {
-          const order = ["board", "activity", "insights"] as const;
+          const order = ["activity", "board", "insights"] as const;
           const i = order.indexOf(v);
           const next =
             e.key === "ArrowLeft" ? Math.max(0, i - 1) : Math.min(order.length - 1, i + 1);
@@ -150,7 +106,10 @@ function Index() {
       if (e.key === "Shift") {
         const now = Date.now();
         if (now - lastShift.current < 400) {
-          setOpen((v) => !v);
+          setOpen((current) => {
+            if (!current) setMaximized(true);
+            return !current;
+          });
           lastShift.current = 0;
         } else {
           lastShift.current = now;
@@ -161,195 +120,13 @@ function Index() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const counts = useMemo(() => {
-    const base: Record<ThreadStatus, number> = {
-      pending: 0,
-      tracking: 0,
-      verified: 0,
-      escalated: 0,
-    };
-    for (const t of threads) base[t.status] += 1;
-    return base;
-  }, [threads]);
-
-  const stamp = () =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-
-  const updateThread = (id: string, fn: (t: Thread) => Thread) =>
-    setThreads((prev) => prev.map((t) => (t.id === id ? fn(t) : t)));
-
-  const addNote = (
-    patientId: string,
-    text: string,
-    doc: DocId = "medical",
-    source: CaseNote["source"] = "agent",
-    author = "Ward Threads agent",
-  ) =>
-    setNotes((prev) => ({
-      ...prev,
-      [patientId]: [
-        ...(prev[patientId] ?? []),
-        {
-          id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          doc,
-          at: stamp(),
-          author,
-          source,
-          text,
-        },
-      ],
-    }));
-
-  const [ledgerBusy, setLedgerBusy] = useState<string | null>(null);
-  const [ledgerErrors, setLedgerErrors] = useState<Record<string, string>>({});
-
-  const handleLedgerCommand = async (thread: Thread, command: WardTaskCommand) => {
-    const backend = thread.backend;
-    if (backend?.taskId == null || backend.taskVersion == null || ledgerBusy !== null) {
-      return;
-    }
-    setLedgerBusy(`${command}-${thread.id}`);
-    setLedgerErrors((prev) => {
-      const next = { ...prev };
-      delete next[thread.id];
-      return next;
-    });
-    const extras: Record<string, unknown> =
-      command === "approve"
-        ? { approvalChannel: "app_one_tap" }
-        : command === "dismiss"
-          ? { reason: "Dismissed on the ward round as already covered." }
-          : command === "reopen"
-            ? { dueInMs: 24 * 3_600_000 }
-            : command === "complete" || command === "verify"
-              ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
-              : {};
-    const actorId =
-      command === "accept" || command === "decline" || command === "complete"
-        ? (thread.assignee ?? demoActors.teamMember)
-        : demoActors.clinician;
-    try {
-      await executeTaskCommand({
-        taskId: backend.taskId,
-        command,
-        actorId,
-        correlationId: crypto.randomUUID(),
-        body: {
-          expectedVersion: backend.taskVersion,
-          idempotencyKey: `${command}-${crypto.randomUUID()}`,
-          ...extras,
-        },
-      });
-      addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
-      await refreshPatientThreads(thread.patientId);
-    } catch (error) {
-      setLedgerErrors((prev) => ({
-        ...prev,
-        [thread.id]:
-          error instanceof FollowThroughApiError
-            ? `${error.message}${error.retryable ? " · safe to retry" : ""}`
-            : "The ledger did not accept the command; the task is unchanged.",
-      }));
-    } finally {
-      setLedgerBusy(null);
-    }
-  };
-
-  const handleStatusChange = (id: string, status: ThreadStatus) => {
-    const th = threads.find((t) => t.id === id);
-    if (th) {
-      addNote(th.patientId, `${th.title} — moved to ${statusLabels[status].toLowerCase()}.`);
-      if (status === "verified")
-        addNote(th.patientId, `Completed and verified: ${th.title}.`, "discharge");
-      if (status === "escalated")
-        addNote(th.patientId, `Escalated — still outstanding: ${th.title}.`, "discharge");
-    }
-    updateThread(id, (t) => ({
-      ...t,
-      status,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text: `Moved to ${statusLabels[status].toLowerCase()}.`,
-          kind: "action" as const,
-        },
-      ],
-    }));
-  };
-
-  const handleAssign = (id: string, assignee: string | null) => {
-    const th = threads.find((t) => t.id === id);
-    if (th)
-      addNote(
-        th.patientId,
-        assignee
-          ? `${th.title} — picked up by ${assignee}.`
-          : `${th.title} — released, open to anyone free.`,
-      );
-    updateThread(id, (t) => ({
-      ...t,
-      assignee,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text: assignee ? `${assignee} picked this up.` : "Released — open to anyone free.",
-          kind: "action" as const,
-        },
-      ],
-    }));
-  };
-
-  const handleAddActivity = (id: string, text: string) => {
-    const th = threads.find((t) => t.id === id);
-    if (th) addNote(th.patientId, `${th.title} — ${text}`);
-    updateThread(id, (t) => ({
-      ...t,
-      activity: [
-        ...t.activity,
-        {
-          id: `${t.id}-${t.activity.length + 1}`,
-          at: stamp(),
-          actor: "You",
-          text,
-          kind: "note" as const,
-        },
-      ],
-    }));
-  };
-
-  const handleAddThread = (patientId: string, title: string) => {
-    const id = `t-${Date.now()}`;
-    setThreads((prev) => [
-      ...prev,
-      {
-        id,
-        patientId,
-        title,
-        status: "pending",
-        heard: "Added by hand on the ward.",
-        matters: "Flagged as worth following through to completion.",
-        suggestion: "Awaiting assignment.",
-        assignee: null,
-        candidates: [],
-        due: "Today",
-        activity: [
-          { id: `${id}-1`, at: stamp(), actor: "You", text: "Thread created.", kind: "system" },
-        ],
-      },
-    ]);
+  const handleAddThread = (patientId: string, title: string, options?: NewTaskOptions) => {
+    const id = createThread(patientId, title, options);
     setActiveThreadId(id);
     setEhrPatientId(patientId);
     setScopeId(patientId);
     setView("activity");
     setOpen(true);
-    addNote(patientId, `New thread started: ${title}. Tracking through to completion.`);
-    addNote(patientId, `Outstanding before discharge: ${title}.`, "discharge");
   };
 
   return (
@@ -368,26 +145,42 @@ function Index() {
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
-          setScopeId(id);
-          setView("activity");
-          setOpen(true);
+          if (open) {
+            setScopeId(id);
+            setView("activity");
+          }
         }}
       />
 
       {open && (
         <section
           ref={panelRef}
-          className={`liquid-glass fixed bottom-4 right-4 top-4 z-40 flex w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[28px] transition-[left,max-width] duration-300 ${
-            maximized ? "left-4 max-w-none" : "max-w-[52rem]"
+          className={`liquid-glass fixed z-40 flex flex-col overflow-hidden transition-all duration-300 ${
+            maximized
+              ? "inset-0 rounded-none"
+              : "bottom-4 right-4 top-4 w-[calc(100%-2rem)] max-w-[52rem] rounded-[28px]"
           }`}
         >
-          <header className="border-b border-white/25 bg-white/12 px-4 py-3">
+          <header className="flex items-center border-b border-white/25 bg-white/12 px-4 py-3">
+            <div className="flex flex-1 justify-start">
+              <button
+                type="button"
+                onClick={() => setMaximized((current) => !current)}
+                onPointerDown={(event) => event.stopPropagation()}
+                className="liquid-press flex size-8 items-center justify-center rounded-full border border-white/20 bg-white/50 text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:bg-white/80 hover:text-foreground"
+                aria-label={maximized ? "Restore window" : "Maximize window"}
+                title={maximized ? "Restore" : "Maximize"}
+              >
+                {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </button>
+            </div>
             <ViewTabs
               value={view}
               onChange={(key) => {
                 setView(key);
               }}
             />
+            <div className="flex-1" />
           </header>
 
           <CortiActivityReceipt />
@@ -414,13 +207,25 @@ function Index() {
                   }}
                   activeThreadId={activeThreadId}
                   onSelect={setActiveThreadId}
-                  onStatusChange={handleStatusChange}
-                  onAssign={handleAssign}
-                  onLedgerCommand={(thread, command) => void handleLedgerCommand(thread, command)}
+                  onStatusChange={changeStatus}
+                  onAssign={assignThread}
+                  onLedgerCommand={(thread, command) => void runLedgerCommand(thread, command)}
                   ledgerBusy={ledgerBusy}
                   ledgerErrors={ledgerErrors}
-                  onAddActivity={handleAddActivity}
+                  onAddActivity={addActivity}
                   onAddThread={handleAddThread}
+                  onOfferToTeam={offerThreadToTeam}
+                  onEditThread={editThread}
+                  onRemoveThread={(id, reason) => {
+                    if (removeThread(id, reason)) {
+                      setActiveThreadId((current) => (current === id ? null : current));
+                    }
+                  }}
+                  onScribe={(text) =>
+                    addNote(ehrPatientId, text, "medical", "scribe", "Ambient scribe")
+                  }
+                  staff={staff}
+                  teams={teams}
                   onRefreshPatient={refreshPatientThreads}
                   onBackToBoard={() => {
                     setView("board");
@@ -430,31 +235,27 @@ function Index() {
               </div>
             ) : view === "insights" ? (
               <div key="insights" className="fade-in-view h-full">
-                <Insights threads={threads} />
+                <Insights
+                  threads={threads}
+                  onOpenPatient={(patientId) => {
+                    setEhrPatientId(patientId);
+                    setScopeId(patientId);
+                    setView("activity");
+                  }}
+                />
               </div>
             ) : (
               <div key="board" className="fade-in-view flex h-full flex-col">
-                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border px-5 py-3">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border px-5 py-3">
                   <div>
                     <h1 className="text-[15px] font-medium tracking-tight">North Wing · Level 4</h1>
-                    <p className="text-[12.5px] text-muted-foreground">
-                      {counts.pending + counts.tracking + counts.escalated} open across the ward
-                    </p>
+                    <p className="text-[12.5px] text-muted-foreground">Board ward</p>
                   </div>
-                  <dl className="flex gap-6 text-[12.5px] text-muted-foreground">
-                    <div>
-                      <dt>Patients</dt>
-                      <dd className="text-foreground">{patients.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Past deadline</dt>
-                      <dd className="text-foreground">{counts.escalated}</dd>
-                    </div>
-                  </dl>
                 </div>
                 <div className="flex-1 overflow-y-auto p-5">
                   <WardBoard
                     threads={threads}
+                    notes={notes}
                     activePatientId={ehrPatientId}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);
@@ -475,7 +276,13 @@ function Index() {
           </div>
 
           <footer className="flex items-center justify-between border-t border-white/25 bg-white/12 px-6 py-3 text-xs font-medium text-muted-foreground">
-            <span>Ward Threads · connected to Nervecentre</span>
+            <span className="flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-verified" />
+              Live · connected to NerveCentre
+              <span className="rounded-full bg-pending-soft px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-pending-strong">
+                Demo data
+              </span>
+            </span>
             <span>← → to switch views · Esc to hide</span>
           </footer>
         </section>
@@ -483,10 +290,12 @@ function Index() {
 
       <FloatingLauncher
         open={open}
-        maximized={maximized}
-        onToggle={() => setOpen((current) => !current)}
-        onMaximize={() => setMaximized((current) => !current)}
-        onClose={() => setOpen(false)}
+        onToggle={() => {
+          setOpen((current) => {
+            if (!current) setMaximized(false);
+            return !current;
+          });
+        }}
       />
     </div>
   );

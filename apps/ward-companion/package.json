@@ -12,7 +12,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "sync:lovable": "node scripts/lovable-sync.mjs",
+    "sync:lovable:safe": "node scripts/lovable-sync.mjs --apply-safe",
+    "sync:lovable:mark": "node scripts/lovable-sync.mjs --mark-reviewed"
   },
   "dependencies": {
     "@corti/dictation-web": "0.9.0",
