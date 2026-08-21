@@ -81,6 +81,7 @@ export type Patient = {
 };
 
 export type Bay = { id: string; name: string; beds: { bed: string; patientId: string | null }[] };
+export type WardBedAssignments = Record<string, string | null>;
 
 export type AuthoritativeSyncState = "idle" | "syncing" | "ready" | "unavailable";
 
@@ -110,6 +111,7 @@ export const bays: Bay[] = [
       { bed: "10", patientId: "p6" },
       { bed: "11", patientId: "p7" },
       { bed: "12", patientId: "p8" },
+      { bed: "13", patientId: null },
     ],
   },
 ];

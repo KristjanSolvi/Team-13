@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, BedDouble, Home, TriangleAlert } from "lucide-react";
-import type { CaseNote, Patient, Thread } from "@/data/ward";
+import type { CaseNote, Patient, Thread, WardBedAssignments } from "@/data/ward";
 import { bays, patients } from "@/data/ward";
+import { IsometricWardMap } from "./IsometricWardMap";
 import { StatusBand } from "./StatusBand";
 
 type Props = {
@@ -10,6 +11,9 @@ type Props = {
   onOpenThread: (threadId: string) => void;
   onOpenPatient: (patientId: string) => void;
   activePatientId?: string | null;
+  bedAssignments: WardBedAssignments;
+  onPlacePatient: (patientId: string, bed: string) => void;
+  onResetPlacements: () => void;
 };
 
 function isDueTodayOrOverdue(due: string) {
@@ -27,7 +31,16 @@ function dueStyle(due: string) {
     : "bg-tracking-soft text-tracking-strong";
 }
 
-export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activePatientId }: Props) {
+export function WardBoard({
+  threads,
+  notes,
+  onOpenPatient,
+  onOpenThread,
+  activePatientId,
+  bedAssignments,
+  onPlacePatient,
+  onResetPlacements,
+}: Props) {
   const [onlyAttention, setOnlyAttention] = useState(false);
 
   const latestPlanFor = (p: Patient) => {
@@ -54,10 +67,24 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
   );
 
   const patientOf = (id: string) => patients.find((p) => p.id === id);
+  const patientIdForBed = (bed: string, fallback: string | null) =>
+    Object.prototype.hasOwnProperty.call(bedAssignments, bed) ? bedAssignments[bed] : fallback;
+  const bedForPatient = (patientId: string) =>
+    Object.entries(bedAssignments).find(([, assignedId]) => assignedId === patientId)?.[0] ??
+    patientOf(patientId)?.bed;
 
   return (
     <div className="space-y-8">
       <StatusBand threads={threads} />
+
+      <IsometricWardMap
+        threads={threads}
+        bedAssignments={bedAssignments}
+        activePatientId={activePatientId}
+        onOpenPatient={onOpenPatient}
+        onPlacePatient={onPlacePatient}
+        onResetPlacements={onResetPlacements}
+      />
 
       {priority.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-escalated/25 bg-escalated-soft/40">
@@ -72,7 +99,7 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                   className="liquid-press group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-panel/70"
                 >
                   <span className="w-16 shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
-                    Bed {patientOf(t.patientId)?.bed}
+                    Bed {bedForPatient(t.patientId)}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[13.5px] text-foreground">
                     {t.title}
@@ -116,7 +143,8 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
       {bays.map((bay) => {
         const beds = bay.beds.filter((slot) => {
           if (!onlyAttention) return true;
-          const p = patients.find((x) => x.id === slot.patientId);
+          const patientId = patientIdForBed(slot.bed, slot.patientId);
+          const p = patients.find((x) => x.id === patientId);
           return p ? openThreadsFor(p).length > 0 : false;
         });
         if (beds.length === 0) return null;
@@ -128,7 +156,8 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
             </h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {beds.map((slot) => {
-                const patient = patients.find((p) => p.id === slot.patientId) ?? null;
+                const patientId = patientIdForBed(slot.bed, slot.patientId);
+                const patient = patients.find((p) => p.id === patientId) ?? null;
                 if (!patient) {
                   return (
                     <div
@@ -173,7 +202,7 @@ export function WardBoard({ threads, notes, onOpenPatient, onOpenThread, activeP
                         {patient.name}
                       </h3>
                       <span className="mt-[3px] shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums text-foreground">
-                        {patient.bed}
+                        {slot.bed}
                       </span>
                     </div>
 
