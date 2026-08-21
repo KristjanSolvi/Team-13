@@ -14,7 +14,6 @@ import {
 } from "@/components/ward/Loading";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { ViewTabs, type ViewKey } from "@/components/ward/ViewTabs";
-import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
 import type { NewTaskOptions, WardBedAssignments } from "@/data/ward";
@@ -246,8 +245,6 @@ function Index() {
             />
             <div className="flex-1" />
           </header>
-
-          <CortiActivityReceipt />
 
           <div className="min-h-0 flex-1">
             {loadingView ? (
