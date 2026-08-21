@@ -265,7 +265,9 @@ function Index() {
                   onSelect={setActiveThreadId}
                   onStatusChange={changeStatus}
                   onAssign={assignThread}
-                  onLedgerCommand={(thread, command) => void runLedgerCommand(thread, command)}
+                  onLedgerCommand={(thread, command, options) =>
+                    void runLedgerCommand(thread, command, options)
+                  }
                   ledgerBusy={ledgerBusy}
                   ledgerErrors={ledgerErrors}
                   onAddActivity={addActivity}
