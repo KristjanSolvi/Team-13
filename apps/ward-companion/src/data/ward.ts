@@ -299,28 +299,6 @@ export const initialNotes: Record<string, CaseNote[]> = {
   ],
   p2: [
     {
-      id: "n2c",
-      doc: "medical",
-      at: "21/8/2026 14:00",
-      author: "Dr S. Marriott",
-      source: "clinician",
-      text: `Patient: 62 year old male Sarah Jenkins
-
-Current issues:
-AKI on CKD
-Acute decompensation of heart failure
-Type 2 diabetes
-Infective exacerbation of COPD
-
-Patient is alert and sat up
-Speaking in full sentences
-Well hydrated
-On oxygen
-
-O/E right lower zone crackles
-Peripherally oedematous`,
-    },
-    {
       id: "n2",
       doc: "medical",
       at: "07:55",

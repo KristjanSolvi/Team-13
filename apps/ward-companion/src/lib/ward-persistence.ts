@@ -19,7 +19,13 @@ export function loadWardState(storage: StorageReader): PersistedWardState | null
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!isStoredEnvelope(parsed)) return null;
-    return { threads: parsed.threads, notes: parsed.notes };
+    return {
+      threads: parsed.threads,
+      notes: {
+        ...parsed.notes,
+        p2: (parsed.notes["p2"] ?? []).filter((note) => note.id !== "n2c"),
+      },
+    };
   } catch {
     return null;
   }
