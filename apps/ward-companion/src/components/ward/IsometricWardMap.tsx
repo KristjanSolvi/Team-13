@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Route,
   Sparkles,
+  UserRoundMinus,
   UserRoundPlus,
   X,
 } from "lucide-react";
@@ -22,6 +23,7 @@ type Props = {
   activePatientId?: string | null | undefined;
   onOpenPatient: (patientId: string) => void;
   onPlacePatient: (patientId: string, bed: string) => void;
+  onRemovePatient: (bed: string) => void;
   onResetPlacements: () => void;
 };
 
@@ -79,6 +81,7 @@ export function IsometricWardMap({
   activePatientId,
   onOpenPatient,
   onPlacePatient,
+  onRemovePatient,
   onResetPlacements,
 }: Props) {
   const [placementBed, setPlacementBed] = useState<string | null>(null);
@@ -190,63 +193,79 @@ export function IsometricWardMap({
                     const active = patient?.id === activePatientId;
 
                     return (
-                      <button
-                        key={slot.bed}
-                        type="button"
-                        onClick={() => {
-                          if (patient) onOpenPatient(patient.id);
-                          else setPlacementBed(slot.bed);
-                        }}
-                        aria-label={
-                          patient
-                            ? `Bed ${slot.bed}, ${patient.name}. Open patient workspace`
-                            : `Bed ${slot.bed}, empty. Assign patient from EHR roster`
-                        }
-                        className={`liquid-press group relative w-full rounded-xl border px-3 py-2.5 text-left shadow-[0_8px_0_rgba(71,89,108,0.12),0_14px_22px_rgba(56,73,91,0.10)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_12px_0_rgba(71,89,108,0.12),0_20px_28px_rgba(56,73,91,0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tracking/45 ${styles.card} ${
-                          active ? "ring-2 ring-tracking/40" : ""
-                        }`}
-                        style={{ transform: "translateZ(16px)" }}
-                      >
-                        <span
-                          aria-hidden
-                          className={`absolute inset-x-2 -bottom-[7px] h-[7px] rounded-b-lg ${styles.edge}`}
-                        />
-                        <span className="flex items-start justify-between gap-2">
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="relative flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/70 bg-white/65 text-[10px] font-bold shadow-sm">
-                              {patient ? initials(patient.name) : <BedDouble className="size-4" />}
-                              <span
-                                className={`absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white ${styles.dot}`}
-                              />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-[12px] font-semibold text-foreground">
-                                {patient?.name ?? "Assign from EHR"}
+                      <div key={slot.bed} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (patient) onOpenPatient(patient.id);
+                            else setPlacementBed(slot.bed);
+                          }}
+                          aria-label={
+                            patient
+                              ? `Bed ${slot.bed}, ${patient.name}. Open patient workspace`
+                              : `Bed ${slot.bed}, empty. Assign patient from EHR roster`
+                          }
+                          className={`liquid-press group relative w-full rounded-xl border px-3 py-2.5 text-left shadow-[0_8px_0_rgba(71,89,108,0.12),0_14px_22px_rgba(56,73,91,0.10)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_12px_0_rgba(71,89,108,0.12),0_20px_28px_rgba(56,73,91,0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tracking/45 ${styles.card} ${
+                            active ? "ring-2 ring-tracking/40" : ""
+                          }`}
+                          style={{ transform: "translateZ(16px)" }}
+                        >
+                          <span
+                            aria-hidden
+                            className={`absolute inset-x-2 -bottom-[7px] h-[7px] rounded-b-lg ${styles.edge}`}
+                          />
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="relative flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/70 bg-white/65 text-[10px] font-bold shadow-sm">
+                                {patient ? (
+                                  initials(patient.name)
+                                ) : (
+                                  <BedDouble className="size-4" />
+                                )}
+                                <span
+                                  className={`absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white ${styles.dot}`}
+                                />
                               </span>
-                              <span className="mt-0.5 block truncate text-[9.5px] font-medium">
-                                {patient
-                                  ? openThreads.length > 0
-                                    ? `${openThreads.length} open · ${styles.label}`
-                                    : styles.label
-                                  : styles.label}
+                              <span className="min-w-0">
+                                <span className="block truncate text-[12px] font-semibold text-foreground">
+                                  {patient?.name ?? "Assign from EHR"}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[9.5px] font-medium">
+                                  {patient
+                                    ? openThreads.length > 0
+                                      ? `${openThreads.length} open · ${styles.label}`
+                                      : styles.label
+                                    : styles.label}
+                                </span>
                               </span>
                             </span>
+                            <span className="flex shrink-0 items-center gap-1 rounded-md border border-white/70 bg-white/60 px-1.5 py-1 text-[10px] font-bold tabular-nums text-foreground shadow-sm">
+                              {slot.bed}
+                              {patient ? (
+                                <ArrowUpRight className="size-2.5 opacity-55 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                              ) : (
+                                <UserRoundPlus className="size-2.5 opacity-55" />
+                              )}
+                            </span>
                           </span>
-                          <span className="flex shrink-0 items-center gap-1 rounded-md border border-white/70 bg-white/60 px-1.5 py-1 text-[10px] font-bold tabular-nums text-foreground shadow-sm">
-                            {slot.bed}
-                            {patient ? (
-                              <ArrowUpRight className="size-2.5 opacity-55 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                            ) : (
-                              <UserRoundPlus className="size-2.5 opacity-55" />
-                            )}
-                          </span>
-                        </span>
-                        {patient?.homeTomorrow && (
-                          <span className="mt-2 flex items-center gap-1 text-[9.5px] font-medium text-pending-strong">
-                            <Home className="size-2.5" /> Expected discharge tomorrow
-                          </span>
+                          {patient?.homeTomorrow && (
+                            <span className="mt-2 flex items-center gap-1 text-[9.5px] font-medium text-pending-strong">
+                              <Home className="size-2.5" /> Expected discharge tomorrow
+                            </span>
+                          )}
+                        </button>
+                        {patient && (
+                          <button
+                            type="button"
+                            onClick={() => onRemovePatient(slot.bed)}
+                            aria-label={`Remove ${patient.name} from Bed ${slot.bed}`}
+                            title="Remove from bed"
+                            className="liquid-press absolute -right-1.5 -top-1.5 z-20 flex size-6 items-center justify-center rounded-full border border-border bg-panel text-muted-foreground shadow-md transition-colors hover:border-escalated/35 hover:bg-escalated-soft hover:text-escalated-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-escalated/40"
+                          >
+                            <UserRoundMinus className="size-3" />
+                          </button>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

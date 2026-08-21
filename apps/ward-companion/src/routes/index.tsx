@@ -155,15 +155,20 @@ function Index() {
     });
   };
 
+  const removePatientFromBed = (bed: string) => {
+    setBedAssignments((current) => ({ ...current, [bed]: null }));
+  };
+
   const baseEhrPatient = patients.find((patient) => patient.id === ehrPatientId);
   const currentBed = Object.entries(bedAssignments).find(
     ([, patientId]) => patientId === ehrPatientId,
   )?.[0];
   const currentBay = bays.find((bay) => bay.beds.some((slot) => slot.bed === currentBed));
-  const displayedEhrPatient =
-    baseEhrPatient && currentBed
+  const displayedEhrPatient = baseEhrPatient
+    ? currentBed
       ? { ...baseEhrPatient, bed: currentBed, bay: currentBay?.name ?? baseEhrPatient.bay }
-      : baseEhrPatient;
+      : { ...baseEhrPatient, bed: "Unassigned", bay: "EHR roster" }
+    : undefined;
 
   return (
     <div className="min-h-screen font-sans text-foreground">
@@ -323,6 +328,7 @@ function Index() {
                     activePatientId={ehrPatientId}
                     bedAssignments={bedAssignments}
                     onPlacePatient={placePatient}
+                    onRemovePatient={removePatientFromBed}
                     onResetPlacements={() => setBedAssignments({ ...initialBedAssignments })}
                     onOpenPatient={(pid) => {
                       setEhrPatientId(pid);

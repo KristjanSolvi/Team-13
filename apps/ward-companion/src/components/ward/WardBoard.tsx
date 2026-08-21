@@ -13,6 +13,7 @@ type Props = {
   activePatientId?: string | null;
   bedAssignments: WardBedAssignments;
   onPlacePatient: (patientId: string, bed: string) => void;
+  onRemovePatient: (bed: string) => void;
   onResetPlacements: () => void;
 };
 
@@ -39,6 +40,7 @@ export function WardBoard({
   activePatientId,
   bedAssignments,
   onPlacePatient,
+  onRemovePatient,
   onResetPlacements,
 }: Props) {
   const [onlyAttention, setOnlyAttention] = useState(false);
@@ -83,6 +85,7 @@ export function WardBoard({
         activePatientId={activePatientId}
         onOpenPatient={onOpenPatient}
         onPlacePatient={onPlacePatient}
+        onRemovePatient={onRemovePatient}
         onResetPlacements={onResetPlacements}
       />
 
