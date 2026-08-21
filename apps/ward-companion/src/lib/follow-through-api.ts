@@ -112,10 +112,7 @@ function browserOrigin(): string {
 }
 
 function integrationUrl(path: string): URL {
-  const configured = import.meta.env["VITE_INTEGRATION_API_URL"]?.trim();
-  return configured
-    ? new URL(path, configured)
-    : new URL(`/follow-through-api${path}`, browserOrigin());
+  return new URL(`/follow-through-api${path}`, browserOrigin());
 }
 
 async function responseJson<T>(response: Response, acceptedStatuses: number[] = []): Promise<T> {

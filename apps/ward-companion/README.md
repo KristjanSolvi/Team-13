@@ -14,7 +14,8 @@ and historical activity are synthetic demo fixtures; they are not a live EHR.
 
 - `Corti Ambient` uses the real browser microphone adapter from
   `apps/corti-pipeline` and shows transcript and audio-quality events. Browser
-  requests go through the integration API's allow-listed proxy.
+  requests use the same-origin `/follow-through-api` boundary; Vite proxies it
+  locally and the built Railway server proxies it in production.
 - Final transcript evidence is sent to the pipeline's conservative candidate
   generator.
 - Evidence-backed candidates are sent to the integration API for record and
