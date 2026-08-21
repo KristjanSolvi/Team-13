@@ -18,6 +18,7 @@ import {
   getWardCompanionOverview,
   routeDemoTaskNow,
   type ChangeImpact,
+  type TaskCorrectionPatch,
   type TaskRoutingReceipt,
   type WardTaskCommand,
 } from "@/lib/follow-through-api";
@@ -285,7 +286,11 @@ export function useWardRuntime() {
   );
 
   const runLedgerCommand = useCallback(
-    async (thread: Thread, command: WardTaskCommand, options: { reason?: string } = {}) => {
+    async (
+      thread: Thread,
+      command: WardTaskCommand,
+      options: { reason?: string; patch?: TaskCorrectionPatch } = {},
+    ) => {
       const backend = thread.backend;
       if (backend?.taskId == null || backend.taskVersion == null || ledgerBusy !== null) {
         return;
@@ -306,13 +311,15 @@ export function useWardRuntime() {
       const extras: Record<string, unknown> =
         command === "approve"
           ? { approvalChannel: "app_one_tap" }
-          : command === "dismiss"
-            ? { reason: options.reason?.trim() }
-            : command === "reopen"
-              ? { dueInMs: 24 * 3_600_000 }
-              : command === "complete" || command === "verify"
-                ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
-                : {};
+          : command === "correct"
+            ? { ...options.patch }
+            : command === "dismiss"
+              ? { reason: options.reason?.trim() }
+              : command === "reopen"
+                ? { dueInMs: 24 * 3_600_000 }
+                : command === "complete" || command === "verify"
+                  ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
+                  : {};
       const idempotencyKey = `${command}-${crypto.randomUUID()}`;
       const latestCommandThread = async () => {
         const patient = patients.find((candidate) => candidate.id === thread.patientId);
