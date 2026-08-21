@@ -64,7 +64,8 @@ console.log(
   JSON.stringify(
     {
       contextId: record.contextId,
-      taskId: typeof record.cortiTaskId === "string" ? record.cortiTaskId : null,
+      taskId:
+        typeof record.cortiTaskId === "string" ? record.cortiTaskId : null,
       state: record.agentState,
       credits: typeof record.credits === "number" ? record.credits : null,
     },

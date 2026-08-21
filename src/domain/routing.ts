@@ -145,7 +145,5 @@ export function chooseMember(
     members,
     options,
   ).selectedMemberId;
-  return (
-    members.find((member) => member.memberId === selectedMemberId) ?? null
-  );
+  return members.find((member) => member.memberId === selectedMemberId) ?? null;
 }

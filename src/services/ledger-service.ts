@@ -22,8 +22,7 @@ import type {
 import type { Clock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
 
-const EVIDENCE_REFERENCE =
-  /^(encounter|record|dictation):[A-Za-z0-9._-]+$/;
+const EVIDENCE_REFERENCE = /^(encounter|record|dictation):[A-Za-z0-9._-]+$/;
 const ACCEPTANCE_WINDOW_MS: Record<ClinicalUrgency, number> = {
   high: 5 * 60_000,
   medium: 30 * 60_000,
@@ -799,8 +798,7 @@ export class LedgerService {
         expectedVersion,
         (task) => {
           requireTransition(task.state, "offered_to_team");
-          const acceptanceWindowMs =
-            ACCEPTANCE_WINDOW_MS[task.clinicalUrgency];
+          const acceptanceWindowMs = ACCEPTANCE_WINDOW_MS[task.clinicalUrgency];
           requireDuration(dueInMs);
           if (dueInMs < acceptanceWindowMs) {
             throw new DomainError(

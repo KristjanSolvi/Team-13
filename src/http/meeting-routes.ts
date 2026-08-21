@@ -178,7 +178,18 @@ export function mountMeetingRoutes(
             patientId: reconciliation.patientId,
             idempotencyKey: reconciliation.idempotencyKey,
           });
-        } catch {
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: "corti.meeting_agent.reconciliation_failed",
+              error:
+                error instanceof DomainError
+                  ? error.code
+                  : error instanceof Error
+                    ? error.name
+                    : "UnknownError",
+            }),
+          );
           throw new DomainError(
             "CORTI_MEETING_AGENT_FAILED",
             "Corti meeting reconciliation failed; retry the same request",

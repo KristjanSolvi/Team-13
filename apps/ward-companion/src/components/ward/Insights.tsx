@@ -2,8 +2,14 @@ import { useCallback, useMemo } from "react";
 import type { Thread } from "@/data/ward";
 import { patients } from "@/data/ward";
 import { demoStaff } from "@/data/demo-staff";
+import { estimateBedDaysProtected } from "@/lib/bed-days";
+import { PatientJourneyMap } from "./PatientJourneyMap";
 
-type Props = { threads: Thread[]; onOpenPatient: (id: string) => void };
+type Props = {
+  threads: Thread[];
+  initialPatientId?: string;
+  onOpenPatient: (id: string) => void;
+};
 
 /* ------------------------------------------------------------------ */
 /* primitives                                                          */
@@ -30,6 +36,41 @@ function Card({
       </div>
       {children}
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* estimated bed-days protected                                       */
+/* ------------------------------------------------------------------ */
+
+function BedDaysProtected({ threads }: { threads: Thread[] }) {
+  const estimate = useMemo(() => estimateBedDaysProtected(threads, patients), [threads]);
+
+  return (
+    <Card
+      title="Estimated bed-days protected this week"
+      hint="Modelled estimate · not measured outcome"
+      className="bed-days-insight overflow-hidden lg:col-span-2"
+    >
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-[44px] font-medium leading-none tracking-tight tabular-nums text-foreground">
+            {estimate.protectedBedDays.toFixed(1)}
+            <span className="ml-2 text-[17px] font-normal tracking-normal text-muted-foreground">
+              bed-days
+            </span>
+          </p>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">
+            {estimate.timelyVerifiedBlockers} discharge-blocking thread
+            {estimate.timelyVerifiedBlockers === 1 ? "" : "s"} verified before deadline ×{" "}
+            {estimate.assumedBedDaysPerBlocker.toFixed(1)} assumed bed-day delay avoided.
+          </p>
+        </div>
+        <span className="w-fit shrink-0 rounded-full border border-white/70 bg-white/45 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-foreground/75 shadow-sm backdrop-blur-md">
+          Estimate, not an outcome claim
+        </span>
+      </div>
+    </Card>
   );
 }
 
@@ -353,10 +394,16 @@ function Capacity({ threads }: { threads: Thread[] }) {
 
 /* ------------------------------------------------------------------ */
 
-export function Insights({ threads, onOpenPatient }: Props) {
+export function Insights({ threads, initialPatientId, onOpenPatient }: Props) {
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="grid gap-4 lg:grid-cols-2">
+        <PatientJourneyMap
+          threads={threads}
+          initialPatientId={initialPatientId}
+          onOpenPatient={onOpenPatient}
+        />
+        <BedDaysProtected threads={threads} />
         <TimeReturned />
         <Funnel threads={threads} />
         <Rhythm />
