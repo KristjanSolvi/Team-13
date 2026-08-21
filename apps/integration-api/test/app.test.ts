@@ -147,6 +147,42 @@ function harness() {
       },
       task: { taskId: "11111111-1111-4111-8111-111111111111" },
     })),
+    routeDemoTaskNow: vi.fn(async () => ({
+      advancedByMs: 1_800_000,
+      task: {
+        taskId: "task-1",
+        state: "assigned_to_member",
+        assignedMemberId: "nurse-a",
+      },
+      receipt: {
+        schemaVersion: "1",
+        taskId: "task-1",
+        assignedMemberId: "nurse-a",
+        routedAt: "2026-08-20T10:30:00.000Z",
+        trigger: "team_acceptance_timeout",
+        routingDecision: {
+          policyVersion: "availability-capability-load-v1",
+          selectedMemberId: "nurse-a",
+          requiredCapabilities: ["blood-pressure"],
+          candidates: [],
+        },
+      },
+    })),
+    getTaskRoutingReceipt: vi.fn(async () => ({
+      receipt: {
+        schemaVersion: "1",
+        taskId: "task-1",
+        assignedMemberId: "nurse-a",
+        routedAt: "2026-08-20T10:30:00.000Z",
+        trigger: "team_acceptance_timeout",
+        routingDecision: {
+          policyVersion: "availability-capability-load-v1",
+          selectedMemberId: "nurse-a",
+          requiredCapabilities: ["blood-pressure"],
+          candidates: [],
+        },
+      },
+    })),
     demoParticipantView: vi.fn(async () => ({
       participant: { participantId: "participant-1" },
       assignments: [],
@@ -272,6 +308,20 @@ describe("integration API", () => {
     ]);
     expect(response.body.paths).toHaveProperty("/api/demo/join/{joinCode}");
     expect(response.body.paths).toHaveProperty("/api/demo/participants/me");
+    expect(response.body.paths).toHaveProperty(
+      "/api/demo/tasks/{taskId}/route-now",
+    );
+    expect(response.body.paths).toHaveProperty(
+      "/api/tasks/{taskId}/routing-receipt",
+    );
+    expect(
+      response.body.components.schemas.TaskRoutingReceipt.properties.trigger
+        .enum,
+    ).toEqual([
+      "team_acceptance_timeout",
+      "member_declined",
+      "audience_demo",
+    ]);
     expect(response.body.components.securitySchemes).toHaveProperty(
       "DemoParticipantToken",
     );
@@ -1214,6 +1264,48 @@ describe("integration API", () => {
       .expect(401);
     expect(denied.body.error.code).toBe("DEMO_PARTICIPANT_AUTH_REQUIRED");
     expect(JSON.stringify(created.body)).not.toContain("server-only-token");
+  });
+
+  it("proxies the demo smart-routing trigger and its durable receipt", async () => {
+    const { agentic, app } = harness();
+
+    const routed = await request(app)
+      .post("/api/demo/tasks/task-1/route-now")
+      .set("x-actor-id", "clinician:demo-host")
+      .set("x-correlation-id", "corr-smart-route")
+      .send({ idempotencyKey: "smart-route-001" })
+      .expect(200);
+    expect(routed.body).toMatchObject({
+      advancedByMs: 1_800_000,
+      task: {
+        taskId: "task-1",
+        state: "assigned_to_member",
+        assignedMemberId: "nurse-a",
+      },
+      receipt: {
+        schemaVersion: "1",
+        taskId: "task-1",
+        assignedMemberId: "nurse-a",
+        trigger: "team_acceptance_timeout",
+      },
+    });
+    expect(agentic.routeDemoTaskNow).toHaveBeenCalledWith(
+      "task-1",
+      { idempotencyKey: "smart-route-001" },
+      {
+        actorId: "clinician:demo-host",
+        correlationId: "corr-smart-route",
+      },
+    );
+
+    const receipt = await request(app)
+      .get("/api/tasks/task-1/routing-receipt")
+      .set("x-correlation-id", "corr-smart-receipt")
+      .expect(200);
+    expect(receipt.body).toEqual({ receipt: routed.body.receipt });
+    expect(agentic.getTaskRoutingReceipt).toHaveBeenCalledWith("task-1", {
+      correlationId: "corr-smart-receipt",
+    });
   });
 
   it("returns the Ward Companion read model without exposing credentials", async () => {

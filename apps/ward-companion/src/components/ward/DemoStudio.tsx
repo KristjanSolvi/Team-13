@@ -590,10 +590,11 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
                       );
                     })}
                   </ul>
-                  {latestAssignment !== null && (
+                  {latestAssignment?.routingDecision != null && (
                     <RoutingReceipt
-                      assignment={latestAssignment}
+                      decision={latestAssignment.routingDecision}
                       participants={session.groups.flatMap((group) => group.participants)}
+                      triggerLabel="Chosen from this clinician-selected audience group"
                     />
                   )}
                 </div>

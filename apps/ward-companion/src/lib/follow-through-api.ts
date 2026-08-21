@@ -105,6 +105,26 @@ export type DemoRoutingDecision = {
   candidates: DemoRoutingCandidate[];
 };
 
+export type TaskRoutingReceipt = {
+  schemaVersion: "1";
+  taskId: string;
+  assignedMemberId: string;
+  routedAt: string;
+  trigger: "team_acceptance_timeout" | "member_declined" | "audience_demo";
+  routingDecision: DemoRoutingDecision;
+};
+
+export type DemoRouteNowResult = {
+  advancedByMs: number;
+  task: {
+    taskId: string;
+    state: string;
+    assignedMemberId: string | null;
+    version: number;
+  };
+  receipt: TaskRoutingReceipt;
+};
+
 export type DemoAssignment = {
   assignmentId: string;
   sessionId: string;
@@ -462,6 +482,35 @@ export async function getTaskDeliveries(
   return responseJson<{ deliveries: DownstreamDelivery[] }>(
     await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(taskId)}/deliveries`), {
       headers: { "x-correlation-id": correlationId },
+    }),
+  );
+}
+
+export async function getTaskRoutingReceipt(
+  taskId: string,
+  correlationId: string,
+): Promise<{ receipt: TaskRoutingReceipt | null }> {
+  return responseJson<{ receipt: TaskRoutingReceipt | null }>(
+    await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(taskId)}/routing-receipt`), {
+      headers: jsonHeaders(correlationId),
+    }),
+  );
+}
+
+export async function routeDemoTaskNow(input: {
+  taskId: string;
+  actorId: string;
+  idempotencyKey: string;
+  correlationId: string;
+}): Promise<DemoRouteNowResult> {
+  return responseJson<DemoRouteNowResult>(
+    await fetch(integrationUrl(`/api/demo/tasks/${encodeURIComponent(input.taskId)}/route-now`), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(input.correlationId),
+        "x-actor-id": input.actorId,
+      },
+      body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
     }),
   );
 }

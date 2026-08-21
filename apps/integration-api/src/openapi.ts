@@ -266,6 +266,74 @@ export const integrationOpenApi = {
         },
       },
     },
+    "/api/demo/tasks/{taskId}/route-now": {
+      post: {
+        summary: "Advance synthetic time to the team deadline and run smart assignment",
+        description:
+          "Demo-mode control only. The authoritative scheduler still applies the live availability, capability, capacity, and workload policy.",
+        parameters: [
+          { $ref: "#/components/parameters/TaskId" },
+          { $ref: "#/components/parameters/ActorId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DemoRouteNow" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Assigned task and the durable routing receipt",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/DemoRouteNowResult" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/Error" },
+          "403": { $ref: "#/components/responses/Error" },
+          "404": { $ref: "#/components/responses/Error" },
+          "409": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
+    "/api/tasks/{taskId}/routing-receipt": {
+      get: {
+        summary: "Read the latest durable smart-assignment decision for a task",
+        parameters: [
+          { $ref: "#/components/parameters/TaskId" },
+          { $ref: "#/components/parameters/CorrelationId" },
+        ],
+        responses: {
+          "200": {
+            description: "Routing receipt, or null when the task was not router-assigned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["receipt"],
+                  properties: {
+                    receipt: {
+                      oneOf: [
+                        { $ref: "#/components/schemas/TaskRoutingReceipt" },
+                        { type: "null" },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/Error" },
+          "502": { $ref: "#/components/responses/Error" },
+        },
+      },
+    },
     "/api/corti/ambient/session": pipelineProxy(
       "Create a Corti Ambient interaction and scoped browser session",
       "201",
@@ -1012,6 +1080,12 @@ export const integrationOpenApi = {
         required: true,
         schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
       },
+      TaskId: {
+        name: "taskId",
+        in: "path",
+        required: true,
+        schema: { type: "string", pattern: "^[A-Za-z0-9:._-]{1,160}$" },
+      },
       MeetingId: {
         name: "meetingId",
         in: "path",
@@ -1255,6 +1329,14 @@ export const integrationOpenApi = {
           idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
         },
       },
+      DemoRouteNow: {
+        type: "object",
+        additionalProperties: false,
+        required: ["idempotencyKey"],
+        properties: {
+          idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
       DemoRoutingCandidate: {
         type: "object",
         additionalProperties: false,
@@ -1338,6 +1420,45 @@ export const integrationOpenApi = {
             type: "array",
             items: { $ref: "#/components/schemas/DemoRoutingCandidate" },
           },
+        },
+      },
+      TaskRoutingReceipt: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "schemaVersion",
+          "taskId",
+          "assignedMemberId",
+          "routedAt",
+          "trigger",
+          "routingDecision",
+        ],
+        properties: {
+          schemaVersion: { const: "1" },
+          taskId: { type: "string" },
+          assignedMemberId: { type: "string" },
+          routedAt: { type: "string", format: "date-time" },
+          trigger: {
+            type: "string",
+            enum: [
+              "team_acceptance_timeout",
+              "member_declined",
+              "audience_demo",
+            ],
+          },
+          routingDecision: {
+            $ref: "#/components/schemas/DemoRoutingDecision",
+          },
+        },
+      },
+      DemoRouteNowResult: {
+        type: "object",
+        additionalProperties: false,
+        required: ["advancedByMs", "task", "receipt"],
+        properties: {
+          advancedByMs: { type: "integer", minimum: 0 },
+          task: { type: "object", additionalProperties: true },
+          receipt: { $ref: "#/components/schemas/TaskRoutingReceipt" },
         },
       },
       DemoAssignmentRecord: {

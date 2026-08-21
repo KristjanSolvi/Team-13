@@ -219,6 +219,10 @@ export const demoAssignmentSchema = z
   })
   .strict();
 
+export const demoRouteNowSchema = z
+  .object({ idempotencyKey: z.string().min(8).max(200) })
+  .strict();
+
 const nullableText = (maximum: number) =>
   z.string().trim().min(1).max(maximum).nullable();
 

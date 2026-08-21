@@ -88,6 +88,15 @@ export interface AgenticGateway {
     body: Record<string, unknown>,
     meta: RequestMeta,
   ): Promise<unknown>;
+  routeDemoTaskNow(
+    taskId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown>;
+  getTaskRoutingReceipt(
+    taskId: string,
+    meta: RequestMeta,
+  ): Promise<unknown>;
   demoParticipantView(
     participantToken: string,
     meta: RequestMeta,
@@ -520,6 +529,32 @@ export class HttpAgenticGateway implements AgenticGateway {
         bearerToken: this.bearerToken,
         meta,
       },
+    );
+  }
+
+  routeDemoTaskNow(
+    taskId: string,
+    body: Record<string, unknown>,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/demo/tasks/${encodeURIComponent(taskId)}/route-now`,
+      {
+        method: "POST",
+        body,
+        bearerToken: this.bearerToken,
+        meta,
+      },
+    );
+  }
+
+  getTaskRoutingReceipt(
+    taskId: string,
+    meta: RequestMeta,
+  ): Promise<unknown> {
+    return this.client.request(
+      `/api/tasks/${encodeURIComponent(taskId)}/routing-receipt`,
+      { bearerToken: this.bearerToken, meta },
     );
   }
 

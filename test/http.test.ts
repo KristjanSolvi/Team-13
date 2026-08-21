@@ -1104,7 +1104,10 @@ test("patient lists, approval commands, and errors match the integration gateway
 
 test("patient task list omits terminal work whose closed thread is absent from the active list", async (t) => {
   const harness = createAppHarness();
-  const draft = harness.ledger.createKarenDraft("ctx-karen", "terminal-list-draft");
+  const draft = harness.ledger.createKarenDraft(
+    "ctx-karen",
+    "terminal-list-draft",
+  );
   const approval = harness.ledger.approveDraft(
     draft.taskId,
     draft.version,
@@ -1143,9 +1146,12 @@ test("patient task list omits terminal work whose closed thread is absent from t
     harness.store.close();
   });
 
-  const threads = await fetch(`${baseUrl}/api/patients/synthetic-karen/threads`, {
-    headers: appHeaders(),
-  });
+  const threads = await fetch(
+    `${baseUrl}/api/patients/synthetic-karen/threads`,
+    {
+      headers: appHeaders(),
+    },
+  );
   const tasks = await fetch(`${baseUrl}/api/patients/synthetic-karen/tasks`, {
     headers: appHeaders(),
   });
@@ -1399,4 +1405,113 @@ test("demo audience endpoints group QR joiners and expose only their assigned ta
     assignments: Array<{ task: { taskId: string } }>;
   };
   assert.equal(view.assignments[0]?.task.taskId, offered.taskId);
+});
+
+test("demo smart routing advances an offered task and exposes its durable decision receipt", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const draft = harness.ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-karen-1",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Check blood pressure within 48 hours",
+    taskType: "demo-smart-routing",
+    evidenceRefs: ["encounter:sentence-42"],
+    targetTeamId: "district-nursing",
+    requiredCapabilities: ["blood-pressure"],
+    clinicalUrgency: "medium",
+    dueInMs: 48 * 60 * 60_000,
+    idempotencyKey: "demo-smart-routing-draft",
+    actor: { type: "agent", id: "corti" },
+  });
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "demo-smart-routing-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "demo-smart-routing-publish",
+  );
+
+  const routedResponse = await fetch(
+    `${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-now" }),
+    },
+  );
+  assert.equal(routedResponse.status, 200);
+  const routed = (await routedResponse.json()) as {
+    advancedByMs: number;
+    task: { taskId: string; state: string; assignedMemberId: string | null };
+    receipt: {
+      taskId: string;
+      assignedMemberId: string;
+      trigger: string;
+      routingDecision: {
+        selectedMemberId: string | null;
+        requiredCapabilities: string[];
+        candidates: Array<{
+          memberId: string;
+          eligible: boolean;
+          rank: number | null;
+          openTaskCount: number;
+        }>;
+      };
+    };
+  };
+  assert.equal(routed.advancedByMs, 30 * 60_000);
+  assert.deepEqual(routed.task, {
+    ...harness.ledger.getTask(offered.taskId),
+  });
+  assert.equal(routed.task.state, "assigned_to_member");
+  assert.equal(routed.task.assignedMemberId, "nurse-a");
+  assert.equal(routed.receipt.taskId, offered.taskId);
+  assert.equal(routed.receipt.assignedMemberId, "nurse-a");
+  assert.equal(routed.receipt.trigger, "team_acceptance_timeout");
+  assert.equal(routed.receipt.routingDecision.selectedMemberId, "nurse-a");
+  assert.deepEqual(routed.receipt.routingDecision.requiredCapabilities, [
+    "blood-pressure",
+  ]);
+  assert.deepEqual(
+    routed.receipt.routingDecision.candidates.map((candidate) => ({
+      memberId: candidate.memberId,
+      eligible: candidate.eligible,
+      rank: candidate.rank,
+      openTaskCount: candidate.openTaskCount,
+    })),
+    [
+      { memberId: "nurse-a", eligible: true, rank: 1, openTaskCount: 1 },
+      { memberId: "nurse-b", eligible: true, rank: 2, openTaskCount: 2 },
+    ],
+  );
+
+  const receiptResponse = await fetch(
+    `${baseUrl}/api/tasks/${offered.taskId}/routing-receipt`,
+    { headers: appHeaders() },
+  );
+  assert.equal(receiptResponse.status, 200);
+  assert.deepEqual(await receiptResponse.json(), { receipt: routed.receipt });
+
+  const replayResponse = await fetch(
+    `${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`,
+    {
+      method: "POST",
+      headers: appHeaders("clinician-1"),
+      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-now" }),
+    },
+  );
+  assert.equal(replayResponse.status, 200);
+  assert.deepEqual(await replayResponse.json(), routed);
 });

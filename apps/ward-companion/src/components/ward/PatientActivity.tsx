@@ -28,6 +28,7 @@ import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
+import { SmartRoutingPanel } from "./SmartRoutingPanel";
 import { SystemConnectionPanel } from "./SystemConnectionPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 import { TaskDeliveryStatus } from "./TaskDeliveryStatus";
@@ -62,6 +63,11 @@ const kindDot: Record<string, string> = {
   system: "bg-border",
   note: "bg-tracking",
   action: "bg-verified",
+};
+
+const backendAssigneeLabels: Record<string, string> = {
+  "nurse-a": "Nurse Kelly O.",
+  "nurse-b": "Nurse Ben Adeyemi",
 };
 
 const ledgerCommandMeta: Record<
@@ -306,8 +312,11 @@ export function PatientActivity({
                         {thread.title}
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                        {statusLabels[thread.status]} · {thread.assignee ?? "no owner"} ·{" "}
-                        {thread.due}
+                        {statusLabels[thread.status]} ·{" "}
+                        {thread.assignee === null
+                          ? "no owner"
+                          : (backendAssigneeLabels[thread.assignee] ?? thread.assignee)}{" "}
+                        · {thread.due}
                       </span>
                     </span>
                     <ChevronDown
@@ -357,6 +366,31 @@ export function PatientActivity({
                             <Spinner className="size-3" />
                             Waiting for a member of {thread.offeredTo} to accept…
                           </p>
+                        )}
+
+                      {thread.backend?.taskId != null &&
+                        thread.backend.taskVersion != null &&
+                        thread.backend.taskState != null &&
+                        [
+                          "offered_to_team",
+                          "assigned_to_member",
+                          "accepted",
+                          "completed",
+                          "verified",
+                        ].includes(thread.backend.taskState) && (
+                          <SmartRoutingPanel
+                            taskId={thread.backend.taskId}
+                            taskVersion={thread.backend.taskVersion}
+                            taskState={
+                              thread.backend.taskState as
+                                | "offered_to_team"
+                                | "assigned_to_member"
+                                | "accepted"
+                                | "completed"
+                                | "verified"
+                            }
+                            onRouted={() => onRefreshPatient(thread.patientId)}
+                          />
                         )}
 
                       {!done &&

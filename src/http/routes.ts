@@ -714,6 +714,59 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
     }),
   );
 
+  router.post(
+    "/demo/tasks/:taskId/route-now",
+    asyncRoute((request, response) => {
+      const body = z
+        .object({ idempotencyKey: z.string().min(8).max(200) })
+        .strict()
+        .parse(request.body);
+      const taskId = pathParam(request, "taskId");
+      const commandScope = `demo-route-now:${taskId}`;
+      const replay = dependencies.store.getProcessedCommand(
+        commandScope,
+        body.idempotencyKey,
+      );
+      if (replay) {
+        response.json(replay);
+        return;
+      }
+      const offered = dependencies.ledger.getTask(taskId);
+      if (offered.state !== "offered_to_team") {
+        throw new DomainError(
+          "DEMO_TASK_NOT_ROUTABLE",
+          "Demo routing requires a task currently offered to a team",
+          false,
+          409,
+        );
+      }
+      const advancedByMs = Math.max(
+        0,
+        Date.parse(offered.acceptBy) - dependencies.clock.now().getTime(),
+      );
+      if (advancedByMs > 0) dependencies.clock.advance(advancedByMs);
+      dependencies.scheduler.tick();
+      const task = dependencies.ledger.getTask(taskId);
+      const receipt = dependencies.store.getTaskRoutingReceipt(taskId);
+      if (task.state !== "assigned_to_member" || receipt === null) {
+        throw new DomainError(
+          "DEMO_ROUTING_INCOMPLETE",
+          "No eligible available team member could receive this task",
+          false,
+          409,
+        );
+      }
+      const result = { advancedByMs, task, receipt };
+      dependencies.store.saveProcessedCommand(
+        commandScope,
+        body.idempotencyKey,
+        result,
+        dependencies.clock.now().toISOString(),
+      );
+      response.json(result);
+    }),
+  );
+
   router.get(
     "/patients/:patientId/threads",
     asyncRoute((request, response) => {
@@ -728,9 +781,9 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
     "/patients/:patientId/tasks",
     asyncRoute((request, response) => {
       response.json({
-        tasks: dependencies.store.listPatientTasks(
-          pathParam(request, "patientId"),
-        ).filter(isHandoverTaskActive),
+        tasks: dependencies.store
+          .listPatientTasks(pathParam(request, "patientId"))
+          .filter(isHandoverTaskActive),
       });
     }),
   );
@@ -775,6 +828,16 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
     "/tasks/:taskId",
     asyncRoute((request, response) => {
       response.json(dependencies.ledger.getTask(pathParam(request, "taskId")));
+    }),
+  );
+  router.get(
+    "/tasks/:taskId/routing-receipt",
+    asyncRoute((request, response) => {
+      response.json({
+        receipt: dependencies.store.getTaskRoutingReceipt(
+          pathParam(request, "taskId"),
+        ),
+      });
     }),
   );
   router.get(

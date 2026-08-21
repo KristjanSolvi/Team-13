@@ -44,6 +44,8 @@ function harness() {
     getDemoSession: vi.fn(async () => ({})),
     joinDemoSession: vi.fn(async () => ({})),
     assignDemoTask: vi.fn(async () => ({})),
+    routeDemoTaskNow: vi.fn(async () => ({})),
+    getTaskRoutingReceipt: vi.fn(async () => ({ receipt: null })),
     demoParticipantView: vi.fn(async () => ({})),
     eventStream: vi.fn(async () => new ReadableStream<Uint8Array>()),
   };
