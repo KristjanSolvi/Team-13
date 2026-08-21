@@ -79,16 +79,6 @@ export function WardBoard({
     <div className="space-y-8">
       <StatusBand threads={threads} />
 
-      <IsometricWardMap
-        threads={threads}
-        bedAssignments={bedAssignments}
-        activePatientId={activePatientId}
-        onOpenPatient={onOpenPatient}
-        onPlacePatient={onPlacePatient}
-        onRemovePatient={onRemovePatient}
-        onResetPlacements={onResetPlacements}
-      />
-
       {priority.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-escalated/25 bg-escalated-soft/40">
           <header className="flex items-center gap-2 px-4 pt-3 text-[11px] font-semibold uppercase tracking-widest text-escalated-strong">
@@ -264,6 +254,16 @@ export function WardBoard({
           </section>
         );
       })}
+
+      <IsometricWardMap
+        threads={threads}
+        bedAssignments={bedAssignments}
+        activePatientId={activePatientId}
+        onOpenPatient={onOpenPatient}
+        onPlacePatient={onPlacePatient}
+        onRemovePatient={onRemovePatient}
+        onResetPlacements={onResetPlacements}
+      />
     </div>
   );
 }
