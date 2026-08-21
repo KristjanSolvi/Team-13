@@ -12,8 +12,8 @@ import { sourceRevisionReasons } from "../domain/change-radar.js";
 import { demoScenarios } from "../demo/types.js";
 import { DomainError } from "../domain/errors.js";
 import { isHandoverTaskActive } from "../domain/handover.js";
-import { explainRouting } from "../domain/routing.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
+import { evaluateTaskRouting } from "../services/scheduler-service.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor, requireAppAuth } from "./auth.js";
 import { mountHandoverRoutes } from "./handover-routes.js";
@@ -750,11 +750,8 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
           409,
         );
       }
-      const preflightDecision = explainRouting(
-        offered,
-        dependencies.store.listMembers(offered.targetTeamId),
-      );
-      if (preflightDecision.selectedMemberId === null) {
+      const preflightRouting = evaluateTaskRouting(dependencies.store, offered);
+      if (preflightRouting.decision.selectedMemberId === null) {
         throw new DomainError(
           "DEMO_ROUTING_INCOMPLETE",
           "No eligible available team member could receive this task",

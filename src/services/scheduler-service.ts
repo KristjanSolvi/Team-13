@@ -1,6 +1,6 @@
 import { calculatePriority } from "../domain/priority.js";
 import { explainRouting } from "../domain/routing.js";
-import type { TaskState } from "../domain/types.js";
+import type { Task, TaskState } from "../domain/types.js";
 import type { Clock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
 
@@ -11,6 +11,17 @@ const DUE_ESCALATION_STATES: ReadonlySet<TaskState> = new Set([
   "accepted",
   "completed",
 ]);
+
+export function evaluateTaskRouting(store: SqliteStore, task: Task) {
+  const declinedMemberIds = new Set(store.listDeclinedMemberIds(task.taskId));
+  const candidates = store
+    .listMembers(task.targetTeamId)
+    .filter((candidate) => !declinedMemberIds.has(candidate.memberId));
+  return {
+    candidates,
+    decision: explainRouting(task, candidates),
+  };
+}
 
 export class SchedulerService {
   constructor(
@@ -48,16 +59,10 @@ export class SchedulerService {
         current.state === "offered_to_team" &&
         Date.parse(current.acceptBy) <= now.getTime()
       ) {
-        const declinedMemberIds = new Set(
-          this.store.listDeclinedMemberIds(current.taskId),
-        );
-        const members = this.store
-          .listMembers(current.targetTeamId)
-          .filter((candidate) => !declinedMemberIds.has(candidate.memberId));
-        const routingDecision = explainRouting(current, members);
-        const member = members.find(
+        const routing = evaluateTaskRouting(this.store, current);
+        const member = routing.candidates.find(
           (candidate) =>
-            candidate.memberId === routingDecision.selectedMemberId,
+            candidate.memberId === routing.decision.selectedMemberId,
         );
         if (member) {
           this.store.assignMember(
@@ -65,7 +70,7 @@ export class SchedulerService {
             current.version,
             member.memberId,
             updatedAt,
-            routingDecision,
+            routing.decision,
           );
         } else {
           this.store.escalate(
@@ -88,15 +93,9 @@ export class SchedulerService {
         memberId,
         declinedAt,
       );
-      const declinedMemberIds = new Set(
-        this.store.listDeclinedMemberIds(taskId),
-      );
-      const members = this.store
-        .listMembers(task.targetTeamId)
-        .filter((candidate) => !declinedMemberIds.has(candidate.memberId));
-      const routingDecision = explainRouting(task, members);
-      const next = members.find(
-        (candidate) => candidate.memberId === routingDecision.selectedMemberId,
+      const routing = evaluateTaskRouting(this.store, task);
+      const next = routing.candidates.find(
+        (candidate) => candidate.memberId === routing.decision.selectedMemberId,
       );
       if (next) {
         this.store.reassignMember(
@@ -104,7 +103,7 @@ export class SchedulerService {
           task.version,
           next.memberId,
           declinedAt,
-          routingDecision,
+          routing.decision,
         );
       } else {
         this.store.escalate(

@@ -1557,7 +1557,9 @@ test("demo smart routing is unavailable when demo mode is disabled", async (t) =
     {
       method: "POST",
       headers: appHeaders("clinician-1"),
-      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-disabled-now" }),
+      body: JSON.stringify({
+        idempotencyKey: "demo-smart-routing-disabled-now",
+      }),
     },
   );
   assert.equal(response.status, 403);
@@ -1609,7 +1611,9 @@ test("demo smart routing rejects a team deadline that collides with the clinical
     fetch(`${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`, {
       method: "POST",
       headers: appHeaders("clinician-1"),
-      body: JSON.stringify({ idempotencyKey: "demo-smart-routing-collision-now" }),
+      body: JSON.stringify({
+        idempotencyKey: "demo-smart-routing-collision-now",
+      }),
     });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await route();
@@ -1668,7 +1672,9 @@ test("demo smart routing leaves an offered task unchanged when nobody is eligibl
       {
         method: "POST",
         headers: appHeaders("clinician-1"),
-        body: JSON.stringify({ idempotencyKey: "demo-smart-routing-no-candidate-now" }),
+        body: JSON.stringify({
+          idempotencyKey: "demo-smart-routing-no-candidate-now",
+        }),
       },
     );
     assert.equal(response.status, 409);
@@ -1679,4 +1685,87 @@ test("demo smart routing leaves an offered task unchanged when nobody is eligibl
   }
   assert.equal(harness.ledger.getTask(offered.taskId).state, "offered_to_team");
   assert.equal(harness.store.getTaskRoutingReceipt(offered.taskId), null);
+});
+
+test("demo smart routing leaves a reopened task unchanged when every member already declined", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const draft = harness.ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-karen-1",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Check blood pressure within 48 hours",
+    taskType: "demo-smart-routing-all-declined",
+    evidenceRefs: ["encounter:sentence-42"],
+    targetTeamId: "district-nursing",
+    requiredCapabilities: ["blood-pressure"],
+    clinicalUrgency: "medium",
+    dueInMs: 48 * 60 * 60_000,
+    idempotencyKey: "demo-smart-routing-all-declined-draft",
+    actor: { type: "agent", id: "corti" },
+  });
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "demo-smart-routing-all-declined-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "demo-smart-routing-all-declined-publish",
+  );
+  harness.clock.advance(
+    Date.parse(offered.acceptBy) - harness.clock.now().getTime(),
+  );
+  harness.scheduler.tick();
+  const nurseA = harness.ledger.getTask(offered.taskId);
+  harness.scheduler.decline(nurseA.taskId, nurseA.version, "nurse-a");
+  const nurseB = harness.ledger.getTask(offered.taskId);
+  harness.scheduler.decline(nurseB.taskId, nurseB.version, "nurse-b");
+  const escalated = harness.ledger.getTask(offered.taskId);
+  const reopened = harness.ledger.reopenToTeam(
+    escalated.taskId,
+    escalated.version,
+    "clinician-1",
+    48 * 60 * 60_000,
+  );
+  const clockBeforeRoute = harness.clock.now().toISOString();
+  const receiptBeforeRoute = harness.store.getTaskRoutingReceipt(
+    reopened.taskId,
+  );
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(
+      `${baseUrl}/api/demo/tasks/${reopened.taskId}/route-now`,
+      {
+        method: "POST",
+        headers: appHeaders("clinician-1"),
+        body: JSON.stringify({
+          idempotencyKey: "demo-smart-routing-all-declined-now",
+        }),
+      },
+    );
+    assert.equal(response.status, 409);
+    assert.equal(
+      ((await response.json()) as { error: { code: string } }).error.code,
+      "DEMO_ROUTING_INCOMPLETE",
+    );
+  }
+  assert.equal(harness.clock.now().toISOString(), clockBeforeRoute);
+  assert.equal(
+    harness.ledger.getTask(reopened.taskId).state,
+    "offered_to_team",
+  );
+  assert.deepEqual(
+    harness.store.getTaskRoutingReceipt(reopened.taskId),
+    receiptBeforeRoute,
+  );
 });
