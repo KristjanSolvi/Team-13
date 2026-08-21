@@ -16,6 +16,7 @@ import {
   buildReviewedTranscript,
   type TranscriptReviewDecision,
 } from "@pipeline/transcript-interpretation.js";
+import { transcriptReviewDemoForPatient } from "@pipeline/demo-review-fixtures.js";
 import type { Patient } from "@/data/ward";
 import { recordCortiActivity } from "@/lib/corti-activity";
 import {
@@ -139,6 +140,7 @@ export function CortiLiveStrip({
   const recordingStartedAtRef = useRef<number | null>(null);
   const liveCortiReadyRef = useRef<boolean | null>(null);
   const readyMessageRef = useRef("Checking the Corti pipeline…");
+  const activeDemoReplayRef = useRef(false);
 
   const refreshDevices = useCallback(async () => {
     if (navigator.mediaDevices === undefined) return;
@@ -161,6 +163,7 @@ export function CortiLiveStrip({
       .then((readiness) => {
         if (!active) return;
         liveCortiReadyRef.current = readiness.liveCortiReady;
+        if (activeDemoReplayRef.current) return;
         if (readiness.liveCortiReady) {
           const readyMessage =
             readiness.status === "ready"
@@ -180,6 +183,7 @@ export function CortiLiveStrip({
         if (!active) return;
         liveCortiReadyRef.current = false;
         readyMessageRef.current = "Integration service unavailable · start it on port 8790";
+        if (activeDemoReplayRef.current) return;
         setState("unavailable");
         setMessage(readyMessageRef.current);
       });
@@ -203,6 +207,7 @@ export function CortiLiveStrip({
     pendingFinalSegmentsRef.current = null;
     pendingGenerationRef.current = null;
     correlationIdRef.current = crypto.randomUUID();
+    activeDemoReplayRef.current = false;
     setSegments([]);
     setFacts([]);
     setCandidateViews([]);
@@ -217,6 +222,20 @@ export function CortiLiveStrip({
     setElapsedSeconds(0);
     recordingStartedAtRef.current = null;
     setAudioMessage("Audio not checked");
+
+    const demoReview = transcriptReviewDemoForPatient(patient.pipelinePatientId);
+    if (demoReview !== null) {
+      activeDemoReplayRef.current = true;
+      pendingFinalSegmentsRef.current = demoReview.segments;
+      setSegments(demoReview.segments);
+      setReviewSuggestions(demoReview.suggestions);
+      setReviewState("complete");
+      setAudioMessage("Final audio · clear");
+      setState("awaiting-review");
+      setMessage("Demo replay · review agent flagged a likely scribe mishearing");
+      return;
+    }
+
     setState(
       liveCortiReadyRef.current === null
         ? "checking"
@@ -225,7 +244,7 @@ export function CortiLiveStrip({
           : "unavailable",
     );
     setMessage(readyMessageRef.current);
-  }, [patient.id]);
+  }, [patient.id, patient.pipelinePatientId]);
 
   useEffect(() => {
     if (state !== "recording" || recordingStartedAtRef.current === null) return;
@@ -574,6 +593,15 @@ export function CortiLiveStrip({
   const busy = ["starting", "stopping", "analysing"].includes(state);
   const reviewPending = state === "awaiting-review";
   const finalSegments = segments.filter((segment) => segment.isFinal);
+  const allReviewSuggestionsDecided =
+    reviewSuggestions.length > 0 &&
+    reviewSuggestions.every((suggestion) => reviewDecisions[suggestion.suggestionId] !== undefined);
+  const reviewedInterpretation = allReviewSuggestionsDecided
+    ? buildReviewedTranscript(finalSegments, reviewSuggestions, reviewDecisions)
+    : null;
+  const displayedFinalSegments = reviewedInterpretation?.segments ?? finalSegments;
+  const showingReviewedInterpretation =
+    reviewedInterpretation !== null && reviewedInterpretation.appliedSuggestionIds.length > 0;
   const latestInterim = segments.filter((segment) => !segment.isFinal).at(-1);
   const speakerLabels = transcriptSpeakerLabels(segments);
   const labelFor = (segment: TranscriptSegment): ConversationSpeakerLabel | "Speaker" =>
@@ -698,7 +726,12 @@ export function CortiLiveStrip({
 
       {(state === "recording" || segments.length > 0) && (
         <div className="max-h-52 space-y-2 overflow-y-auto px-4 py-3">
-          {finalSegments.map((segment) => (
+          {showingReviewedInterpretation && (
+            <p className="rounded-md bg-teal/5 px-2.5 py-1.5 text-[11.5px] font-medium text-teal">
+              Showing clinician-reviewed interpretation · raw Ambient transcript preserved
+            </p>
+          )}
+          {displayedFinalSegments.map((segment) => (
             <div
               key={segment.segmentKey}
               className="fade-in-view flex items-start gap-2.5 text-[13px] leading-snug text-foreground"

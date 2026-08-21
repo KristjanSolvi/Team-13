@@ -391,6 +391,7 @@ function Index() {
             if (!current) {
               setMaximized(false);
               setScopeId(ehrPatientId);
+              setActiveThreadId(null);
             }
             return !current;
           });

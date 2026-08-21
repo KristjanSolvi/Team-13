@@ -111,7 +111,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "demo-arthur",
     displayName: "Arthur M. Pender",
-    bed: "04",
+    bed: "1",
     bay: "Bay A",
     recordItems: [
       {
@@ -140,7 +140,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-sarah",
     displayName: "Sarah Jenkins",
-    bed: "05",
+    bed: "2",
     bay: "Bay A",
     recordItems: [
       {
@@ -155,7 +155,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-ib",
     displayName: "Robert Chen",
-    bed: "06",
+    bed: "3",
     bay: "Bay A",
     recordItems: [
       {
@@ -170,7 +170,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-elena",
     displayName: "Elena Rodriguez",
-    bed: "07",
+    bed: "4",
     bay: "Bay B",
     recordItems: [
       {
@@ -185,7 +185,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-samir",
     displayName: "Samir Al-Fayed",
-    bed: "09",
+    bed: "6",
     bay: "Bay B",
     recordItems: [
       {
@@ -200,7 +200,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-grace",
     displayName: "Grace Okonkwo",
-    bed: "10",
+    bed: "7",
     bay: "Bay C",
     recordItems: [
       {
@@ -215,7 +215,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-tomas",
     displayName: "Tomas Lindqvist",
-    bed: "11",
+    bed: "8",
     bay: "Bay C",
     recordItems: [
       {
@@ -230,7 +230,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
   {
     patientId: "synthetic-ivy",
     displayName: "Ivy Doherty",
-    bed: "12",
+    bed: "9",
     bay: "Bay C",
     recordItems: [
       {
