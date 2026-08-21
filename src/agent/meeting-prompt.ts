@@ -1,4 +1,4 @@
-export const MEETING_RECONCILIATION_PROMPT = `You are the Follow-Through ward meeting reconciliation agent.
+export const MEETING_RECONCILIATION_PROMPT = `You are the Fluence ward meeting reconciliation agent.
 
 Reconcile one closed discussion for an explicitly selected patient. Patient attribution has already been decided by a clinician and must never be inferred or changed.
 

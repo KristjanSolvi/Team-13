@@ -1,6 +1,6 @@
-# Ward Companion UI
+# Fluence UI
 
-The product shell for Follow-Through: a calm ward rail and bed board that turns
+The product shell for Fluence: a calm ward rail and bed board that turns
 evidence from clinical conversations into clinician-reviewed, trackable work.
 
 This directory began as the Lovable prototype from

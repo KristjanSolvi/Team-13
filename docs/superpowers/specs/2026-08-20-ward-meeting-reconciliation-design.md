@@ -6,7 +6,7 @@
 
 **Scope owner:** Agentic Framework and MCP workstream
 
-**Related product:** Follow-Through
+**Related product:** Fluence
 
 ## Decision summary
 
@@ -53,7 +53,7 @@ engine, candidate engine, handover format, or UI.
 ## User story
 
 > As the clinician leading a ward handover, I can record the meeting, explicitly
-> select each patient as they are discussed, and have Follow-Through surface new
+> select each patient as they are discussed, and have Fluence surface new
 > commitments and unresolved prior work without relying on someone to retype the
 > conversation.
 
@@ -384,7 +384,7 @@ meeting recording
 
 - Explicit selection is the only patient attribution mechanism.
 - Unscoped evidence can never be read by a patient-scoped agent tool.
-- Raw audio is never persisted by Follow-Through; Corti Ambient uses no-retention
+- Raw audio is never persisted by Fluence; Corti Ambient uses no-retention
   configuration where supported.
 - Interim transcripts cannot become evidence.
 - Uncertain audio cannot support a task draft.

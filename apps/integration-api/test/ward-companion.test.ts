@@ -29,7 +29,7 @@ const task = {
   updatedAt: "2026-08-20T10:00:00.000Z",
 };
 
-describe("Ward Companion projection", () => {
+describe("Fluence projection", () => {
   it("maps authoritative Agentic records into the existing UI thread shape", () => {
     const result = projectWardCompanionOverview({
       patientId,
@@ -60,14 +60,14 @@ describe("Ward Companion projection", () => {
             {
               id: "thread-karen-bp:captured",
               at: "2026-08-20T10:00:00.000Z",
-              actor: "Follow-through agent",
+              actor: "Fluence agent",
               text: "Captured from the clinical interaction.",
               kind: "system",
             },
             {
               id: "task-karen-bp:state:1",
               at: "2026-08-20T10:00:00.000Z",
-              actor: "Follow-through service",
+              actor: "Fluence service",
               text: "Suggested action is awaiting clinical review.",
               kind: "system",
             },

@@ -350,7 +350,7 @@ export function NervecentreShell({
 
 function sourceLabel(source: CaseNote["source"]) {
   if (source === "scribe") return "Auto-scribed";
-  if (source === "agent") return "Ward Threads";
+  if (source === "agent") return "Fluence";
   return null;
 }
 

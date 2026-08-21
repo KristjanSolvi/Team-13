@@ -61,7 +61,7 @@ function harness() {
         path === "/api/corti/documents/generate"
           ? {
               documentType: "clinical-note",
-              name: "Approved Follow-Through Clinical Note",
+              name: "Approved Fluence Clinical Note",
               sections: [
                 {
                   sectionId: "approved-action",

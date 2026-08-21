@@ -1,4 +1,4 @@
-# Ward Threads — a standalone clinical workflow layer
+# Fluence — a standalone clinical workflow layer
 
 Refine the overlay into a self-contained tool that clips onto any EHR (Nervecentre stays the demo host). Fewer surfaces, calmer nordic design, one clear loop: listen → capture → assign → complete → learn.
 

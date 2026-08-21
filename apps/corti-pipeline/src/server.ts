@@ -15,6 +15,6 @@ const app = createPipelineApp({
 app.listen(config.port, config.host, () => {
   const cortiStatus = gateway === null ? "not configured" : "configured";
   console.log(
-    `Follow-Through Corti pipeline listening on http://${config.host}:${config.port} (${cortiStatus})`,
+    `Fluence Corti pipeline listening on http://${config.host}:${config.port} (${cortiStatus})`,
   );
 });

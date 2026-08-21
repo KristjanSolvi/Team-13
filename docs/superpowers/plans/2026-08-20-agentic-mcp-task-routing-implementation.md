@@ -1,4 +1,4 @@
-# Follow-Through Agentic and MCP Task Routing Implementation Plan
+# Fluence Agentic and MCP Task Routing Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -42,7 +42,7 @@
 | `src/mcp/auth.ts` | Narrow bearer validation and context extraction |
 | `src/mcp/tools.ts` | Six patient-scoped MCP tools |
 | `src/mcp/transport.ts` | Stateful Streamable HTTP session handling |
-| `src/agent/prompt.ts` | Full Follow-Through agent instructions |
+| `src/agent/prompt.ts` | Full Fluence agent instructions |
 | `src/agent/corti-gateway.ts` | Narrow interface plus real Corti SDK implementation |
 | `src/agent/runner.ts` | Context warmup, investigation, publication follow-up, polling |
 | `src/http/auth.ts` | Demo application authentication and actor attribution |
@@ -2603,7 +2603,7 @@ scheduler.tick();
 setInterval(() => scheduler.tick(), 15_000).unref();
 createApp({ store, clock, ledger, records, scheduler, appBearerToken: config.appBearerToken,
   mcpBearerToken: config.mcpBearerToken, uiOrigin: config.uiOrigin }).listen(config.port, "127.0.0.1", () => {
-  console.error(`Follow-Through listening on http://127.0.0.1:${config.port}`);
+  console.error(`Fluence listening on http://127.0.0.1:${config.port}`);
 });
 ```
 
@@ -2612,7 +2612,7 @@ createApp({ store, clock, ledger, records, scheduler, appBearerToken: config.app
 Create `docs/contracts.md` with this complete contract:
 
 ````markdown
-# Follow-Through integration contract v1
+# Fluence integration contract v1
 
 This is the frozen MVP contract between the pipeline, UI, and Agentic/MCP backend. All examples use synthetic data.
 
@@ -2884,7 +2884,7 @@ Expected: missing agent modules.
 
 ```ts
 // src/agent/prompt.ts
-export const FOLLOW_THROUGH_PROMPT = `You are the Follow-Through clinical operations agent.
+export const FOLLOW_THROUGH_PROMPT = `You are the Fluence clinical operations agent.
 
 Your job is to investigate a supplied patient-scoped conversation signal and propose safe follow-through work. You advise; clinicians authorize clinical intent.
 
@@ -3035,7 +3035,7 @@ const mcpServer: Corti.AgentsCreateMcpServer = {
   name: config.mcpName, transportType: "streamable_http", authorizationType: "bearer", url: config.mcpPublicUrl
 };
 const definition = {
-  name: "Follow-Through Orchestrator",
+  name: "Fluence Orchestrator",
   description: "Investigates conversation signals and creates clinician-approved team tasks.",
   systemPrompt: FOLLOW_THROUGH_PROMPT,
   mcpServers: [mcpServer]
@@ -3133,7 +3133,7 @@ const runner = config.cortiAgentId
 
 createApp({ store, clock, ledger, records, scheduler, appBearerToken: config.appBearerToken,
   mcpBearerToken: config.mcpBearerToken, uiOrigin: config.uiOrigin, ...(runner ? { runner } : {}) })
-  .listen(config.port, "127.0.0.1", () => console.error(`Follow-Through listening on http://127.0.0.1:${config.port}`));
+  .listen(config.port, "127.0.0.1", () => console.error(`Fluence listening on http://127.0.0.1:${config.port}`));
 ```
 
 Remove the earlier `createApp(...).listen(...)` call so only one server starts.
@@ -3348,7 +3348,7 @@ Expected: one `https://...ngrok.../mcp` URL is printed without exposing the auth
 Create `docs/runbook.md` with this complete operator handoff:
 
 ````markdown
-# Follow-Through MVP runbook
+# Fluence MVP runbook
 
 All patient data in this prototype is synthetic. Never paste Corti, application, MCP, HMAC, or ngrok credentials into chat, terminal output, screenshots, events, or Git.
 

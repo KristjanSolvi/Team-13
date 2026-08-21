@@ -1,7 +1,7 @@
 export const mockEhrOpenApi = {
   openapi: "3.1.0",
   info: {
-    title: "Follow-Through Synthetic Mock EHR",
+    title: "Fluence Synthetic Mock EHR",
     version: "0.1.0",
     description:
       "Private synthetic clinical-document store used by the Nervecentre demo surface.",

@@ -256,9 +256,7 @@ async function responseJson<T>(response: Response, acceptedStatuses: number[] = 
         ? (value as { error?: Record<string, unknown> }).error
         : undefined;
     throw new FollowThroughApiError(
-      typeof error?.["message"] === "string"
-        ? error["message"]
-        : "Follow-Through service request failed.",
+      typeof error?.["message"] === "string" ? error["message"] : "Fluence service request failed.",
       typeof error?.["code"] === "string" ? error["code"] : "REQUEST_FAILED",
       error?.["retryable"] === true,
       typeof error?.["correlationId"] === "string"

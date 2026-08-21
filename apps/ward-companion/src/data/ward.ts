@@ -310,7 +310,7 @@ export const initialNotes: Record<string, CaseNote[]> = {
       id: "n2b",
       doc: "discharge",
       at: "07:56",
-      author: "Ward Threads agent",
+      author: "Fluence agent",
       source: "agent",
       text: "Draft: planned discharge tomorrow. Outstanding for completion — TTOs to pharmacy, transport confirmation.",
     },

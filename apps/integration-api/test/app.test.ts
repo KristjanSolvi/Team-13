@@ -1323,7 +1323,7 @@ describe("integration API", () => {
     });
   });
 
-  it("returns the Ward Companion read model without exposing credentials", async () => {
+  it("returns the Fluence read model without exposing credentials", async () => {
     const { agentic, app } = harness();
     vi.mocked(agentic.listThreads).mockResolvedValue([
       {

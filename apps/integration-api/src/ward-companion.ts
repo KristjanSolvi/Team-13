@@ -230,7 +230,7 @@ function projectThread(
     {
       id: `${thread.threadId}:captured`,
       at: thread.createdAt,
-      actor: "Follow-through agent",
+      actor: "Fluence agent",
       text: "Captured from the clinical interaction.",
       kind: "system",
     },
@@ -239,7 +239,7 @@ function projectThread(
     activity.push({
       id: `${task.taskId}:state:${task.version}`,
       at: task.updatedAt,
-      actor: "Follow-through service",
+      actor: "Fluence service",
       text: stateActivity(task.state),
       kind: stateActivityKind(task.state),
     });

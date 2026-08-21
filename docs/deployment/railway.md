@@ -1,6 +1,6 @@
 # Railway deployment
 
-Ward Threads deploys as six backend services from `KristjanSolvi/Team-13` plus
+Fluence deploys as six backend services from `KristjanSolvi/Team-13` plus
 the separately managed Lovable UI. Keeping the current service boundaries
 avoids moving secrets into the browser and lets the Agentic ledger retain its
 SQLite ownership model for the hackathon.

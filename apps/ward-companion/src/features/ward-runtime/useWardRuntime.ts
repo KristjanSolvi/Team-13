@@ -264,7 +264,7 @@ export function useWardRuntime() {
       text: string,
       doc: DocId = "medical",
       source: CaseNote["source"] = "agent",
-      author = "Ward Threads agent",
+      author = "Fluence agent",
     ) => {
       setNotes((current) => ({
         ...current,

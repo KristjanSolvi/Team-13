@@ -6,7 +6,7 @@
 
 **Scope owner:** Agentic Framework and MCP workstream
 
-**Related product:** Follow-Through
+**Related product:** Fluence
 
 ## Decision summary
 
@@ -39,7 +39,7 @@ summary before a review, ward round, or handover.
 
 ## Goals
 
-- Produce a useful handover from the patient record and live Follow-Through
+- Produce a useful handover from the patient record and live Fluence
   ledger, not from a free-form prompt alone.
 - Use Corti Agentic as an observable investigator that calls narrow MCP tools.
 - Use Corti Text Generation for a bounded rendering step.
@@ -385,7 +385,7 @@ focus fails with `409 IDEMPOTENCY_CONFLICT`.
 - Task state and ownership come from the ledger, never model memory.
 - Missing data is reported as unknown, never “normal,” “none,” “completed,” or
   “safe.”
-- “No open Follow-Through tasks were found” is allowed only after successful
+- “No open Fluence tasks were found” is allowed only after successful
   scoped retrieval. It is not equivalent to “no clinical issues.”
 - There is no “ready for discharge” output.
 - Cross-patient references are rejected before storage and again before render.

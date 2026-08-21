@@ -32,21 +32,21 @@ export function buildAgentDefinitions(config: AppConfig) {
   };
   return {
     task: {
-      name: "Follow-Through Orchestrator",
+      name: "Fluence Orchestrator",
       description:
         "Investigates registered conversation evidence and creates clinician-approved team tasks.",
       systemPrompt: FOLLOW_THROUGH_PROMPT,
       mcpServers: [taskMcpServer],
     },
     handover: {
-      name: "Follow-Through Patient Handover",
+      name: "Fluence Patient Handover",
       description:
         "Creates one current, evidence-grounded patient handover draft without changing clinical work.",
       systemPrompt: HANDOVER_PROMPT,
       mcpServers: [handoverMcpServer],
     },
     meeting: {
-      name: "Follow-Through Ward Meeting Reconciliation",
+      name: "Fluence Ward Meeting Reconciliation",
       description:
         "Reconciles one explicitly selected patient discussion against prior meeting evidence, handover, and active work.",
       systemPrompt: MEETING_RECONCILIATION_PROMPT,

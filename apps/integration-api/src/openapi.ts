@@ -47,7 +47,7 @@ function handoverActivityVariant(eventType: string, payloadSchema: string) {
 export const integrationOpenApi = {
   openapi: "3.1.0",
   info: {
-    title: "Follow-Through Integration API",
+    title: "Fluence Integration API",
     version: "0.1.0",
     description:
       "Stateless UI-facing facade for the Corti pipeline, Agentic ledger, synthetic EHR, patient profiles, and downstream delivery.",
@@ -602,9 +602,9 @@ export const integrationOpenApi = {
     },
     "/api/patients/{patientId}/companion": {
       get: {
-        summary: "Read a Ward Companion-compatible patient projection",
+        summary: "Read a Fluence-compatible patient projection",
         description:
-          "Maps authoritative Agentic threads and tasks into the current Ward Companion thread shape. Dismissed records are omitted and completed tasks remain tracking until verified.",
+          "Maps authoritative Agentic threads and tasks into the current Fluence thread shape. Dismissed records are omitted and completed tasks remain tracking until verified.",
         parameters: [
           {
             name: "patientId",
@@ -616,7 +616,7 @@ export const integrationOpenApi = {
         ],
         responses: {
           "200": {
-            description: "Ward Companion patient follow-through projection",
+            description: "Fluence patient follow-through projection",
             content: {
               "application/json": {
                 schema: {

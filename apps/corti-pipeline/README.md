@@ -1,4 +1,4 @@
-# Follow-Through Corti pipeline
+# Fluence Corti pipeline
 
 Developer 1's isolated TypeScript service for Corti authentication, Ambient
 session setup, Dictation authentication, Text Generation, Medical Coding, and

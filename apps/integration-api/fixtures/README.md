@@ -3,7 +3,7 @@
 These fixtures are display-safe, synthetic examples for UI adapters, contract
 tests, and demo fallback states. They are not authoritative runtime data.
 
-The Ward Companion projection remains compatible with
+The Fluence projection remains compatible with
 `YaldesDev/ward-companion@2be8bac` (`src/data/ward.ts`).
 
 - `candidate-karen.json`: normalized Corti pipeline candidate accepted by
@@ -11,7 +11,7 @@ The Ward Companion projection remains compatible with
 - `patient-overview-karen.json`: representative response from
   `GET /api/patients/synthetic-karen/overview`.
 - `ward-companion-overview-karen.json`: exact projection returned by
-  `GET /api/patients/synthetic-karen/companion` for the current Ward Companion
+  `GET /api/patients/synthetic-karen/companion` for the current Fluence
   `Thread` model.
 - `events-karen.sse`: representative resumable domain events.
 

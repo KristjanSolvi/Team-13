@@ -1,4 +1,4 @@
-# Lovable prompt: wire the current UI to the Ward Threads backend
+# Lovable prompt: wire the current UI to the Fluence backend
 
 Use this prompt in the `YaldesDev/ward-companion` Lovable project:
 

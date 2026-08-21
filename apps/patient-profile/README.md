@@ -1,6 +1,6 @@
 # Patient profile service
 
-Private backend service for editable Ward Companion patient details and safe
+Private backend service for editable Fluence patient details and safe
 referral automation inputs.
 
 This is a mutable coordination profile, not a replacement for the EHR. Every

@@ -59,6 +59,6 @@ reconciler.start(config.downstreamReconcileIntervalMs);
 
 app.listen(config.port, config.host, () => {
   console.error(
-    `Follow-Through integration API listening on http://${config.host}:${config.port}`,
+    `Fluence integration API listening on http://${config.host}:${config.port}`,
   );
 });

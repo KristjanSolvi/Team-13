@@ -1,7 +1,7 @@
 # Products and datasets disclosure
 
 This file records the external products, services, source projects, packages,
-and data used by the Follow-Through prototype. Update it before submission when
+and data used by the Fluence prototype. Update it before submission when
 something is added or removed.
 
 ## Products and services
@@ -10,7 +10,7 @@ something is added or removed.
   Dictation speech-to-text, Text Generation, Agentic Framework integration, and
   Medical Coding. Only enabled and demonstrably working areas should be claimed
   in the final presentation.
-- **Lovable** — generated the original Ward Companion visual prototype. Source:
+- **Lovable** — generated the original Fluence visual prototype. Source:
   <https://github.com/YaldesDev/ward-companion>, imported from commit `fee200b`.
 - **GitHub** — source control and team collaboration.
 - **Nervecentre, GP inbox, district-nursing, EHR, task-system, and call-log
@@ -32,7 +32,7 @@ something is added or removed.
   They have no linked ground-truth transcripts or longitudinal patient mapping,
   so they are used only for ingestion/transcription demonstrations or fallback,
   not accuracy claims.
-- **Ward Companion UI fixtures** — fictional patient, bed, staffing, note, and
+- **Fluence UI fixtures** — fictional patient, bed, staffing, note, and
   task data inherited from the Lovable prototype and adapted locally. No real
   patient information is included.
 

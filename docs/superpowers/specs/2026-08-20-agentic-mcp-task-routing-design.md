@@ -1,4 +1,4 @@
-# Follow-Through Agentic and MCP Task Routing Design
+# Fluence Agentic and MCP Task Routing Design
 
 **Status:** Approved design, ready for team review
 
@@ -6,7 +6,7 @@
 
 **Scope owner:** Agentic Framework and MCP workstream
 
-**Related product:** Follow-Through
+**Related product:** Fluence
 
 ## Decision summary
 
@@ -20,7 +20,7 @@ The MVP creates only the district-nursing blood-pressure task. A GP medication-r
 
 ## Product intent
 
-Follow-Through is an addition alongside the EHR, not a replacement for it. It gives clinical conversations a durable memory by turning selected commitments or unresolved concerns into clinician-approved, tracked work. Its central promise is:
+Fluence is an addition alongside the EHR, not a replacement for it. It gives clinical conversations a durable memory by turning selected commitments or unresolved concerns into clinician-approved, tracked work. Its central promise is:
 
 > Nothing a patient tells their care team should get lost, and nothing they are promised should go unkept.
 
@@ -53,7 +53,7 @@ The product deliberately avoids claiming that it can decide whether a patient is
 
 The wider project can use all five areas without forcing all five into this service:
 
-| Corti area | Purpose in Follow-Through | Workstream boundary |
+| Corti area | Purpose in Fluence | Workstream boundary |
 |---|---|---|
 | Ambient speech-to-text | Capture the ward or discharge conversation and retain evidence references | Pipeline |
 | Dictation speech-to-text | Let a clinician correct a proposal or create a missed task deliberately | Pipeline into Agentic/MCP commands |
@@ -70,7 +70,7 @@ The MVP is one deployable TypeScript backend with strong internal module boundar
 ```text
 Pipeline / Dictation ── commands ─────────────┐
                                               v
-Corti Agent ── Streamable HTTP MCP ──> Follow-Through backend
+Corti Agent ── Streamable HTTP MCP ──> Fluence backend
                                        ├── Patient Record module
                                        ├── Task Ledger module
                                        ├── Team Directory module

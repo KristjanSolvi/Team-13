@@ -37,21 +37,21 @@ const documentProfiles: Record<
   { name: string; heading: string; contentPrompt: string; writingStylePrompt: string }
 > = {
   "clinical-note": {
-    name: "Follow-Through Clinical Note",
+    name: "Fluence Clinical Note",
     heading: "Approved follow-through note",
     contentPrompt:
       "Summarize only the approved clinical context and follow-through action. Include the action, accountable owner or receiving team, and deadline only when explicitly present. Do not add diagnoses, recommendations, or facts.",
     writingStylePrompt: "Concise clinical prose. Mark uncertainty explicitly.",
   },
   "receiving-team-handoff": {
-    name: "Follow-Through Receiving-Team Handoff",
+    name: "Fluence Receiving-Team Handoff",
     heading: "Receiving-team handoff",
     contentPrompt:
       "Create a brief handoff using only the approved context. State why follow-through is requested, the requested action, the receiving team, the deadline, and the source evidence only when present. Use request language. Do not say a task, referral, message, or handoff was created, sent, routed, assigned, accepted, completed, or verified unless that exact lifecycle status is explicitly present in the approved input.",
     writingStylePrompt: "Direct operational handoff language with short sentences.",
   },
   "patient-receipt": {
-    name: "Follow-Through Patient Receipt",
+    name: "Fluence Patient Receipt",
     heading: "What happens next",
     contentPrompt:
       "Explain only the clinician-approved next step in plain language: what will happen, who is expected to do it, and by when when those details are present. Do not add clinical advice or reassurance.",
@@ -324,7 +324,7 @@ export class CortiSdkGateway implements CortiGateway {
               },
             ],
             dynamicTemplate: {
-              name: "Follow-Through Candidate Extraction",
+              name: "Fluence Candidate Extraction",
               generation: {
                 instructions: {
                   prompt:
@@ -484,7 +484,7 @@ export class CortiSdkGateway implements CortiGateway {
               labels: [{ key: "handover-id", value: input.handoverId }],
               context: [{ type: "text", text: JSON.stringify(context) }],
               dynamicTemplate: {
-                name: "Follow-Through Grounded Patient Handover",
+                name: "Fluence Grounded Patient Handover",
                 generation: {
                   instructions: {
                     prompt:
