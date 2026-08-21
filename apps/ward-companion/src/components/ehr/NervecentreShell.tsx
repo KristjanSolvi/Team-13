@@ -67,6 +67,7 @@ type ShellProps = {
   onAddNote?: ((doc: DocId, text: string) => void) | undefined;
   activity?: ActivityEntry[] | undefined;
   recordRefreshKey?: number | undefined;
+  openNotesRequest?: number | undefined;
 };
 
 export function NervecentreShell({
@@ -76,11 +77,16 @@ export function NervecentreShell({
   onAddNote,
   activity = [],
   recordRefreshKey = 0,
+  openNotesRequest = 0,
 }: ShellProps) {
   const current = patient ?? patients[0]!;
   const [activeTab, setActiveTab] = useState("Summary");
   const [ehrDocuments, setEhrDocuments] = useState<ClinicalDocument[]>([]);
   const [ehrConnected, setEhrConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (openNotesRequest > 0) setActiveTab("Notes");
+  }, [openNotesRequest]);
 
   useEffect(() => {
     let currentRequest = true;

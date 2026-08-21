@@ -77,6 +77,7 @@ function Index() {
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
+  const [openNotesRequest, setOpenNotesRequest] = useState(0);
   const [bedAssignments, setBedAssignments] = useState<WardBedAssignments>(() => ({
     ...initialBedAssignments,
   }));
@@ -191,6 +192,7 @@ function Index() {
             })),
           )}
         recordRefreshKey={ehrRevision}
+        openNotesRequest={openNotesRequest}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
@@ -293,6 +295,11 @@ function Index() {
                   onUnlockDemoHost={unlockDemoHost}
                   onRouteTaskNow={routeTaskNow}
                   onRefreshPatient={refreshPatientThreads}
+                  onMoveToDocument={(text) => {
+                    addNote(ehrPatientId, text, "medical", "scribe", "Corti Ambient draft");
+                    setOpenNotesRequest((current) => current + 1);
+                    setOpen(false);
+                  }}
                   onBackToBoard={() => {
                     setView("board");
                     setScopeId(ehrPatientId);
