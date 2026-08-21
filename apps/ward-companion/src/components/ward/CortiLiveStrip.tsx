@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, LoaderCircle, Mic, Radio, Square } from "lucide-react";
+import { CircleAlert, FileText, LoaderCircle, Mic, Radio, Square } from "lucide-react";
 import { AmbientCapture } from "@pipeline/browser/ambient.js";
 import {
   transcriptSpeakerLabels,
@@ -55,6 +55,7 @@ type CandidateView = {
 type Props = {
   patient: Patient;
   onAuthoritativeChange: () => Promise<void>;
+  onMoveToDocument: (text: string) => void;
 };
 
 function timeLabel(seconds: number): string {
@@ -102,11 +103,13 @@ function speakerTone(label: ConversationSpeakerLabel | "Speaker"): string {
   return "bg-background text-muted-foreground";
 }
 
-export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
+export function CortiLiveStrip({ patient, onAuthoritativeChange, onMoveToDocument }: Props) {
   const [state, setState] = useState<CaptureState>("checking");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [facts, setFacts] = useState<AmbientFact[]>([]);
   const [candidateViews, setCandidateViews] = useState<CandidateView[]>([]);
+  const [documentSegments, setDocumentSegments] = useState<TranscriptSegment[]>([]);
+  const [documentMoved, setDocumentMoved] = useState(false);
   const [message, setMessage] = useState("Checking the Corti pipeline…");
   const [audioMessage, setAudioMessage] = useState("Audio not checked");
   const [ambientCredits, setAmbientCredits] = useState<number | null>(null);
@@ -194,6 +197,8 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     setSegments([]);
     setFacts([]);
     setCandidateViews([]);
+    setDocumentSegments([]);
+    setDocumentMoved(false);
     setAmbientCredits(null);
     setGenerationCredits(null);
     setReviewCredits(null);
@@ -303,6 +308,8 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     setSegments([]);
     setFacts([]);
     setCandidateViews([]);
+    setDocumentSegments([]);
+    setDocumentMoved(false);
     setAmbientCredits(null);
     setGenerationCredits(null);
     setReviewCredits(null);
@@ -447,6 +454,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
       const finalSegments = capture.segments.filter((segment) => segment.isFinal);
       captureRef.current = null;
       setSegments([...capture.segments]);
+      setDocumentSegments(finalSegments);
       setState("analysing");
       setMessage("Reviewing final wording while checking conservative follow-through evidence…");
       const interactionId = finalSegments[0]?.interactionId;
@@ -525,6 +533,7 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     const correlationId = correlationIdRef.current;
     try {
       const reviewed = buildReviewedTranscript(rawSegments, reviewSuggestions, reviewDecisions);
+      setDocumentSegments(reviewed.segments);
       setReviewState("confirmed");
       setMessage(
         reviewed.appliedSuggestionIds.length > 0
@@ -555,6 +564,9 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
     segment.speakerId === undefined
       ? "Speaker"
       : (speakerLabels.get(segment.speakerId) ?? "Speaker");
+  const documentText = documentSegments
+    .map((segment) => `${labelFor(segment)}: ${segment.text}`)
+    .join("\n");
 
   return (
     <section className="rounded-xl border border-border bg-panel">
@@ -573,6 +585,20 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange }: Props) {
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">{message}</p>
         </div>
         <div className="flex items-center gap-2">
+          {state === "complete" && documentText.length > 0 && (
+            <button
+              type="button"
+              disabled={documentMoved}
+              onClick={() => {
+                onMoveToDocument(documentText);
+                setDocumentMoved(true);
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-[12.5px] font-medium text-foreground disabled:opacity-55"
+            >
+              <FileText className="size-3.5" />
+              {documentMoved ? "Moved to Medical notes" : "Move to document"}
+            </button>
+          )}
           <select
             value={deviceId}
             onChange={(event) => setDeviceId(event.target.value)}

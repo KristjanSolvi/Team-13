@@ -62,6 +62,7 @@ type Props = {
   onUnlockDemoHost: (accessKey: string) => Promise<void>;
   onRouteTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRefreshPatient: (id: string) => Promise<void>;
+  onMoveToDocument: (text: string) => void;
   onBackToBoard: () => void;
 };
 
@@ -135,6 +136,7 @@ export function PatientActivity({
   onUnlockDemoHost,
   onRouteTaskNow,
   onRefreshPatient,
+  onMoveToDocument,
   onBackToBoard,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -197,7 +199,11 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+        <LiveStrip
+          patient={patient}
+          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+          onMoveToDocument={onMoveToDocument}
+        />
 
         <HandoverPanel patient={patient} />
 
