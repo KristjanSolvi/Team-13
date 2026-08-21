@@ -29,6 +29,7 @@ import {
   wardMeetingSchema,
 } from "../domain/meeting.js";
 import { calculatePriority } from "../domain/priority.js";
+import type { RoutingDecision } from "../domain/routing.js";
 import { requireTransition } from "../domain/state-machine.js";
 import type {
   Actor,
@@ -386,6 +387,7 @@ function mapDemoParticipant(row: SqlRow): DemoParticipant {
 }
 
 function mapDemoAssignment(row: SqlRow): DemoAssignment {
+  const routingDecisionJson = rowOptionalText(row, "routing_decision_json");
   return {
     assignmentId: rowText(row, "assignment_id"),
     sessionId: rowText(row, "session_id"),
@@ -394,6 +396,10 @@ function mapDemoAssignment(row: SqlRow): DemoAssignment {
     taskId: rowText(row, "task_id"),
     assignedBy: rowText(row, "assigned_by"),
     assignedAt: rowText(row, "assigned_at"),
+    routingDecision:
+      routingDecisionJson === null
+        ? null
+        : (JSON.parse(routingDecisionJson) as RoutingDecision),
   };
 }
 
@@ -1474,8 +1480,8 @@ export class SqliteStore {
       .prepare(`
         INSERT INTO demo_assignments
           (assignment_id, session_id, group_id, participant_id, task_id,
-           assigned_by, assigned_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+           assigned_by, assigned_at, routing_decision_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         assignment.assignmentId,
@@ -1485,6 +1491,9 @@ export class SqliteStore {
         assignment.taskId,
         assignment.assignedBy,
         assignment.assignedAt,
+        assignment.routingDecision === null
+          ? null
+          : JSON.stringify(assignment.routingDecision),
       );
   }
 
@@ -2395,6 +2404,7 @@ export class SqliteStore {
     expectedVersion: number,
     memberId: string,
     updatedAt: string,
+    routingDecision: RoutingDecision,
   ): Task {
     return this.transaction(() => {
       const current = this.requireTask(taskId);
@@ -2445,7 +2455,7 @@ export class SqliteStore {
         thread.contextId,
         actor,
         "task.member_assigned",
-        { memberId },
+        { memberId, routingDecision },
       );
       return next;
     });
@@ -2458,6 +2468,7 @@ export class SqliteStore {
     assignedAt: string,
     sessionId: string,
     groupId: string,
+    routingDecision: RoutingDecision,
   ): Task {
     return this.transaction(() => {
       const current = this.requireTask(taskId);
@@ -2498,7 +2509,12 @@ export class SqliteStore {
         thread.contextId,
         { type: "router", id: "demo-audience-router" },
         "task.member_assigned",
-        { memberId, demoSessionId: sessionId, demoGroupId: groupId },
+        {
+          memberId,
+          demoSessionId: sessionId,
+          demoGroupId: groupId,
+          routingDecision,
+        },
       );
       return next;
     });
@@ -2643,6 +2659,7 @@ export class SqliteStore {
     expectedVersion: number,
     memberId: string,
     assignedAt: string,
+    routingDecision: RoutingDecision,
   ): Task {
     return this.updateTask(
       taskId,
@@ -2670,7 +2687,7 @@ export class SqliteStore {
       },
       { type: "router", id: "decline-router" },
       "task.member_assigned",
-      { memberId },
+      { memberId, routingDecision },
     );
   }
 }

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import { chooseMember } from "../domain/routing.js";
+import { explainRouting } from "../domain/routing.js";
 import { DomainError } from "../domain/errors.js";
 import type {
   DemoAssignment,
@@ -316,10 +316,13 @@ export class DemoAudienceService {
         .filter((member) => member !== undefined);
       // Audience members are deliberately excluded from normal ward routing.
       // This explicit, clinician-chosen group is the only routing path that
-      // opts them in.
-      const selected = chooseMember(task, members, {
+      // opts them in, and the durable receipt records that scoped decision.
+      const routingDecision = explainRouting(task, members, {
         includeDemoAudience: true,
       });
+      const selected = members.find(
+        (member) => member.memberId === routingDecision.selectedMemberId,
+      );
       if (!selected) {
         throw new DomainError(
           "DEMO_GROUP_INELIGIBLE",
@@ -349,6 +352,7 @@ export class DemoAudienceService {
         taskId: task.taskId,
         assignedBy: input.actorId,
         assignedAt,
+        routingDecision,
       };
       this.store.assignMemberForDemo(
         task.taskId,
@@ -357,6 +361,7 @@ export class DemoAudienceService {
         assignedAt,
         session.sessionId,
         input.groupId,
+        routingDecision,
       );
       this.store.putDemoAssignment(assignment);
       this.store.saveProcessedCommand(

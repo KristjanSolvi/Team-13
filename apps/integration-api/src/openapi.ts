@@ -229,10 +229,13 @@ export const integrationOpenApi = {
         },
         responses: {
           "200": {
-            description: "The selected participant and authoritative assigned task",
+            description:
+              "The selected participant, authoritative assigned task, and durable routing receipt",
             content: {
               "application/json": {
-                schema: { type: "object", additionalProperties: true },
+                schema: {
+                  $ref: "#/components/schemas/DemoAssignmentResult",
+                },
               },
             },
           },
@@ -1250,6 +1253,130 @@ export const integrationOpenApi = {
           taskId: { type: "string", format: "uuid" },
           expectedVersion: { type: "integer", minimum: 1 },
           idempotencyKey: { type: "string", minLength: 8, maxLength: 200 },
+        },
+      },
+      DemoRoutingCandidate: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "memberId",
+          "teamId",
+          "eligible",
+          "rank",
+          "openTaskCount",
+          "capacity",
+          "capabilities",
+          "missingCapabilities",
+          "checks",
+          "exclusionReasons",
+        ],
+        properties: {
+          memberId: { type: "string" },
+          teamId: { type: "string" },
+          eligible: { type: "boolean" },
+          rank: { type: ["integer", "null"], minimum: 1 },
+          openTaskCount: { type: "integer", minimum: 0 },
+          capacity: { type: "integer", minimum: 0 },
+          capabilities: { type: "array", items: { type: "string" } },
+          missingCapabilities: {
+            type: "array",
+            items: { type: "string" },
+          },
+          checks: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "teamMatch",
+              "onShift",
+              "available",
+              "hasCapacity",
+              "capabilitiesMatch",
+            ],
+            properties: {
+              teamMatch: { type: "boolean" },
+              onShift: { type: "boolean" },
+              available: { type: "boolean" },
+              hasCapacity: { type: "boolean" },
+              capabilitiesMatch: { type: "boolean" },
+            },
+          },
+          exclusionReasons: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "wrong_team",
+                "off_shift",
+                "unavailable",
+                "at_capacity",
+                "missing_capability",
+              ],
+            },
+          },
+        },
+      },
+      DemoRoutingDecision: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "policyVersion",
+          "selectedMemberId",
+          "requiredCapabilities",
+          "candidates",
+        ],
+        properties: {
+          policyVersion: {
+            type: "string",
+            enum: ["availability-capability-load-v1"],
+          },
+          selectedMemberId: { type: ["string", "null"] },
+          requiredCapabilities: {
+            type: "array",
+            items: { type: "string" },
+          },
+          candidates: {
+            type: "array",
+            items: { $ref: "#/components/schemas/DemoRoutingCandidate" },
+          },
+        },
+      },
+      DemoAssignmentRecord: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "assignmentId",
+          "sessionId",
+          "groupId",
+          "participantId",
+          "taskId",
+          "assignedBy",
+          "assignedAt",
+          "routingDecision",
+        ],
+        properties: {
+          assignmentId: { type: "string", format: "uuid" },
+          sessionId: { type: "string", format: "uuid" },
+          groupId: { type: "string", pattern: "^group-[1-9][0-9]*$" },
+          participantId: { type: "string", format: "uuid" },
+          taskId: { type: "string", format: "uuid" },
+          assignedBy: { type: "string" },
+          assignedAt: { type: "string", format: "date-time" },
+          routingDecision: {
+            oneOf: [
+              { $ref: "#/components/schemas/DemoRoutingDecision" },
+              { type: "null" },
+            ],
+          },
+        },
+      },
+      DemoAssignmentResult: {
+        type: "object",
+        additionalProperties: false,
+        required: ["assignment", "participant", "task"],
+        properties: {
+          assignment: { $ref: "#/components/schemas/DemoAssignmentRecord" },
+          participant: { type: "object", additionalProperties: true },
+          task: { type: "object", additionalProperties: true },
         },
       },
       HandoverRequest: {

@@ -77,6 +77,34 @@ export type DemoParticipant = {
   assignedTaskCount?: number;
 };
 
+export type DemoRoutingCandidate = {
+  memberId: string;
+  teamId: string;
+  eligible: boolean;
+  rank: number | null;
+  openTaskCount: number;
+  capacity: number;
+  capabilities: string[];
+  missingCapabilities: string[];
+  checks: {
+    teamMatch: boolean;
+    onShift: boolean;
+    available: boolean;
+    hasCapacity: boolean;
+    capabilitiesMatch: boolean;
+  };
+  exclusionReasons: Array<
+    "wrong_team" | "off_shift" | "unavailable" | "at_capacity" | "missing_capability"
+  >;
+};
+
+export type DemoRoutingDecision = {
+  policyVersion: "availability-capability-load-v1";
+  selectedMemberId: string | null;
+  requiredCapabilities: string[];
+  candidates: DemoRoutingCandidate[];
+};
+
 export type DemoAssignment = {
   assignmentId: string;
   sessionId: string;
@@ -85,6 +113,7 @@ export type DemoAssignment = {
   taskId: string;
   assignedBy: string;
   assignedAt: string;
+  routingDecision?: DemoRoutingDecision | null;
 };
 
 export type DemoSession = {

@@ -88,7 +88,7 @@ function makeMembersUnavailable(store: SqliteStore): void {
 }
 
 test("medium task assigns nurse-a exactly at the thirty-minute acceptance deadline", (t) => {
-  const { clock, ledger, scheduler } = harness(t);
+  const { store, clock, ledger, scheduler } = harness(t);
   const offered = publish(ledger, "exact-acceptance");
 
   clock.advance(30 * 60_000 - 1);
@@ -101,6 +101,53 @@ test("medium task assigns nurse-a exactly at the thirty-minute acceptance deadli
   assert.equal(assigned.state, "assigned_to_member");
   assert.equal(assigned.assignedMemberId, "nurse-a");
   assert.equal(assigned.failedOffers, 1);
+  const assignmentEvent = store
+    .listEvents(0)
+    .find((event) => event.eventType === "task.member_assigned");
+  assert.ok(assignmentEvent);
+  assert.deepEqual(assignmentEvent.payload.routingDecision, {
+    policyVersion: "availability-capability-load-v1",
+    selectedMemberId: "nurse-a",
+    requiredCapabilities: ["blood-pressure"],
+    candidates: [
+      {
+        memberId: "nurse-a",
+        teamId: "district-nursing",
+        eligible: true,
+        rank: 1,
+        openTaskCount: 1,
+        capacity: 4,
+        capabilities: ["blood-pressure"],
+        missingCapabilities: [],
+        checks: {
+          teamMatch: true,
+          onShift: true,
+          available: true,
+          hasCapacity: true,
+          capabilitiesMatch: true,
+        },
+        exclusionReasons: [],
+      },
+      {
+        memberId: "nurse-b",
+        teamId: "district-nursing",
+        eligible: true,
+        rank: 2,
+        openTaskCount: 2,
+        capacity: 4,
+        capabilities: ["blood-pressure"],
+        missingCapabilities: [],
+        checks: {
+          teamMatch: true,
+          onShift: true,
+          available: true,
+          hasCapacity: true,
+          capabilitiesMatch: true,
+        },
+        exclusionReasons: [],
+      },
+    ],
+  });
 });
 
 test("an offered task past due escalates before acceptance timeout can assign it", (t) => {

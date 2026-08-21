@@ -161,7 +161,8 @@ export function openDatabase(databasePath: string): DatabaseSync {
       participant_id TEXT NOT NULL REFERENCES demo_participants(participant_id),
       task_id TEXT NOT NULL UNIQUE REFERENCES tasks(task_id),
       assigned_by TEXT NOT NULL,
-      assigned_at TEXT NOT NULL
+      assigned_at TEXT NOT NULL,
+      routing_decision_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS approvals (
@@ -325,6 +326,22 @@ export function openDatabase(databasePath: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_change_impacts_patient
       ON change_impacts(patient_id, detected_at, impact_id);
   `);
+
+  const demoAssignmentColumns = database
+    .prepare("PRAGMA table_info(demo_assignments)")
+    .all();
+  const hasRoutingDecision = demoAssignmentColumns.some(
+    (row) =>
+      typeof row === "object" &&
+      row !== null &&
+      "name" in row &&
+      row.name === "routing_decision_json",
+  );
+  if (!hasRoutingDecision) {
+    database.exec(
+      "ALTER TABLE demo_assignments ADD COLUMN routing_decision_json TEXT",
+    );
+  }
 
   return database;
 }

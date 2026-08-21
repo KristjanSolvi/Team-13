@@ -1,5 +1,5 @@
 import { calculatePriority } from "../domain/priority.js";
-import { chooseMember } from "../domain/routing.js";
+import { explainRouting } from "../domain/routing.js";
 import type { TaskState } from "../domain/types.js";
 import type { Clock } from "../infra/clock.js";
 import type { SqliteStore } from "../infra/store.js";
@@ -51,13 +51,18 @@ export class SchedulerService {
         const declinedMemberIds = new Set(
           this.store.listDeclinedMemberIds(current.taskId),
         );
-        const member = chooseMember(
+        const members = this.store
+          .listMembers(current.targetTeamId)
+          .filter(
+            (candidate) => !declinedMemberIds.has(candidate.memberId),
+          );
+        const routingDecision = explainRouting(
           current,
-          this.store
-            .listMembers(current.targetTeamId)
-            .filter(
-              (candidate) => !declinedMemberIds.has(candidate.memberId),
-            ),
+          members,
+        );
+        const member = members.find(
+          (candidate) =>
+            candidate.memberId === routingDecision.selectedMemberId,
         );
         if (member) {
           this.store.assignMember(
@@ -65,6 +70,7 @@ export class SchedulerService {
             current.version,
             member.memberId,
             updatedAt,
+            routingDecision,
           );
         } else {
           this.store.escalate(
@@ -90,11 +96,17 @@ export class SchedulerService {
       const declinedMemberIds = new Set(
         this.store.listDeclinedMemberIds(taskId),
       );
-      const next = chooseMember(
+      const members = this.store
+        .listMembers(task.targetTeamId)
+        .filter(
+          (candidate) => !declinedMemberIds.has(candidate.memberId),
+        );
+      const routingDecision = explainRouting(
         task,
-        this.store
-          .listMembers(task.targetTeamId)
-          .filter((candidate) => !declinedMemberIds.has(candidate.memberId)),
+        members,
+      );
+      const next = members.find(
+        (candidate) => candidate.memberId === routingDecision.selectedMemberId,
       );
       if (next) {
         this.store.reassignMember(
@@ -102,6 +114,7 @@ export class SchedulerService {
           task.version,
           next.memberId,
           declinedAt,
+          routingDecision,
         );
       } else {
         this.store.escalate(

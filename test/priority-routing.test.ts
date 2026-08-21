@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { DomainError } from "../src/domain/errors.js";
 import { calculatePriority } from "../src/domain/priority.js";
-import { chooseMember } from "../src/domain/routing.js";
+import { chooseMember, explainRouting } from "../src/domain/routing.js";
 import type { Member, Task, TaskState } from "../src/domain/types.js";
 import { DemoClock, SystemClock } from "../src/infra/clock.js";
 
@@ -404,6 +404,104 @@ test("routing does not mutate the input member array", () => {
   assert.deepEqual(
     members.map((member) => member.memberId),
     originalOrder,
+  );
+});
+
+test("routing explains eligibility and the deterministic selected member", () => {
+  const task = createTask({
+    requiredCapabilities: ["blood-pressure", "home-visit"],
+  });
+  const decision = explainRouting(task, [
+    createMember({
+      memberId: "nurse-unavailable",
+      capabilities: ["blood-pressure", "home-visit"],
+      available: false,
+      openTaskCount: 0,
+    }),
+    createMember({
+      memberId: "nurse-missing-skill",
+      capabilities: ["blood-pressure"],
+      openTaskCount: 0,
+    }),
+    createMember({
+      memberId: "nurse-busier",
+      capabilities: ["blood-pressure", "home-visit"],
+      openTaskCount: 2,
+      tieBreakKey: "a",
+    }),
+    createMember({
+      memberId: "nurse-selected",
+      capabilities: ["home-visit", "blood-pressure"],
+      openTaskCount: 1,
+      tieBreakKey: "z",
+    }),
+  ]);
+
+  assert.equal(decision.policyVersion, "availability-capability-load-v1");
+  assert.equal(decision.selectedMemberId, "nurse-selected");
+  assert.deepEqual(decision.requiredCapabilities, [
+    "blood-pressure",
+    "home-visit",
+  ]);
+  assert.deepEqual(
+    decision.candidates.map(({ memberId, eligible, rank }) => ({
+      memberId,
+      eligible,
+      rank,
+    })),
+    [
+      { memberId: "nurse-selected", eligible: true, rank: 1 },
+      { memberId: "nurse-busier", eligible: true, rank: 2 },
+      { memberId: "nurse-missing-skill", eligible: false, rank: null },
+      { memberId: "nurse-unavailable", eligible: false, rank: null },
+    ],
+  );
+  assert.deepEqual(
+    decision.candidates.find(
+      (candidate) => candidate.memberId === "nurse-unavailable",
+    )?.exclusionReasons,
+    ["unavailable"],
+  );
+  assert.deepEqual(
+    decision.candidates.find(
+      (candidate) => candidate.memberId === "nurse-missing-skill",
+    )?.missingCapabilities,
+    ["home-visit"],
+  );
+  assert.deepEqual(
+    decision.candidates.find(
+      (candidate) => candidate.memberId === "nurse-selected",
+    )?.checks,
+    {
+      teamMatch: true,
+      onShift: true,
+      available: true,
+      hasCapacity: true,
+      capabilitiesMatch: true,
+    },
+  );
+});
+
+test("routing returns a complete no-selection receipt when nobody is eligible", () => {
+  const decision = explainRouting(createTask(), [
+    createMember({ memberId: "off-shift", onShift: false }),
+    createMember({
+      memberId: "wrong-team",
+      teamId: "medical",
+      onShift: true,
+    }),
+  ]);
+
+  assert.equal(decision.selectedMemberId, null);
+  assert.deepEqual(
+    decision.candidates.map((candidate) => ({
+      memberId: candidate.memberId,
+      reasons: candidate.exclusionReasons,
+    })),
+    [
+      { memberId: "off-shift", reasons: ["off_shift"] },
+      { memberId: "wrong-team", reasons: ["wrong_team"] },
+    ],
   );
 });
 
