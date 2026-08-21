@@ -13,6 +13,7 @@ type Props = {
   activePatientId?: string | null;
   bedAssignments: WardBedAssignments;
   onPlacePatient: (patientId: string, bed: string) => void;
+  onRemovePatient: (bed: string) => void;
   onResetPlacements: () => void;
 };
 
@@ -39,6 +40,7 @@ export function WardBoard({
   activePatientId,
   bedAssignments,
   onPlacePatient,
+  onRemovePatient,
   onResetPlacements,
 }: Props) {
   const [onlyAttention, setOnlyAttention] = useState(false);
@@ -76,15 +78,6 @@ export function WardBoard({
   return (
     <div className="space-y-8">
       <StatusBand threads={threads} />
-
-      <IsometricWardMap
-        threads={threads}
-        bedAssignments={bedAssignments}
-        activePatientId={activePatientId}
-        onOpenPatient={onOpenPatient}
-        onPlacePatient={onPlacePatient}
-        onResetPlacements={onResetPlacements}
-      />
 
       {priority.length > 0 && (
         <section className="overflow-hidden rounded-xl border border-escalated/25 bg-escalated-soft/40">
@@ -261,6 +254,16 @@ export function WardBoard({
           </section>
         );
       })}
+
+      <IsometricWardMap
+        threads={threads}
+        bedAssignments={bedAssignments}
+        activePatientId={activePatientId}
+        onOpenPatient={onOpenPatient}
+        onPlacePatient={onPlacePatient}
+        onRemovePatient={onRemovePatient}
+        onResetPlacements={onResetPlacements}
+      />
     </div>
   );
 }
