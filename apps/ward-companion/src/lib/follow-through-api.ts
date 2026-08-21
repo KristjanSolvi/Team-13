@@ -436,7 +436,8 @@ export type HandoverSection = {
 export type GroundedHandover = {
   handoverId: string;
   patientId: string;
-  status: "requested" | "draft" | "rendered" | "failed";
+  status: "draft";
+  renderingStatus: "pending" | "rendered";
   sourceSnapshotHash: string;
   rendered: {
     title: string;
