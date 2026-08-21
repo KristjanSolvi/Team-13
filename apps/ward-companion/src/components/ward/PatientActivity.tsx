@@ -23,12 +23,9 @@ import type {
 } from "@/data/ward";
 import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
 import type { WardStaffOption } from "@/data/demo-staff";
-import type {
-  ChangeImpact,
-  TaskRoutingReceipt,
-  WardTaskCommand,
-} from "@/lib/follow-through-api";
+import type { ChangeImpact, TaskRoutingReceipt, WardTaskCommand } from "@/lib/follow-through-api";
 import { memberLabel } from "@/lib/member-label";
+import { wardTimestampLabel } from "@/lib/ward-time-label";
 import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
@@ -325,10 +322,8 @@ export function PatientActivity({
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
                         {statusLabels[thread.status]} ·{" "}
-                        {thread.assignee === null
-                          ? "no owner"
-                          : memberLabel(thread.assignee)}{" "}
-                        · {thread.due}
+                        {thread.assignee === null ? "no owner" : memberLabel(thread.assignee)} ·{" "}
+                        {wardTimestampLabel(thread.due)}
                       </span>
                     </span>
                     <ChevronDown
@@ -338,7 +333,7 @@ export function PatientActivity({
 
                   {!expanded && last && (
                     <p className="truncate px-2 pb-2 text-[12.5px] text-muted-foreground/80">
-                      {last.at} — {last.text}
+                      {wardTimestampLabel(last.at)} — {last.text}
                     </p>
                   )}
 
@@ -650,7 +645,7 @@ export function PatientActivity({
                             />
                             <p className="text-[13.5px] leading-snug text-foreground">{a.text}</p>
                             <span className="text-[11.5px] text-muted-foreground">
-                              {a.actor} · {a.at}
+                              {a.actor} · {wardTimestampLabel(a.at)}
                             </span>
                           </li>
                         ))}

@@ -66,7 +66,8 @@ export function TaskDeliveryStatus({ taskId, taskVersion }: Props) {
   if (error) {
     return (
       <p className="flex items-center gap-1.5 text-[10.5px] text-escalated-strong">
-        <CircleAlert className="size-3" /> Delivery status unavailable; task state is unchanged.
+        <CircleAlert className="size-3" /> Receiving-system status unavailable; the Fluence
+        assignment is still saved.
       </p>
     );
   }

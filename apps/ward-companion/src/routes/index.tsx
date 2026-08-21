@@ -117,7 +117,10 @@ function Index() {
         const now = Date.now();
         if (now - lastShift.current < 400) {
           setOpen((current) => {
-            if (!current) setMaximized(true);
+            if (!current) {
+              setMaximized(true);
+              setScopeId(ehrPatientId);
+            }
             return !current;
           });
           lastShift.current = 0;
@@ -128,7 +131,7 @@ function Index() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [ehrPatientId]);
 
   const handleAddThread = (patientId: string, title: string, options?: NewTaskOptions) => {
     const id = createThread(patientId, title, options);
@@ -332,7 +335,10 @@ function Index() {
         open={open}
         onToggle={() => {
           setOpen((current) => {
-            if (!current) setMaximized(false);
+            if (!current) {
+              setMaximized(false);
+              setScopeId(ehrPatientId);
+            }
             return !current;
           });
         }}

@@ -39,7 +39,7 @@ export function SmartRoutingPanel({
   const [loading, setLoading] = useState(taskState !== "offered_to_team");
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idempotencyKey = useMemo(() => `smart-route-${crypto.randomUUID()}`, [taskId]);
+  const idempotencyKey = useMemo(() => `smart-route-${taskId}-${crypto.randomUUID()}`, [taskId]);
   const currentReceipt = receipt?.taskId === taskId ? receipt : null;
 
   useEffect(() => {
