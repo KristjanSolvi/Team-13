@@ -16,6 +16,8 @@ interface DischargePatient {
 export interface BedDaysEstimate {
   protectedBedDays: number;
   timelyVerifiedBlockers: number;
+  bedDaysAtRisk: number;
+  openDischargeBlockers: number;
   assumedBedDaysPerBlocker: number;
 }
 
@@ -30,9 +32,20 @@ export function estimateBedDaysProtected(
   const weekStartedAt = startOfLocalWeek(now).getTime();
   const observedAt = now.getTime();
   const countedThreadIds = new Set<string>();
+  const countedOpenThreadIds = new Set<string>();
   let timelyVerifiedBlockers = 0;
+  let openDischargeBlockers = 0;
 
   for (const thread of threads) {
+    if (
+      thread.status !== "verified" &&
+      plannedDischarges.has(thread.patientId) &&
+      !countedOpenThreadIds.has(thread.id)
+    ) {
+      countedOpenThreadIds.add(thread.id);
+      openDischargeBlockers += 1;
+    }
+
     if (
       thread.status !== "verified" ||
       !plannedDischarges.has(thread.patientId) ||
@@ -60,6 +73,8 @@ export function estimateBedDaysProtected(
       (timelyVerifiedBlockers * ASSUMED_BED_DAYS_PER_TIMELY_BLOCKER).toFixed(1),
     ),
     timelyVerifiedBlockers,
+    bedDaysAtRisk: Number((openDischargeBlockers * ASSUMED_BED_DAYS_PER_TIMELY_BLOCKER).toFixed(1)),
+    openDischargeBlockers,
     assumedBedDaysPerBlocker: ASSUMED_BED_DAYS_PER_TIMELY_BLOCKER,
   };
 }

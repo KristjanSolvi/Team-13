@@ -54,6 +54,8 @@ test("estimates 0.5 bed-day for each timely verified discharge blocker this week
   assert.deepEqual(result, {
     protectedBedDays: 1,
     timelyVerifiedBlockers: 2,
+    bedDaysAtRisk: 0.5,
+    openDischargeBlockers: 1,
     assumedBedDaysPerBlocker: 0.5,
   });
 });
@@ -70,4 +72,25 @@ test("excludes verification outside the current week and unparseable deadlines",
 
   assert.equal(result.protectedBedDays, 0);
   assert.equal(result.timelyVerifiedBlockers, 0);
+  assert.equal(result.bedDaysAtRisk, 0);
+  assert.equal(result.openDischargeBlockers, 0);
+});
+
+test("shows modelled exposure for open blockers on planned discharges", () => {
+  const result = estimateBedDaysProtected(
+    [
+      thread("open-one", "planned-home", "Today 14:00", "11:00", "tracking"),
+      thread("open-two", "planned-home", "Today 16:00", "11:30", "tracking"),
+      thread("other-patient", "staying", "Today 16:00", "11:30", "tracking"),
+    ],
+    [
+      { id: "planned-home", homeTomorrow: true },
+      { id: "staying", homeTomorrow: false },
+    ],
+    now,
+  );
+
+  assert.equal(result.bedDaysAtRisk, 1);
+  assert.equal(result.openDischargeBlockers, 2);
+  assert.equal(result.protectedBedDays, 0);
 });
