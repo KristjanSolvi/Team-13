@@ -62,6 +62,7 @@ type Props = {
   onUnlockDemoHost: (accessKey: string) => Promise<void>;
   onRouteTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRefreshPatient: (id: string) => Promise<void>;
+  onMoveToDocument: (text: string) => void;
   onBackToBoard: () => void;
 };
 
@@ -135,6 +136,7 @@ export function PatientActivity({
   onUnlockDemoHost,
   onRouteTaskNow,
   onRefreshPatient,
+  onMoveToDocument,
   onBackToBoard,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -212,6 +214,7 @@ export function PatientActivity({
               );
             });
           }}
+          onMoveToDocument={onMoveToDocument}
         />
 
         <HandoverPanel patient={patient} />

@@ -14,7 +14,6 @@ import {
 } from "@/components/ward/Loading";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { ViewTabs, type ViewKey } from "@/components/ward/ViewTabs";
-import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import { useWardRuntime } from "@/features/ward-runtime/useWardRuntime";
 import type { NewTaskOptions, WardBedAssignments } from "@/data/ward";
@@ -77,6 +76,7 @@ function Index() {
   const [ehrPatientId, setEhrPatientId] = useState("p1");
   const [activeThreadId, setActiveThreadId] = useState<string | null>("demo-t1");
   const [scopeId, setScopeId] = useState<string>("p1");
+  const [openNotesRequest, setOpenNotesRequest] = useState(0);
   const [bedAssignments, setBedAssignments] = useState<WardBedAssignments>(() => ({
     ...initialBedAssignments,
   }));
@@ -191,6 +191,7 @@ function Index() {
             })),
           )}
         recordRefreshKey={ehrRevision}
+        openNotesRequest={openNotesRequest}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);
@@ -245,8 +246,6 @@ function Index() {
             <div className="flex-1" />
           </header>
 
-          <CortiActivityReceipt />
-
           <div className="min-h-0 flex-1">
             {loadingView ? (
               view === "board" ? (
@@ -293,6 +292,11 @@ function Index() {
                   onUnlockDemoHost={unlockDemoHost}
                   onRouteTaskNow={routeTaskNow}
                   onRefreshPatient={refreshPatientThreads}
+                  onMoveToDocument={(text) => {
+                    addNote(ehrPatientId, text, "medical", "scribe", "Corti Ambient draft");
+                    setOpenNotesRequest((current) => current + 1);
+                    setOpen(false);
+                  }}
                   onBackToBoard={() => {
                     setView("board");
                     setScopeId(ehrPatientId);
