@@ -1,7 +1,9 @@
 import { openProfileDatabase } from "../src/database.js";
 import {
   seedSyntheticKarenProfile,
+  seedSyntheticWardProfiles,
   syntheticKarenProfile,
+  syntheticWardProfiles,
 } from "../src/demo.js";
 import { PatientProfileService } from "../src/service.js";
 import { PatientProfileStore } from "../src/store.js";
@@ -36,6 +38,29 @@ describe("synthetic Karen fixture", () => {
         version: 2,
         profile: { flow: { homeTomorrow: true } },
       });
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("synthetic ward fixtures", () => {
+  it("seeds every UI patient idempotently", () => {
+    const store = new PatientProfileStore(openProfileDatabase(":memory:"));
+    const service = new PatientProfileService(
+      store,
+      () => new Date("2026-08-21T07:00:00.000Z"),
+      () => "referral-ward",
+    );
+    try {
+      seedSyntheticWardProfiles(service, store);
+      seedSyntheticWardProfiles(service, store);
+
+      expect(service.getProfile("synthetic-karen").profile).toEqual(syntheticKarenProfile);
+      for (const fixture of syntheticWardProfiles) {
+        expect(service.getProfile(fixture.patientId).profile).toEqual(fixture.profile);
+        expect(service.listHistory(fixture.patientId)).toHaveLength(1);
+      }
     } finally {
       store.close();
     }

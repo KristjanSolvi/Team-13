@@ -1,6 +1,6 @@
 import { createAgentRunners } from "./agent/runtime.js";
 import { parseConfig } from "./config.js";
-import { seedKaren } from "./fixtures/karen.js";
+import { seedSyntheticWard } from "./fixtures/ward.js";
 import { createApp } from "./http/app.js";
 import { DemoClock } from "./infra/clock.js";
 import { openDatabase } from "./infra/database.js";
@@ -14,9 +14,7 @@ import { SchedulerService } from "./services/scheduler-service.js";
 
 const config = parseConfig(process.env);
 const store = new SqliteStore(openDatabase(config.databasePath));
-if (!store.getPatient("synthetic-karen")) {
-  seedKaren(store, new Date().toISOString());
-}
+seedSyntheticWard(store, new Date().toISOString());
 store.backfillEvidenceDependencies();
 const clock = new DemoClock(new Date(), config.demoMode);
 const ledger = new LedgerService(store, clock, config.approvalHmacSecret);

@@ -3,7 +3,7 @@ import "dotenv/config";
 import { createPatientProfileApp } from "./app.js";
 import { parseConfig } from "./config.js";
 import { openProfileDatabase } from "./database.js";
-import { seedSyntheticKarenProfile } from "./demo.js";
+import { seedSyntheticWardProfiles } from "./demo.js";
 import { PatientProfileService } from "./service.js";
 import { PatientProfileStore } from "./store.js";
 
@@ -13,7 +13,7 @@ const store = new PatientProfileStore(
 );
 const service = new PatientProfileService(store);
 if (config.seedSyntheticKaren) {
-  seedSyntheticKarenProfile(service, store);
+  seedSyntheticWardProfiles(service, store);
 }
 const app = createPatientProfileApp({
   service,
