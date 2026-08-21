@@ -151,7 +151,10 @@ test("draft, approval, publication, and acceptance replay without duplicate even
   assert.deepEqual(secondAccept, firstAccept);
 
   const eventTypes = store.listEvents(0).map((event) => event.eventType);
-  assert.equal(eventTypes.filter((type) => type === "task.draft_created").length, 1);
+  assert.equal(
+    eventTypes.filter((type) => type === "task.draft_created").length,
+    1,
+  );
   assert.equal(eventTypes.filter((type) => type === "task.approved").length, 1);
   assert.equal(
     eventTypes.filter((type) => type === "task.published_to_team").length,
@@ -340,8 +343,7 @@ test("draft validation rejects missing patients, bad evidence, missing evidence,
 
   ledger.createKarenDraft("ctx-karen", "original-draft");
   assertDomainError(
-    () =>
-      ledger.createDraft(draftInput({ idempotencyKey: "duplicate-draft" })),
+    () => ledger.createDraft(draftInput({ idempotencyKey: "duplicate-draft" })),
     "LIKELY_DUPLICATE",
     409,
   );
@@ -496,12 +498,7 @@ test("only one eligible member wins an acceptance race and failed writes emit no
   assert.equal(accepted.assignedMemberId, "nurse-a");
   assertDomainError(
     () =>
-      ledger.acceptTask(
-        offered.taskId,
-        offered.version,
-        "nurse-b",
-        "race-b",
-      ),
+      ledger.acceptTask(offered.taskId, offered.version, "nurse-b", "race-b"),
     "VERSION_CONFLICT",
     409,
   );
@@ -544,11 +541,7 @@ test("eligible owner completes and downstream verification closes the thread", (
   assert.equal(store.requireThread(verified.threadId).state, "verified");
   assertDomainError(
     () =>
-      ledger.verifyTask(
-        verified.taskId,
-        verified.version,
-        "record:outcome-1",
-      ),
+      ledger.verifyTask(verified.taskId, verified.version, "record:outcome-1"),
     "INVALID_TRANSITION",
     409,
   );
@@ -669,7 +662,12 @@ test("acceptance rejects a same-team member who lacks availability or capacity",
     capabilities: ["blood-pressure"],
   };
   store.putTeam(otherTeam);
-  store.putMember({ ...unavailable, memberId: "other-member", teamId: "other-team", available: true });
+  store.putMember({
+    ...unavailable,
+    memberId: "other-member",
+    teamId: "other-team",
+    available: true,
+  });
   const offered = publishKaren(ledger, "member-eligibility");
 
   assertDomainError(

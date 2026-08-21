@@ -53,13 +53,8 @@ export class SchedulerService {
         );
         const members = this.store
           .listMembers(current.targetTeamId)
-          .filter(
-            (candidate) => !declinedMemberIds.has(candidate.memberId),
-          );
-        const routingDecision = explainRouting(
-          current,
-          members,
-        );
+          .filter((candidate) => !declinedMemberIds.has(candidate.memberId));
+        const routingDecision = explainRouting(current, members);
         const member = members.find(
           (candidate) =>
             candidate.memberId === routingDecision.selectedMemberId,
@@ -98,13 +93,8 @@ export class SchedulerService {
       );
       const members = this.store
         .listMembers(task.targetTeamId)
-        .filter(
-          (candidate) => !declinedMemberIds.has(candidate.memberId),
-        );
-      const routingDecision = explainRouting(
-        task,
-        members,
-      );
+        .filter((candidate) => !declinedMemberIds.has(candidate.memberId));
+      const routingDecision = explainRouting(task, members);
       const next = members.find(
         (candidate) => candidate.memberId === routingDecision.selectedMemberId,
       );

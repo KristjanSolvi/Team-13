@@ -728,9 +728,9 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
     "/patients/:patientId/tasks",
     asyncRoute((request, response) => {
       response.json({
-        tasks: dependencies.store.listPatientTasks(
-          pathParam(request, "patientId"),
-        ).filter(isHandoverTaskActive),
+        tasks: dependencies.store
+          .listPatientTasks(pathParam(request, "patientId"))
+          .filter(isHandoverTaskActive),
       });
     }),
   );

@@ -25,7 +25,9 @@ const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null) {
-    throw new Error(`Expected an object response, received: ${JSON.stringify(value)}`);
+    throw new Error(
+      `Expected an object response, received: ${JSON.stringify(value)}`,
+    );
   }
   return value as Record<string, unknown>;
 }
@@ -52,7 +54,8 @@ async function request(path: string, body?: unknown): Promise<unknown> {
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error = asRecord(asRecord(payload).error ?? payload);
-    const code = typeof error.code === "string" ? error.code : `HTTP_${response.status}`;
+    const code =
+      typeof error.code === "string" ? error.code : `HTTP_${response.status}`;
     if (code.includes("AGENT_NOT_CONFIGURED")) {
       throw new Error(
         "The ward-meeting Corti agent is not provisioned. Set CORTI_MEETING_AGENT_ID " +
@@ -135,7 +138,9 @@ await request(`/api/ward-meetings/${meetingId}/transcript-segments`, {
 console.log({ appendedSegments: transcript.length });
 
 step("4 · Close the segment · the ward-meeting Corti agent reconciles it");
-console.log("(fresh Agentic context, MCP tools, draft-only output — may take a moment)");
+console.log(
+  "(fresh Agentic context, MCP tools, draft-only output — may take a moment)",
+);
 const closed = await request(
   `/api/ward-meetings/${meetingId}/segments/${segmentId}/close`,
   {
