@@ -10,7 +10,7 @@ const secured = [{ serviceBearer: [] }] as const;
 export const patientProfileOpenApi = {
   openapi: "3.1.0",
   info: {
-    title: "Follow-Through Patient Profile API",
+    title: "Fluence Patient Profile API",
     version: "0.1.0",
     description:
       "Private service for versioned manual patient details and immutable referral-input snapshots.",

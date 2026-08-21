@@ -29,7 +29,7 @@ const readbackResponse = {
 export const downstreamOpenApi = {
   openapi: "3.1.0",
   info: {
-    title: "Follow-Through Downstream Gateway API",
+    title: "Fluence Downstream Gateway API",
     version: "0.1.0",
     description:
       "Private delivery and independent-readback boundary. The checked-in provider is explicitly simulated; real adapters implement the same contract.",

@@ -1,4 +1,4 @@
-# Follow-Through demo runbook
+# Fluence demo runbook
 
 This runbook brings up the Agentic/MCP backend, publishes its MCP endpoints,
 provisions the Corti agents, and performs controlled smoke requests. Every

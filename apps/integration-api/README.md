@@ -1,4 +1,4 @@
-# Follow-Through integration API
+# Fluence integration API
 
 Stateless backend-for-frontend and cross-service handoff layer. It gives the UI
 one safe HTTP surface while keeping all private service bearer tokens on the
@@ -26,7 +26,7 @@ pipeline owns Ambient, Dictation, Text Generation, and Medical Coding.
 - `GET /api/patients/:patientId/overview`: return authoritative threads, tasks,
   and review-required source-change impacts from the Agentic backend.
 - `GET /api/patients/:patientId/companion`: map those authoritative records
-  into the current Ward Companion `Thread` read model without coupling the
+  into the current Fluence `Thread` read model without coupling the
   backend to the UI component tree.
 - `POST /api/demo/patients/:patientId/source-revisions`: inject the predefined
   synthetic Karen note revision so Change Radar can demonstrate its persisted
@@ -75,7 +75,7 @@ pipeline owns Ambient, Dictation, Text Generation, and Medical Coding.
 - `GET /api/ehr/patients/:patientId`: compose the current versioned profile and
   mock-EHR documents into one Nervecentre-facing record.
 - `PATCH /api/ehr/patients/:patientId/profile`: apply an attributed profile
-  update using the same optimistic version contract as Ward Companion.
+  update using the same optimistic version contract as Fluence.
 - `POST /api/ehr/patients/:patientId/documents`: create an attributed document
   draft.
 - `PATCH /api/ehr/documents/:documentId`: revise an unfiled draft.
@@ -138,7 +138,7 @@ final transcript segments to the meeting endpoint with the currently selected
 segment may take the dedicated long upstream timeout because that request waits
 for the meeting agent. It never publishes the resulting draft tasks.
 
-## Ward Companion boundary
+## Fluence boundary
 
 The companion projection matches the existing UI fields (`id`, `title`,
 `status`, `heard`, `matters`, `suggestion`, `assignee`, `candidates`, `due`, and

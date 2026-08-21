@@ -43,7 +43,7 @@ describe("published integration fixtures", () => {
     expect(value).toContain("event: thread.state_changed");
   });
 
-  it("derives the Ward Companion fixture from the authoritative overview", async () => {
+  it("derives the Fluence fixture from the authoritative overview", async () => {
     const overview = JSON.parse(
       await readFile(new URL("patient-overview-karen.json", fixtures), "utf8"),
     ) as {

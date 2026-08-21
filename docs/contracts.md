@@ -1,4 +1,4 @@
-# Follow-Through integration contract v1
+# Fluence integration contract v1
 
 This is the MVP contract between the Corti pipeline, integration API, Ward
 Companion, Agentic/MCP backend, patient profile, mock EHR, and downstream
@@ -267,7 +267,7 @@ completion state. Consumers must present the impact as requiring clinician
 review, not as an automated clinical decision.
 
 `GET /api/patients/:patientId/change-impacts` returns the patient-scoped impact
-chain. The integration overview and Ward Companion projection expose the same
+chain. The integration overview and Fluence projection expose the same
 records as `changeImpacts`. The browser-facing
 `POST /api/demo/patients/:patientId/source-revisions` is intentionally limited
 to the predefined `synthetic-karen` revision and accepts no clinical text.
@@ -496,7 +496,7 @@ the inbound integration bearer plus `x-actor-id`.
 
 - `GET /api/patients/:patientId/threads` returns `{ "threads": [Thread] }`.
 - `GET /api/patients/:patientId/tasks` returns `{ "tasks": [Task] }`, including
-  drafts needed by the Ward Companion projection.
+  drafts needed by the Fluence projection.
 - `GET /api/teams/:teamId/tasks` returns the actionable team queue, sorted by
   dynamic operational priority and deadline.
 - `GET /api/tasks/:taskId` returns one authoritative task.

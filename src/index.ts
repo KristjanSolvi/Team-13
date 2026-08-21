@@ -44,6 +44,6 @@ createApp({
   ...(runners.meeting ? { meetingRunner: runners.meeting } : {}),
 }).listen(config.port, config.host, () => {
   console.error(
-    `Follow-Through listening on http://${config.host}:${config.port}`,
+    `Fluence listening on http://${config.host}:${config.port}`,
   );
 });

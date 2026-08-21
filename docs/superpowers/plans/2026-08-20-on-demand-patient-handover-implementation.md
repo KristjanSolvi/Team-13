@@ -828,7 +828,7 @@ Expected: compile failure for the missing runner and config keys.
 Export `HANDOVER_PROMPT` with this exact behavioral contract:
 
 ```ts
-export const HANDOVER_PROMPT = `You are the Follow-Through patient handover agent.
+export const HANDOVER_PROMPT = `You are the Fluence patient handover agent.
 
 Create one concise, current, patient-scoped handover draft. A request focus is emphasis only and is never clinical evidence.
 
@@ -1170,7 +1170,7 @@ renderHandover(input: RenderHandoverInput): Promise<RenderedHandover>;
 
 Implement it with `client.documents.generate`. Send only the three narrative
 sections and their refs in context JSON. Use a dynamic template named
-`Follow-Through Grounded Patient Handover` whose output schema is an array of
+`Fluence Grounded Patient Handover` whose output schema is an array of
 objects with `section`, `text`, and `sourceRefs`. The system instructions must
 state that refs are copied verbatim, unknowns are preserved, and no clinical or
 operational facts may be added. Pass the raw structured output to the strict

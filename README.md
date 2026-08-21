@@ -1,6 +1,6 @@
-# Ward Threads
+# Fluence
 
-Ward Threads connects the Lovable ward overlay to a source-grounded Corti
+Fluence connects the Lovable ward overlay to a source-grounded Corti
 pipeline and an authoritative Agentic/MCP follow-through ledger. The current
 checkpoint is one integrated demo system; fixture EHR data and external task
 destinations remain explicitly simulated.
@@ -84,7 +84,7 @@ npm run dev
 cd apps/integration-api
 npm run dev
 
-# 7. Lovable Ward Threads UI
+# 7. Fluence UI
 cd apps/ward-companion
 npm run dev
 ```

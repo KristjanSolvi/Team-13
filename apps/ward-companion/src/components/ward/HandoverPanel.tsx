@@ -144,7 +144,7 @@ export function HandoverPanel({ patient }: Props) {
           </span>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
             Corti creates an evidence-linked draft from the current record and open work, then saves
-            it to this patient&apos;s Follow-Through record for clinician review.
+            it to this patient&apos;s Fluence record for clinician review.
           </p>
         </div>
         <button

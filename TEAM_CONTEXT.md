@@ -1,4 +1,4 @@
-# Follow-Through — Team Context and Build Brief
+# Fluence — Team Context and Build Brief
 
 > **Team 13 single source of truth**  
 > Corti Hack for Health, Copenhagen · 20–21 August 2026  
@@ -129,7 +129,7 @@ The five criteria are evenly weighted:
 
 ### Product name
 
-**Follow-Through**
+**Fluence**
 
 ### Tagline
 
@@ -138,18 +138,18 @@ The five criteria are evenly weighted:
 ### Naming hierarchy
 
 ```text
-Follow-Through                   User-facing product
+Fluence                   User-facing product
 └── Clinical Thread Ledger       Persistent accountability layer
     └── Thread Resolution Agent  Detects, checks, proposes, acts, and verifies
 ```
 
 ### One-sentence pitch
 
-> Follow-Through is an EHR companion that converts clinical conversations into tracked, clinician-approved, and verified work—at the bedside, across the ward, and throughout the patient journey.
+> Fluence is an EHR companion that converts clinical conversations into tracked, clinician-approved, and verified work—at the bedside, across the ward, and throughout the patient journey.
 
 ### Memorable closing line
 
-> **Other systems remember what was said. Follow-Through remembers what still needs to happen.**
+> **Other systems remember what was said. Fluence remembers what still needs to happen.**
 
 ---
 
@@ -181,7 +181,7 @@ Both failures have the same root cause:
 
 > The conversation where the commitment originated has no persistent action memory of its own.
 
-Follow-Through gives it one.
+Fluence gives it one.
 
 ---
 
@@ -217,7 +217,7 @@ The product is **vendor-neutral** and should be described as an additional intel
 
 ---
 
-## What Follow-Through does
+## What Fluence does
 
 ### Detects
 
@@ -291,7 +291,7 @@ This is a conceptual product model, not an implementation schema.
 
 ## UX decision
 
-Follow-Through has **two screens, one visual language, and one underlying object**.
+Fluence has **two screens, one visual language, and one underlying object**.
 
 ### The rail—at the bedside
 
@@ -360,7 +360,7 @@ If a patient has several threads, the row must not imply that a single green thr
 
 ## Vendor-neutral overlay architecture
 
-Follow-Through is a companion/intelligence layer over existing hospital systems:
+Fluence is a companion/intelligence layer over existing hospital systems:
 
 ```text
 Existing hospital systems
@@ -472,7 +472,7 @@ The staged WSO2 FHIR MCP can connect through Streamable HTTP to a local HAPI FHI
 
 ## Use of all five Corti areas
 
-| Corti area | Follow-Through role |
+| Corti area | Fluence role |
 |---|---|
 | Ambient Speech-to-text | Passive capture of rounds, handoffs, and discharge conversations; supplies timestamped evidence |
 | Dictation Speech-to-text | Intentional clinician channel for correcting the action, receiving team, deadline, urgency, dismissal rationale, or closure wording |
@@ -676,7 +676,7 @@ The official examples are public and intended as integration references. The rep
 
 ## Why this meets every “where to build” area
 
-| Territory | Follow-Through contribution |
+| Territory | Fluence contribution |
 |---|---|
 | In-encounter intelligence | Surfaces a potentially missed commitment before the encounter ends |
 | Documentation and coding | Checks that the approved concern reaches documentation and supported coding concepts |
@@ -753,7 +753,7 @@ The official examples are public and intended as integration references. The rep
 
 > **A conversation-to-action and verification layer for clinical workflows.**
 
-Follow-Through complements rather than replaces:
+Fluence complements rather than replaces:
 
 - EHRs
 - Ambient scribes
@@ -838,7 +838,7 @@ Show six beds and tracked blockers; explain the operational buyer and expansion.
 
 ### 4:40–5:00—close
 
-> “Other systems remember what was said. Follow-Through remembers what still needs to happen.”
+> “Other systems remember what was said. Fluence remembers what still needs to happen.”
 
 ---
 
@@ -884,7 +884,7 @@ Prefer:
 
 ## Decisions already made
 
-- Product name: **Follow-Through**
+- Product name: **Fluence**
 - Underlying system: **Clinical Thread Ledger**
 - Engine: **Thread Resolution Agent**
 - Vendor-neutral EHR companion/overlay, not a replacement EHR
@@ -906,7 +906,7 @@ Prefer:
 - Deterministic search versus local embeddings
 - Whether optional FHIR/Epic/standards validation fits after the core works
 - Enabled medical coding system
-- Final team name if different from Follow-Through
+- Final presentation team-name wording
 
 ---
 
@@ -943,7 +943,7 @@ After the official start:
 Example documentation-only commit message:
 
 ```text
-docs: add Follow-Through team context
+docs: add Fluence team context
 ```
 
 Keep this context synchronized with the implemented cross-service contracts.

@@ -132,7 +132,7 @@ class ContextAuditFailureStore extends SqliteStore {
 test("handover prompt preserves the exact constrained five-tool contract", () => {
   assert.equal(
     HANDOVER_PROMPT,
-    `You are the Follow-Through patient handover agent.
+    `You are the Fluence patient handover agent.
 
 Create one concise, current, patient-scoped handover draft. A request focus is emphasis only and is never clinical evidence.
 

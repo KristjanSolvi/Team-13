@@ -21,7 +21,7 @@ function thread(
       {
         id: `${id}:verified`,
         at: verifiedAt,
-        actor: "Follow-through service",
+        actor: "Fluence service",
         text: "Completion was independently verified.",
         kind: "action" as const,
       },
