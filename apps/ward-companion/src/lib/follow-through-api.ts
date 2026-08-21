@@ -82,6 +82,25 @@ export type ClinicalDocument = {
   filedAt: string | null;
   filedBy: string | null;
   correlationId: string;
+  codingReview: ClinicalCodingReview | null;
+};
+
+export type CodingReviewInput = {
+  outcome: "accepted" | "rejected" | "no-suggestions" | "unavailable";
+  approvalId: string;
+  system: CodingSystem;
+  selectedCode: {
+    suggestionKind: "supported" | "candidate";
+    code: string;
+    display: string;
+    evidenceStatus: "validated" | "unavailable";
+    evidences: Array<{ text: string; start: number; end: number }>;
+  } | null;
+};
+
+export type ClinicalCodingReview = CodingReviewInput & {
+  reviewedAt: string;
+  reviewedBy: string;
 };
 
 export type ClinicalDocumentVersion = ClinicalDocument & {
@@ -446,6 +465,7 @@ export async function createEhrDocument(input: {
   title: string;
   content: string;
   source: ClinicalDocument["source"];
+  codingReview: CodingReviewInput | null;
 }): Promise<ClinicalDocument> {
   return responseJson<ClinicalDocument>(
     await fetch(
@@ -459,6 +479,7 @@ export async function createEhrDocument(input: {
           title: input.title,
           content: input.content,
           source: input.source,
+          codingReview: input.codingReview,
         }),
       },
     ),
@@ -472,7 +493,7 @@ export async function reviseEhrDocument(input: {
   expectedVersion: number;
   idempotencyKey: string;
   reason: string;
-  changes: { title?: string; content?: string };
+  changes: { title?: string; content?: string; codingReview?: CodingReviewInput | null };
 }): Promise<ClinicalDocument> {
   return responseJson<ClinicalDocument>(
     await fetch(integrationUrl(`/api/ehr/documents/${encodeURIComponent(input.documentId)}`), {

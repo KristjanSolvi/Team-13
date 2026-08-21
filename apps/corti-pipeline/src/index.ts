@@ -20,6 +20,11 @@ export {
   normalizeTranscriptReview,
   transcriptReviewContext,
 } from "./transcript-review.js";
+export { buildReviewedTranscript } from "./transcript-interpretation.js";
+export type {
+  ReviewedTranscript,
+  TranscriptReviewDecision,
+} from "./transcript-interpretation.js";
 export {
   locateExactQuote,
   validateCodingEvidence,

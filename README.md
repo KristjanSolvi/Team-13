@@ -11,7 +11,7 @@ destinations remain explicitly simulated.
 Lovable Ward UI (8080)
   -> Integration API / BFF (8790)
       -> Corti pipeline (8787)
-          Ambient + Dictation + Text Generation + Medical Coding
+          Ambient + FactsR + Dictation + Text Generation + Medical Coding
       -> Agentic/MCP service (3000)
           evidence registry + approval proof + task/thread ledger
       -> Patient profile service (8791)
@@ -19,7 +19,7 @@ Lovable Ward UI (8080)
       -> Downstream gateway (8792)
           idempotent delivery + independent provider readback
       -> Synthetic mock EHR (8793)
-          versioned document drafts + explicit immutable filing
+          versioned drafts + attributed coding review + immutable filing
 ```
 
 The pipeline may propose one source-grounded candidate. It does not assign a

@@ -3,6 +3,7 @@ import { ChevronDown, LoaderCircle, Mic2, ShieldCheck } from "lucide-react";
 import type { CortiDictation } from "@corti/dictation-web";
 import type { PipelineEvent, TaskRevisionPreview } from "@pipeline/contracts.js";
 import type { Thread } from "@/data/ward";
+import { recordCortiActivity } from "@/lib/corti-activity";
 import {
   buildDictationRevisionPreview,
   demoActors,
@@ -84,6 +85,11 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
           setText((current) => appendFinal(current, event.payload.text));
           setInterim("");
           setPreview(null);
+          recordCortiActivity({
+            product: "dictation",
+            status: "completed",
+            action: "Voice correction transcribed for clinician review",
+          });
           break;
         case "audio.quality_changed":
           if (event.payload.product !== "dictation") return;
@@ -96,11 +102,22 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
         case "usage.updated":
           if (event.payload.product === "dictation") {
             setDictationCredits(event.payload.creditsConsumed);
+            recordCortiActivity({
+              product: "dictation",
+              status: "completed",
+              action: "Voice correction transcribed for clinician review",
+              credits: event.payload.creditsConsumed,
+            });
           }
           break;
         case "pipeline.error":
           setStatus("error");
           setMessage("Dictation stopped safely. Type the correction instead.");
+          recordCortiActivity({
+            product: "dictation",
+            status: "unavailable",
+            action: "Voice correction unavailable; typed fallback remained available",
+          });
           break;
         default:
           break;
@@ -133,6 +150,11 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
         if (cancelled) return;
         setStatus("error");
         setMessage("Voice unavailable · the typed correction still works.");
+        recordCortiActivity({
+          product: "dictation",
+          status: "unavailable",
+          action: "Voice correction unavailable; typed fallback remained available",
+        });
       }
     };
 
@@ -227,7 +249,7 @@ export function TaskCorrectionPanel({ thread, onApplied }: Props) {
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 text-[12.5px] font-medium text-teal"
       >
-        <Mic2 className="size-3.5" /> Edit proposal by voice or text
+        <Mic2 className="size-3.5" /> Step 4 · Corti Dictation — edit by voice or text
       </button>
     );
   }
