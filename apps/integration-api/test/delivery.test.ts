@@ -15,6 +15,7 @@ const TASK_ID = "11111111-1111-4111-8111-111111111111";
 const REFERRAL_ID = "referral-snapshot-1";
 const DELIVERY_ID = "delivery-1";
 const PUBLIC_TOKEN = "integration-public-token";
+const GENERATED_RECORD_TITLE = `Approved follow-through · Refer Karen for community mobility assessment · ${TASK_ID}`;
 
 function harness() {
   const publishedTask = {
@@ -52,7 +53,25 @@ function harness() {
       cortiConfigured: true,
       missingCortiVariables: [],
     })),
-    request: vi.fn(async () => ({ status: 200, body: {} })),
+    request: vi.fn(async (path) => ({
+      status: 200,
+      body:
+        path === "/api/corti/documents/generate"
+          ? {
+              documentType: "clinical-note",
+              name: "Approved Follow-Through Clinical Note",
+              sections: [
+                {
+                  sectionId: "approved-action",
+                  heading: "Approved follow-through note",
+                  text: "Community mobility assessment was approved for district nursing.",
+                },
+              ],
+              creditsConsumed: 0.02,
+              status: "draft",
+            }
+          : {},
+    })),
   };
   const profile: ProfileGateway = {
     health: vi.fn(async () => ({ status: "ok" })),
@@ -79,7 +98,14 @@ function harness() {
   const mockEhr: MockEhrGateway = {
     health: vi.fn(async () => ({ status: "ok" })),
     listDocuments: vi.fn(async () => []),
-    createDocument: vi.fn(async () => ({})),
+    createDocument: vi.fn(async (patientId, body) => ({
+      schemaVersion: "1",
+      documentId: "document-approved-task-1",
+      patientId,
+      ...body,
+      status: "draft",
+      version: 1,
+    })),
     reviseDocument: vi.fn(async () => ({})),
     fileDocument: vi.fn(async () => ({})),
     documentHistory: vi.fn(async () => []),
@@ -114,6 +140,8 @@ function harness() {
     agentic,
     profile,
     downstream,
+    pipeline,
+    mockEhr,
     app: createIntegrationApp({
       service,
       integrationApiBearerToken: PUBLIC_TOKEN,
@@ -162,7 +190,7 @@ describe("referral and downstream UI boundary", () => {
   });
 
   it("publishes an approved referral to downstream with its immutable profile snapshot", async () => {
-    const { agentic, profile, downstream, app } = harness();
+    const { agentic, profile, downstream, pipeline, mockEhr, app } = harness();
     const response = await request(app)
       .post(`/api/tasks/${TASK_ID}/approve`)
       .set("x-actor-id", "clinician:evelyn")
@@ -180,6 +208,15 @@ describe("referral and downstream UI boundary", () => {
       "22222222-2222-4222-8222-222222222222",
     );
     expect(response.body.delivery.deliveryId).toBe(DELIVERY_ID);
+    expect(response.body.recordDraft).toMatchObject({
+      status: "created",
+      creditsConsumed: 0.02,
+      document: {
+        documentId: "document-approved-task-1",
+        patientId: "synthetic-karen",
+        status: "draft",
+      },
+    });
     expect(agentic.taskCommand).toHaveBeenCalledWith(
       TASK_ID,
       "approve",
@@ -214,6 +251,84 @@ describe("referral and downstream UI boundary", () => {
         correlationId: "corr-approve-referral",
       },
     );
+    expect(pipeline.request).toHaveBeenCalledWith(
+      "/api/corti/documents/generate",
+      expect.objectContaining({
+        approvalId: `task-approval:${TASK_ID}:2`,
+        documentType: "clinical-note",
+        approvedClinicalText: expect.stringContaining(
+          "community mobility assessment",
+        ),
+      }),
+      {
+        actorId: "clinician:evelyn",
+        correlationId: "corr-approve-referral",
+      },
+    );
+    expect(mockEhr.createDocument).toHaveBeenCalledWith(
+      "synthetic-karen",
+      expect.objectContaining({
+        idempotencyKey: `approved-task-record:${TASK_ID}:2`,
+        category: "medical",
+        source: "agent",
+      }),
+      {
+        actorId: "system:corti-text-generation",
+        correlationId: "corr-approve-referral",
+      },
+    );
+  });
+
+  it("keeps approval and delivery successful when the additive EHR draft is unavailable", async () => {
+    const { pipeline, mockEhr, app } = harness();
+    vi.mocked(pipeline.request).mockRejectedValueOnce(new Error("Text Generation unavailable"));
+
+    const response = await request(app)
+      .post(`/api/tasks/${TASK_ID}/approve`)
+      .set("x-actor-id", "clinician:evelyn")
+      .set("x-correlation-id", "corr-approve-without-record-draft")
+      .send({
+        expectedVersion: 1,
+        idempotencyKey: "approve-without-record-draft-001",
+        approvalChannel: "app_one_tap",
+      })
+      .expect(200);
+
+    expect(response.body.delivery.deliveryId).toBe(DELIVERY_ID);
+    expect(response.body.recordDraft).toEqual({ status: "unavailable", retryable: true });
+    expect(mockEhr.createDocument).not.toHaveBeenCalled();
+  });
+
+  it("reuses an existing approved-task EHR draft without another Text Generation call", async () => {
+    const { pipeline, mockEhr, app } = harness();
+    vi.mocked(mockEhr.listDocuments).mockResolvedValueOnce([
+      {
+        documentId: "existing-approved-task-document",
+        patientId: "synthetic-karen",
+        title: GENERATED_RECORD_TITLE,
+        status: "draft",
+        version: 1,
+      },
+    ]);
+
+    const response = await request(app)
+      .post(`/api/tasks/${TASK_ID}/approve`)
+      .set("x-actor-id", "clinician:evelyn")
+      .set("x-correlation-id", "corr-approve-existing-record-draft")
+      .send({
+        expectedVersion: 1,
+        idempotencyKey: "approve-existing-record-draft-001",
+        approvalChannel: "app_one_tap",
+      })
+      .expect(200);
+
+    expect(response.body.recordDraft).toMatchObject({
+      status: "existing",
+      creditsConsumed: 0,
+      document: { documentId: "existing-approved-task-document" },
+    });
+    expect(pipeline.request).not.toHaveBeenCalled();
+    expect(mockEhr.createDocument).not.toHaveBeenCalled();
   });
 
   it("keeps delivery state readable and protects synthetic provider mutation", async () => {

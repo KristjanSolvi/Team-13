@@ -66,6 +66,7 @@ type ShellProps = {
   notes?: CaseNote[] | undefined;
   onAddNote?: ((doc: DocId, text: string) => void) | undefined;
   activity?: ActivityEntry[] | undefined;
+  recordRefreshKey?: number | undefined;
 };
 
 export function NervecentreShell({
@@ -74,6 +75,7 @@ export function NervecentreShell({
   notes = [],
   onAddNote,
   activity = [],
+  recordRefreshKey = 0,
 }: ShellProps) {
   const current = patient ?? patients[0]!;
   const [activeTab, setActiveTab] = useState("Summary");
@@ -102,7 +104,7 @@ export function NervecentreShell({
     return () => {
       currentRequest = false;
     };
-  }, [current.backendLinked, current.pipelinePatientId]);
+  }, [current.backendLinked, current.pipelinePatientId, recordRefreshKey]);
 
   const handleDocumentChange = (document: ClinicalDocument) => {
     setEhrConnected(true);

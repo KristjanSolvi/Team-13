@@ -54,7 +54,10 @@ pipeline owns Ambient, Dictation, Text Generation, and Medical Coding.
   `dismiss`, `reopen`, `accept`, `decline`, `complete`, and `verify`.
   Approval also creates one idempotent downstream delivery. Referral approvals
   can include `referralSnapshotId` to bind the delivery to the exact profile
-  version sent.
+  version sent. A successful approval also asks Corti Text Generation for an
+  important-details clinical note and saves it as an attributed mock-EHR
+  **draft**; it is never filed automatically, and draft failure does not undo a
+  task that was already published.
 - `GET /api/tasks/:taskId/deliveries`: read submission, provider, and readback
   status without exposing the private downstream bearer.
 - `POST /api/demo/downstream/deliveries/:deliveryId/status`: authenticated demo
@@ -191,9 +194,8 @@ writes safe to retry; submission or acceptance alone never becomes verified.
 
 ## Next integration slice
 
-- Post-approval Text Generation and Medical Coding orchestration. The delivery
-  path is now durable, but generated clinical artifacts still need their own
-  reviewed-draft ownership and retention contract.
+- Attach reviewed Medical Coding suggestions to the post-approval document
+  workflow without making them part of the filed record automatically.
 - Mutations for manually created tasks and free-form operational activity.
   Their Agentic ownership and audit contracts must be defined before the UI
   sends them to a backend.

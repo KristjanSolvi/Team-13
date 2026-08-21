@@ -959,7 +959,8 @@ export const integrationOpenApi = {
         },
         responses: {
           "200": {
-            description: "Authoritative Agentic command result",
+            description:
+              "Authoritative Agentic command result. Approval may also include downstream delivery and a clinician-reviewable Corti-generated EHR draft.",
             content: {
               "application/json": {
                 schema: { type: "object", additionalProperties: true },

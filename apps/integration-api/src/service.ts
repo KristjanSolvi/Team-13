@@ -475,6 +475,34 @@ const publishedTaskEnvelopeSchema = z
   .object({ task: publishedTaskSchema })
   .passthrough();
 
+const generatedTaskRecordSchema = z
+  .object({
+    documentType: z.literal("clinical-note"),
+    name: z.string().trim().min(1).max(240),
+    sections: z
+      .array(
+        z
+          .object({
+            sectionId: z.string().min(1).max(200),
+            heading: z.string().trim().min(1).max(240),
+            text: z.string().trim().min(1).max(40_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+    creditsConsumed: z.number().nonnegative(),
+    status: z.literal("draft"),
+  })
+  .strict();
+
+const existingTaskRecordSchema = z
+  .object({
+    patientId: z.string().min(1).max(160),
+    title: z.string().min(1).max(240),
+  })
+  .passthrough();
+
 const referralSnapshotReferenceSchema = z
   .object({
     referralId: z.string().min(1).max(160),
@@ -751,7 +779,9 @@ export class IntegrationService {
       agenticBody,
       meta,
     );
-    if (command !== "approve" || this.downstream === undefined) return result;
+    if (command !== "approve" || (this.downstream === undefined && this.ehr === undefined)) {
+      return result;
+    }
 
     const parsed = publishedTaskEnvelopeSchema.safeParse(result);
     if (!parsed.success || parsed.data.task.taskId !== taskId) {
@@ -761,7 +791,7 @@ export class IntegrationService {
     const kind = task.taskType.toLowerCase().includes("referral")
       ? ("referral" as const)
       : ("team-task" as const);
-    if (referralSnapshotId !== null) {
+    if (referralSnapshotId !== null && this.downstream !== undefined) {
       if (kind !== "referral") {
         throw new IntegrationError(
           "REFERRAL_SNAPSHOT_NOT_APPLICABLE",
@@ -786,24 +816,105 @@ export class IntegrationService {
         );
       }
     }
-    const delivery = await this.downstream.createDelivery(
-      {
-        idempotencyKey: `delivery:${task.taskId}`,
-        sourceTaskId: task.taskId,
-        patientId: task.patientId,
-        targetSystem: task.targetTeamId,
-        kind,
-        summary: task.summary,
-        instructions: null,
-        dueAt: task.dueBy,
-        referralSnapshotId,
-      },
-      {
-        correlationId: meta.correlationId,
-        actorId: "system:integration-delivery",
-      },
-    );
-    return { ...(result as Record<string, unknown>), delivery };
+    const delivery =
+      this.downstream === undefined
+        ? undefined
+        : await this.downstream.createDelivery(
+            {
+              idempotencyKey: `delivery:${task.taskId}`,
+              sourceTaskId: task.taskId,
+              patientId: task.patientId,
+              targetSystem: task.targetTeamId,
+              kind,
+              summary: task.summary,
+              instructions: null,
+              dueAt: task.dueBy,
+              referralSnapshotId,
+            },
+            {
+              correlationId: meta.correlationId,
+              actorId: "system:integration-delivery",
+            },
+          );
+    const recordDraft = await this.createApprovedTaskRecordDraft(task, meta);
+    return {
+      ...(result as Record<string, unknown>),
+      ...(delivery === undefined ? {} : { delivery }),
+      ...(recordDraft === undefined ? {} : { recordDraft }),
+    };
+  }
+
+  private async createApprovedTaskRecordDraft(
+    task: z.infer<typeof publishedTaskSchema>,
+    meta: RequestMeta,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (this.ehr === undefined) return undefined;
+
+    const title = `Approved follow-through · ${task.summary.slice(0, 150)} · ${task.taskId}`;
+    try {
+      const existing = (await this.ehr.mockEhr.listDocuments(task.patientId, meta))
+        .map((document) => existingTaskRecordSchema.safeParse(document))
+        .find(
+          (document) =>
+            document?.success === true &&
+            document.data.patientId === task.patientId &&
+            document.data.title === title,
+        );
+      if (existing?.success === true) {
+        return { status: "existing", document: existing.data, creditsConsumed: 0 };
+      }
+
+      const generated = await this.pipeline.request(
+        "/api/corti/documents/generate",
+        {
+          approvalId: `task-approval:${task.taskId}:${task.version}`,
+          approvedClinicalText: [
+            `Patient identifier: ${task.patientId}.`,
+            `Clinician-approved follow-through action: ${task.summary}.`,
+            `Receiving team: ${task.targetTeamId}.`,
+            `Due by: ${task.dueBy}.`,
+            "Current lifecycle: approved and offered to the receiving team.",
+          ].join("\n"),
+          documentType: "clinical-note",
+        },
+        meta,
+      );
+      if (generated.status < 200 || generated.status >= 300) {
+        return { status: "unavailable", retryable: true };
+      }
+      const draft = generatedTaskRecordSchema.safeParse(generated.body);
+      if (!draft.success) {
+        return { status: "unavailable", retryable: false };
+      }
+      const content = draft.data.sections
+        .map((section) => `${section.heading}\n${section.text}`)
+        .join("\n\n")
+        .slice(0, 40_000);
+      const document = await this.ehr.mockEhr.createDocument(
+        task.patientId,
+        {
+          idempotencyKey: `approved-task-record:${task.taskId}:${task.version}`,
+          category: "medical",
+          title,
+          content,
+          source: "agent",
+        },
+        {
+          correlationId: meta.correlationId,
+          actorId: "system:corti-text-generation",
+        },
+      );
+      return {
+        status: "created",
+        document,
+        creditsConsumed: draft.data.creditsConsumed,
+      };
+    } catch {
+      // Publication and downstream delivery are already authoritative at this
+      // point. A supporting EHR draft is additive and must never turn a
+      // successful clinician approval into an apparent failure.
+      return { status: "unavailable", retryable: true };
+    }
   }
 
   async listTaskDeliveries(taskId: string, correlationId: string) {

@@ -41,6 +41,7 @@ function Index() {
     notes,
     ledgerBusy,
     ledgerErrors,
+    ehrRevision,
     refreshPatientThreads,
     addNote,
     runLedgerCommand,
@@ -141,6 +142,7 @@ function Index() {
               id: `${thread.id}:${entry.id}`,
             })),
           )}
+        recordRefreshKey={ehrRevision}
         onAddNote={(doc, text) => addNote(ehrPatientId, text, doc, "clinician", "S. Marriott")}
         onSelectPatient={(id) => {
           setEhrPatientId(id);

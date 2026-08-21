@@ -46,6 +46,7 @@ export function useWardRuntime() {
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [ledgerBusy, setLedgerBusy] = useState<string | null>(null);
   const [ledgerErrors, setLedgerErrors] = useState<Record<string, string>>({});
+  const [ehrRevision, setEhrRevision] = useState(0);
 
   useEffect(() => {
     const persisted = loadWardState(window.localStorage);
@@ -150,7 +151,7 @@ export function useWardRuntime() {
           ? (thread.assignee ?? demoActors.teamMember)
           : demoActors.clinician;
       try {
-        await executeTaskCommand({
+        const result = await executeTaskCommand({
           taskId: backend.taskId,
           command,
           actorId,
@@ -162,6 +163,16 @@ export function useWardRuntime() {
           },
         });
         addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
+        if (
+          command === "approve" &&
+          (result.recordDraft?.status === "created" || result.recordDraft?.status === "existing")
+        ) {
+          addNote(
+            thread.patientId,
+            `${thread.title} — Corti drafted an important-details note for clinician review in the EHR.`,
+          );
+          setEhrRevision((current) => current + 1);
+        }
         await refreshPatientThreads(thread.patientId);
       } catch (error) {
         setLedgerErrors((current) => ({
@@ -380,6 +391,7 @@ export function useWardRuntime() {
     notes,
     ledgerBusy,
     ledgerErrors,
+    ehrRevision,
     refreshPatientThreads,
     addNote,
     runLedgerCommand,

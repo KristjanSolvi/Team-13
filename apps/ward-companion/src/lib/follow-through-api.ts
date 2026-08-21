@@ -273,6 +273,17 @@ export async function investigateCandidate(
 
 export type WardTaskCommand = NonNullable<Thread["backend"]>["availableCommands"][number];
 
+export type TaskCommandResult = {
+  recordDraft?:
+    | {
+        status: "created" | "existing";
+        document: ClinicalDocument;
+        creditsConsumed: number;
+      }
+    | { status: "unavailable"; retryable: boolean };
+  [key: string]: unknown;
+};
+
 /**
  * Demo actor identities seeded by the agentic backend's Karen fixture.
  * Clinician commands (approve/correct/dismiss/reopen) are attributed to the
@@ -289,8 +300,8 @@ export async function executeTaskCommand(input: {
   actorId: string;
   correlationId: string;
   body: Record<string, unknown>;
-}): Promise<unknown> {
-  return responseJson<unknown>(
+}): Promise<TaskCommandResult> {
+  return responseJson<TaskCommandResult>(
     await fetch(integrationUrl(`/api/tasks/${encodeURIComponent(input.taskId)}/${input.command}`), {
       method: "POST",
       headers: {
