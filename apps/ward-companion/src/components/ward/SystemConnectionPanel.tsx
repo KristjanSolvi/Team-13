@@ -31,6 +31,17 @@ const serviceRows = [
   },
 ] as const;
 
+function allAgentRunnersReady(readiness: IntegrationReadiness): boolean {
+  const detail = readiness.services["agentic"]?.detail;
+  if (typeof detail !== "object" || detail === null) return false;
+  const agents = (detail as { agents?: unknown }).agents;
+  if (typeof agents !== "object" || agents === null) return false;
+  const configured = agents as Record<string, unknown>;
+  return (
+    configured["task"] === true && configured["handover"] === true && configured["meeting"] === true
+  );
+}
+
 export function SystemConnectionPanel() {
   const [readiness, setReadiness] = useState<IntegrationReadiness | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +63,8 @@ export function SystemConnectionPanel() {
 
   const serviceReady = (key: (typeof serviceRows)[number]["key"]) =>
     readiness?.services[key]?.reachable === true &&
-    (key !== "pipeline" || readiness.liveCortiReady);
+    (key !== "pipeline" || readiness.liveCortiReady) &&
+    (key !== "agentic" || allAgentRunnersReady(readiness));
   const readyCount = serviceRows.filter(({ key }) => serviceReady(key)).length;
 
   return (
