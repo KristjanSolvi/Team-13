@@ -199,13 +199,6 @@ export function PatientActivity({
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
 
-        <WardMeetingPanel
-          key={patient.pipelinePatientId}
-          patientId={patient.pipelinePatientId}
-          patientName={patient.name}
-          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
-        />
-
         <HandoverPanel patient={patient} />
 
         <div>
@@ -731,9 +724,15 @@ export function PatientActivity({
 
         <details className="rounded-xl border border-border bg-panel/70 px-4 py-3">
           <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
-            Record change checks
+            Continuity and record checks
           </summary>
           <div className="mt-3 space-y-3">
+            <WardMeetingPanel
+              key={patient.pipelinePatientId}
+              patientId={patient.pipelinePatientId}
+              patientName={patient.name}
+              onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+            />
             <ChangeRadar
               patient={patient}
               threads={scoped}
