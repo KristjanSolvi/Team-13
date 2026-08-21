@@ -31,7 +31,6 @@ import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
 import { SmartRoutingPanel } from "./SmartRoutingPanel";
-import { SystemConnectionPanel } from "./SystemConnectionPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 import { TaskDeliveryStatus } from "./TaskDeliveryStatus";
 import { usePendingAction } from "./useLoading";
@@ -206,6 +205,8 @@ export function PatientActivity({
           patientName={patient.name}
           onAuthoritativeChange={() => onRefreshPatient(patient.id)}
         />
+
+        <HandoverPanel patient={patient} />
 
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -730,11 +731,9 @@ export function PatientActivity({
 
         <details className="rounded-xl border border-border bg-panel/70 px-4 py-3">
           <summary className="cursor-pointer text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
-            Agent and record tools
+            Record change checks
           </summary>
           <div className="mt-3 space-y-3">
-            <SystemConnectionPanel />
-            <HandoverPanel patient={patient} />
             <ChangeRadar
               patient={patient}
               threads={scoped}
