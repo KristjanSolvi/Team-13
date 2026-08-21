@@ -314,9 +314,12 @@ call that protected endpoint directly.
 
 An expanded `offered_to_team` task may expose the demo-only
 `POST /api/demo/tasks/:taskId/route-now` control. It accepts only an idempotency
-key, requires the server-held integration bearer, and advances the backend's
-synthetic clock to the task's existing team acceptance deadline. It is rejected
-when demo mode is disabled or when the team deadline collides with the clinical
+key, requires a signed presenter session plus CSRF token at the UI boundary,
+and uses the server-held integration bearer upstream. The presenter unlocks
+that session with `DEMO_HOST_ACCESS_KEY`, which is never bundled into client
+code. The control advances the backend's synthetic clock to the task's existing
+team acceptance deadline. It is rejected without mutation when demo mode is
+disabled, nobody is eligible, or the team deadline collides with the clinical
 deadline. The normal scheduler still makes the decision; the UI cannot nominate
 an owner or bypass team, shift, availability, capacity, or capability checks.
 

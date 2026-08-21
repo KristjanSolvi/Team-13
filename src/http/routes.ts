@@ -12,6 +12,7 @@ import { sourceRevisionReasons } from "../domain/change-radar.js";
 import { demoScenarios } from "../demo/types.js";
 import { DomainError } from "../domain/errors.js";
 import { isHandoverTaskActive } from "../domain/handover.js";
+import { explainRouting } from "../domain/routing.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor, requireAppAuth } from "./auth.js";
@@ -745,6 +746,18 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
         throw new DomainError(
           "DEMO_TASK_DEADLINE_COLLISION",
           "This task reaches its clinical deadline before smart assignment can run",
+          false,
+          409,
+        );
+      }
+      const preflightDecision = explainRouting(
+        offered,
+        dependencies.store.listMembers(offered.targetTeamId),
+      );
+      if (preflightDecision.selectedMemberId === null) {
+        throw new DomainError(
+          "DEMO_ROUTING_INCOMPLETE",
+          "No eligible available team member could receive this task",
           false,
           409,
         );

@@ -99,8 +99,9 @@ Then exercise the browser path and confirm:
 6. task correction exposes Corti Dictation and requires preview plus explicit
    apply;
 7. an offered Karen task shows **Smart assignment is armed**; triggering the
-   demo selects an eligible authoritative roster member and displays the five
-   routing checks, workload ranking, and durable receipt;
+   presenter-key unlock and then the demo selects an eligible authoritative
+   roster member while displaying the five routing checks, workload ranking,
+   and durable receipt;
 8. Medical Coding requires accept/reject and the saved EHR history retains the
    attributed outcome; and
 9. the live receipt reflects only the products actually exercised.

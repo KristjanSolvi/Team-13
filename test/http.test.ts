@@ -1622,3 +1622,61 @@ test("demo smart routing rejects a team deadline that collides with the clinical
   assert.equal(harness.ledger.getTask(offered.taskId).state, "offered_to_team");
   assert.equal(harness.store.getTaskRoutingReceipt(offered.taskId), null);
 });
+
+test("demo smart routing leaves an offered task unchanged when nobody is eligible", async (t) => {
+  const harness = createAppHarness();
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+  const draft = harness.ledger.createDraft({
+    patientId: "synthetic-karen",
+    interactionId: "interaction-karen-1",
+    contextId: "ctx-karen",
+    origin: "agent_suggested",
+    summary: "Check blood pressure within 48 hours",
+    taskType: "demo-smart-routing-no-candidate",
+    evidenceRefs: ["encounter:sentence-42"],
+    targetTeamId: "district-nursing",
+    requiredCapabilities: ["blood-pressure"],
+    clinicalUrgency: "medium",
+    dueInMs: 48 * 60 * 60_000,
+    idempotencyKey: "demo-smart-routing-no-candidate-draft",
+    actor: { type: "agent", id: "corti" },
+  });
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "demo-smart-routing-no-candidate-approval",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "demo-smart-routing-no-candidate-publish",
+  );
+  for (const member of harness.store.listMembers("district-nursing")) {
+    harness.store.putMember({ ...member, available: false });
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(
+      `${baseUrl}/api/demo/tasks/${offered.taskId}/route-now`,
+      {
+        method: "POST",
+        headers: appHeaders("clinician-1"),
+        body: JSON.stringify({ idempotencyKey: "demo-smart-routing-no-candidate-now" }),
+      },
+    );
+    assert.equal(response.status, 409);
+    assert.equal(
+      ((await response.json()) as { error: { code: string } }).error.code,
+      "DEMO_ROUTING_INCOMPLETE",
+    );
+  }
+  assert.equal(harness.ledger.getTask(offered.taskId).state, "offered_to_team");
+  assert.equal(harness.store.getTaskRoutingReceipt(offered.taskId), null);
+});

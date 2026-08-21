@@ -52,6 +52,8 @@ function Index() {
     ehrRevision,
     refreshPatientThreads,
     loadTaskRoutingReceipt,
+    demoHostUnlocked,
+    unlockDemoHost,
     routeTaskNow,
     addNote,
     runLedgerCommand,
@@ -254,6 +256,8 @@ function Index() {
                   staff={staff}
                   teams={teams}
                   onLoadTaskRoutingReceipt={loadTaskRoutingReceipt}
+                  demoHostUnlocked={demoHostUnlocked}
+                  onUnlockDemoHost={unlockDemoHost}
                   onRouteTaskNow={routeTaskNow}
                   onRefreshPatient={refreshPatientThreads}
                   onBackToBoard={() => {

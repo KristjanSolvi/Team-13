@@ -497,11 +497,28 @@ export async function getTaskRoutingReceipt(
   );
 }
 
+export async function createDemoHostBrowserSession(
+  accessKey: string,
+  correlationId: string,
+): Promise<{ authorized: true; csrfToken: string; expiresAt: number }> {
+  return responseJson<{ authorized: true; csrfToken: string; expiresAt: number }>(
+    await fetch(integrationUrl("/api/demo/host/session"), {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(correlationId),
+        "x-demo-host-key": accessKey,
+      },
+      body: "{}",
+    }),
+  );
+}
+
 export async function routeDemoTaskNow(input: {
   taskId: string;
   actorId: string;
   idempotencyKey: string;
   correlationId: string;
+  csrfToken: string;
 }): Promise<DemoRouteNowResult> {
   return responseJson<DemoRouteNowResult>(
     await fetch(integrationUrl(`/api/demo/tasks/${encodeURIComponent(input.taskId)}/route-now`), {
@@ -509,6 +526,7 @@ export async function routeDemoTaskNow(input: {
       headers: {
         ...jsonHeaders(input.correlationId),
         "x-actor-id": input.actorId,
+        "x-demo-csrf": input.csrfToken,
       },
       body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
     }),

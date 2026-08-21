@@ -59,6 +59,8 @@ type Props = {
   staff: WardStaffOption[];
   teams: string[];
   onLoadTaskRoutingReceipt: (taskId: string) => Promise<TaskRoutingReceipt | null>;
+  demoHostUnlocked: boolean;
+  onUnlockDemoHost: (accessKey: string) => Promise<void>;
   onRouteTaskNow: (taskId: string, idempotencyKey: string) => Promise<TaskRoutingReceipt>;
   onRefreshPatient: (id: string) => Promise<void>;
   onBackToBoard: () => void;
@@ -130,6 +132,8 @@ export function PatientActivity({
   staff,
   teams,
   onLoadTaskRoutingReceipt,
+  demoHostUnlocked,
+  onUnlockDemoHost,
   onRouteTaskNow,
   onRefreshPatient,
   onBackToBoard,
@@ -397,6 +401,8 @@ export function PatientActivity({
                                 | "verified"
                             }
                             loadReceipt={onLoadTaskRoutingReceipt}
+                            presenterUnlocked={demoHostUnlocked}
+                            unlockPresenter={onUnlockDemoHost}
                             routeTaskNow={onRouteTaskNow}
                             onRouted={() => onRefreshPatient(thread.patientId)}
                           />
