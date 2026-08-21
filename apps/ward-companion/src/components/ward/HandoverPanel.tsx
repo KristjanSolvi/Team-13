@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, FileText, LoaderCircle, ShieldCheck } from "lucide-react";
+import { Check, Copy, Download, FileText, LoaderCircle, ShieldCheck } from "lucide-react";
 import type { Patient } from "@/data/ward";
 import {
   demoActors,
@@ -25,6 +25,26 @@ function errorMessage(error: unknown): string {
     return `${error.message}${error.retryable ? " · safe to retry" : ""}`;
   }
   return "The handover could not be generated; nothing was saved.";
+}
+
+function handoverDocument(patient: Patient, handover: GroundedHandover): string {
+  if (handover.rendered == null) return "";
+  return [
+    "FLUENCE PATIENT HANDOVER",
+    `Patient: ${patient.name}`,
+    "Status: Saved draft — not sent automatically",
+    `Handover ID: ${handover.handoverId}`,
+    "",
+    handover.rendered.title,
+    ...handover.rendered.sections
+      .filter((section) => section.statements.length > 0)
+      .flatMap((section) => [
+        `\n${section.heading}`,
+        ...section.statements.map((statement) => `- ${statement.statement}`),
+      ]),
+    "",
+    `Source snapshot: ${handover.sourceSnapshotHash}`,
+  ].join("\n");
 }
 
 /**
@@ -86,22 +106,32 @@ export function HandoverPanel({ patient }: Props) {
 
   const copyForHandover = async () => {
     if (handover?.rendered == null) return;
-    const text = [
-      handover.rendered.title,
-      ...handover.rendered.sections
-        .filter((section) => section.statements.length > 0)
-        .flatMap((section) => [
-          `\n${section.heading}`,
-          ...section.statements.map((statement) => `- ${statement.statement}`),
-        ]),
-    ].join("\n");
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(handoverDocument(patient, handover));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_500);
     } catch {
       setError("The draft is saved, but it could not be copied from this browser.");
     }
+  };
+
+  const downloadHandover = () => {
+    if (handover?.rendered == null) return;
+    const blob = new Blob([handoverDocument(patient, handover)], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const patientSlug = patient.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    link.href = url;
+    link.download = `fluence-handover-${patientSlug || patient.id}.txt`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -192,14 +222,23 @@ export function HandoverPanel({ patient }: Props) {
               receiving team&apos;s existing handover channel; no notification is sent
               automatically.
             </p>
-            <button
-              type="button"
-              onClick={() => void copyForHandover()}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-pending/25 bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground"
-            >
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-              {copied ? "Copied" : "Copy for handover"}
-            </button>
+            <div className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                onClick={() => void copyForHandover()}
+                className="flex items-center gap-1.5 rounded-md border border-pending/25 bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground"
+              >
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadHandover}
+                className="flex items-center gap-1.5 rounded-md border border-pending/25 bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground"
+              >
+                <Download className="size-3.5" /> Download .txt
+              </button>
+            </div>
           </div>
         </div>
       )}
