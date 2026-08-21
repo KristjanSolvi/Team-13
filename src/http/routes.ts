@@ -11,6 +11,7 @@ import { ZodError, z } from "zod";
 import { sourceRevisionReasons } from "../domain/change-radar.js";
 import { demoScenarios } from "../demo/types.js";
 import { DomainError } from "../domain/errors.js";
+import { isHandoverTaskActive } from "../domain/handover.js";
 import type { CorrectDraftPatch } from "../services/ledger-service.js";
 import type { AppDependencies } from "./app.js";
 import { requireActor, requireAppAuth } from "./auth.js";
@@ -729,7 +730,7 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
       response.json({
         tasks: dependencies.store.listPatientTasks(
           pathParam(request, "patientId"),
-        ),
+        ).filter(isHandoverTaskActive),
       });
     }),
   );

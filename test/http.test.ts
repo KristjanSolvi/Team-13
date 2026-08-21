@@ -1102,6 +1102,60 @@ test("patient lists, approval commands, and errors match the integration gateway
   });
 });
 
+test("patient task list omits terminal work whose closed thread is absent from the active list", async (t) => {
+  const harness = createAppHarness();
+  const draft = harness.ledger.createKarenDraft("ctx-karen", "terminal-list-draft");
+  const approval = harness.ledger.approveDraft(
+    draft.taskId,
+    draft.version,
+    "clinician-1",
+    "app_one_tap",
+    "terminal-list-approve",
+  );
+  const offered = harness.ledger.publishDraft(
+    draft.taskId,
+    approval.proof,
+    draft.version,
+    "terminal-list-publish",
+  );
+  const accepted = harness.ledger.acceptTask(
+    offered.taskId,
+    offered.version,
+    "nurse-a",
+    "terminal-list-accept",
+  );
+  const completed = harness.ledger.completeTask(
+    accepted.taskId,
+    accepted.version,
+    "nurse-a",
+    "record:terminal-list-outcome",
+  );
+  harness.ledger.verifyTask(
+    completed.taskId,
+    completed.version,
+    "record:terminal-list-outcome",
+    "downstream:terminal-list",
+  );
+
+  const { server, baseUrl } = await listen(harness.app);
+  t.after(async () => {
+    await close(server);
+    harness.store.close();
+  });
+
+  const threads = await fetch(`${baseUrl}/api/patients/synthetic-karen/threads`, {
+    headers: appHeaders(),
+  });
+  const tasks = await fetch(`${baseUrl}/api/patients/synthetic-karen/tasks`, {
+    headers: appHeaders(),
+  });
+
+  assert.equal(threads.status, 200);
+  assert.equal(tasks.status, 200);
+  assert.deepEqual(await threads.json(), { threads: [] });
+  assert.deepEqual(await tasks.json(), { tasks: [] });
+});
+
 test("external readback verification requires a downstream actor and replays exactly", async (t) => {
   const harness = createAppHarness();
   const draft = harness.ledger.createKarenDraft(
