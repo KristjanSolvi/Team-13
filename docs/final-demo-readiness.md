@@ -15,6 +15,28 @@ not a substitute for the live preflight.
 | Dictation | Lets the clinician correct task routing by voice, with typed fallback and a preview before mutation | Explicit task correction step and activity receipt |
 | Medical Coding | Returns evidence-linked codes/candidates for an explicit accept/reject review | Record closure, persisted EHR version, and activity receipt |
 
+## UI wiring map
+
+The live demo path has one visible surface for every qualifying Corti product
+and each authoritative workflow boundary:
+
+| Runtime capability | UI surface |
+| --- | --- |
+| Ambient, FactsR, transcript review and task-agent investigation | Activity → live Corti strip |
+| Clinician task approval and the authoritative ledger lifecycle | Activity → expanded backend task |
+| Dictation correction with preview-before-mutation | Expanded backend task → correction panel |
+| Grounded handover Agentic/MCP run plus Text Generation | Agent and record tools → grounded handover |
+| Source-revision dependencies | Agent and record tools → Change Radar |
+| Text Generation, Medical Coding, EHR versioning and explicit filing | Nervecentre → Notes → record closure |
+| Ward-meeting Agentic reconciliation and audience assignment | Fluence → Demo Studio |
+| Pipeline, Agentic, profile, EHR and downstream reachability | Agent and record tools → system wiring |
+
+The ward roster is synthetic. Every displayed patient is seeded into the
+patient-scoped Agentic record and profile services, while only Karen's task
+list replaces the local presentation fixtures with authoritative ledger work.
+This keeps the visual scenario rich without allowing fixture tasks to
+masquerade as backend state.
+
 The activity receipt is intentionally event-backed. A product remains **Not
 run** until this browser sees a real SDK event or API result. It stores only
 product, safe action label, status, time, and optional credits; no clinical

@@ -1,6 +1,6 @@
-import { ArrowRight, GitBranch, Radar, ShieldAlert } from "lucide-react";
+import { ArrowRight, GitBranch, Radar, RefreshCw, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import type { Patient, Thread } from "@/data/ward";
+import type { AuthoritativeSyncState, Patient, Thread } from "@/data/ward";
 import {
   type ChangeImpact,
   FollowThroughApiError,
@@ -12,6 +12,7 @@ type Props = {
   patient: Patient;
   threads: Thread[];
   impacts: ChangeImpact[] | null;
+  syncState: AuthoritativeSyncState;
   onRefresh: () => Promise<void>;
 };
 
@@ -22,10 +23,13 @@ const reasonLabels: Record<ChangeImpact["reason"], string> = {
   other: "Source revised",
 };
 
-export function ChangeRadar({ patient, threads, impacts, onRefresh }: Props) {
+export function ChangeRadar({ patient, threads, impacts, syncState, onRefresh }: Props) {
   const [simulating, setSimulating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const impactCount = impacts?.length ?? 0;
+  const waiting = syncState === "idle" || syncState === "syncing";
+  const unavailable = syncState === "unavailable";
   const canSimulate =
     impacts !== null &&
     patient.pipelinePatientId === "synthetic-karen" &&
@@ -54,6 +58,16 @@ export function ChangeRadar({ patient, threads, impacts, onRefresh }: Props) {
     }
   };
 
+  const retry = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <section
       className={`rounded-xl border px-4 py-3 ${
@@ -78,23 +92,37 @@ export function ChangeRadar({ patient, threads, impacts, onRefresh }: Props) {
                 Change Radar
               </h3>
               <span className="rounded-full border border-current/15 px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
-                {impacts === null
-                  ? "Awaiting sync"
-                  : impactCount > 0
-                    ? `${impactCount} review required`
-                    : "No changes detected"}
+                {unavailable
+                  ? "Sync unavailable"
+                  : waiting
+                    ? "Syncing"
+                    : impactCount > 0
+                      ? `${impactCount} review required`
+                      : "No changes detected"}
               </span>
             </div>
             <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-              {impacts === null
-                ? "Waiting for the authoritative service before reporting source status."
-                : impactCount > 0
-                  ? "Evidence changed after downstream work was created. Nothing was altered automatically."
-                  : "Watching linked evidence for changes that could affect tracked work."}
+              {unavailable
+                ? "The authoritative ledger could not be reached. Local work is unchanged; retry when services recover."
+                : waiting
+                  ? "Reading source versions and linked work from the authoritative ledger…"
+                  : impactCount > 0
+                    ? "Evidence changed after downstream work was created. Nothing was altered automatically."
+                    : "Watching linked evidence for changes that could affect tracked work."}
             </p>
           </div>
         </div>
-        {canSimulate && (
+        {unavailable ? (
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => void retry()}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-panel px-2.5 py-1.5 text-[11.5px] font-medium text-foreground hover:bg-background disabled:opacity-45"
+          >
+            {refreshing ? <Spinner className="size-3" /> : <RefreshCw className="size-3" />}
+            {refreshing ? "Retrying…" : "Retry sync"}
+          </button>
+        ) : canSimulate ? (
           <button
             type="button"
             disabled={simulating}
@@ -104,7 +132,7 @@ export function ChangeRadar({ patient, threads, impacts, onRefresh }: Props) {
             {simulating ? <Spinner className="size-3" /> : <GitBranch className="size-3" />}
             {simulating ? "Revising…" : "Run demo"}
           </button>
-        )}
+        ) : null}
       </div>
 
       {error !== null && (

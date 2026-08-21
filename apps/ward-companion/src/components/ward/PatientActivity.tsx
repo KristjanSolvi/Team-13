@@ -14,7 +14,13 @@ import {
   Users,
   UserPlus,
 } from "lucide-react";
-import type { NewTaskOptions, Thread, ThreadStatus, Urgency } from "@/data/ward";
+import type {
+  AuthoritativeSyncState,
+  NewTaskOptions,
+  Thread,
+  ThreadStatus,
+  Urgency,
+} from "@/data/ward";
 import { patients, statusDotClass, statusLabels, urgencyLabels } from "@/data/ward";
 import type { WardStaffOption } from "@/data/demo-staff";
 import type { ChangeImpact, WardTaskCommand } from "@/lib/follow-through-api";
@@ -22,12 +28,14 @@ import { ChangeRadar } from "./ChangeRadar";
 import { HandoverPanel } from "./HandoverPanel";
 import { LiveStrip } from "./LiveStrip";
 import { Spinner } from "./Loading";
+import { SystemConnectionPanel } from "./SystemConnectionPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 import { usePendingAction } from "./useLoading";
 
 type Props = {
   threads: Thread[];
   changeImpacts: ChangeImpact[] | null;
+  authoritativeSync: AuthoritativeSyncState;
   patientId: string;
   scopeId: string;
   onScopeChange: (id: string) => void;
@@ -96,6 +104,7 @@ const ledgerCommandMeta: Record<
 export function PatientActivity({
   threads,
   changeImpacts,
+  authoritativeSync,
   patientId,
   scopeId,
   onScopeChange,
@@ -667,11 +676,13 @@ export function PatientActivity({
             Agent and record tools
           </summary>
           <div className="mt-3 space-y-3">
+            <SystemConnectionPanel />
             <HandoverPanel patient={patient} />
             <ChangeRadar
               patient={patient}
               threads={scoped}
               impacts={changeImpacts}
+              syncState={authoritativeSync}
               onRefresh={() => onRefreshPatient(patient.id)}
             />
           </div>

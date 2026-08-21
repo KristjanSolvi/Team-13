@@ -66,7 +66,12 @@ export type Thread = {
 export type Patient = {
   id: string;
   pipelinePatientId: string;
+  /** Authoritative task ledger replaces local task fixtures for this patient. */
   backendLinked?: boolean;
+  /** Patient exists in the patient-scoped Agentic/MCP record store. */
+  agenticLinked?: boolean;
+  /** Patient has an authoritative profile and document store. */
+  ehrLinked?: boolean;
   name: string;
   bed: string;
   bay: string;
@@ -76,6 +81,8 @@ export type Patient = {
 };
 
 export type Bay = { id: string; name: string; beds: { bed: string; patientId: string | null }[] };
+
+export type AuthoritativeSyncState = "idle" | "syncing" | "ready" | "unavailable";
 
 export const bays: Bay[] = [
   {
@@ -111,6 +118,8 @@ export const patients: Patient[] = [
   {
     id: "p1",
     pipelinePatientId: "demo-arthur",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Arthur M. Pender",
     bed: "04",
     bay: "Bay A",
@@ -121,6 +130,8 @@ export const patients: Patient[] = [
   {
     id: "p2",
     pipelinePatientId: "synthetic-sarah",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Sarah Jenkins",
     bed: "05",
     bay: "Bay A",
@@ -131,6 +142,8 @@ export const patients: Patient[] = [
   {
     id: "p3",
     pipelinePatientId: "synthetic-ib",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Robert Chen",
     bed: "06",
     bay: "Bay A",
@@ -141,6 +154,8 @@ export const patients: Patient[] = [
   {
     id: "p4",
     pipelinePatientId: "synthetic-elena",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Elena Rodriguez",
     bed: "07",
     bay: "Bay B",
@@ -152,6 +167,8 @@ export const patients: Patient[] = [
     id: "p9",
     pipelinePatientId: "synthetic-karen",
     backendLinked: true,
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Karen Jensen",
     bed: "08",
     bay: "Bay B",
@@ -162,6 +179,8 @@ export const patients: Patient[] = [
   {
     id: "p5",
     pipelinePatientId: "synthetic-samir",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Samir Al-Fayed",
     bed: "09",
     bay: "Bay B",
@@ -172,6 +191,8 @@ export const patients: Patient[] = [
   {
     id: "p6",
     pipelinePatientId: "synthetic-grace",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Grace Okonkwo",
     bed: "10",
     bay: "Bay C",
@@ -182,6 +203,8 @@ export const patients: Patient[] = [
   {
     id: "p7",
     pipelinePatientId: "synthetic-tomas",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Tomas Lindqvist",
     bed: "11",
     bay: "Bay C",
@@ -192,6 +215,8 @@ export const patients: Patient[] = [
   {
     id: "p8",
     pipelinePatientId: "synthetic-ivy",
+    agenticLinked: true,
+    ehrLinked: true,
     name: "Ivy Doherty",
     bed: "12",
     bay: "Bay C",

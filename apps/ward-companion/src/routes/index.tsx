@@ -45,6 +45,7 @@ function Index() {
   const {
     threads,
     changeImpacts,
+    authoritativeSync,
     notes,
     ledgerBusy,
     ledgerErrors,
@@ -209,6 +210,7 @@ function Index() {
                 <PatientActivity
                   threads={threads}
                   changeImpacts={changeImpacts[scopeId] ?? null}
+                  authoritativeSync={authoritativeSync[scopeId] ?? "idle"}
                   patientId={ehrPatientId}
                   scopeId={scopeId}
                   onScopeChange={(id) => {

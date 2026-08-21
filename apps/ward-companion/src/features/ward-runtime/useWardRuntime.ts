@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CaseNote, DocId, NewTaskOptions, Thread, ThreadStatus } from "@/data/ward";
+import type {
+  AuthoritativeSyncState,
+  CaseNote,
+  DocId,
+  NewTaskOptions,
+  Thread,
+  ThreadStatus,
+} from "@/data/ward";
 import { initialNotes, initialThreads, patients, statusLabels } from "@/data/ward";
 import { demoStaff, demoTeams } from "@/data/demo-staff";
 import {
@@ -43,6 +50,9 @@ function stamp() {
 export function useWardRuntime() {
   const [threads, setThreads] = useState<Thread[]>(initialThreads);
   const [changeImpacts, setChangeImpacts] = useState<Record<string, ChangeImpact[]>>({});
+  const [authoritativeSync, setAuthoritativeSync] = useState<
+    Record<string, AuthoritativeSyncState>
+  >({});
   const [notes, setNotes] = useState<Record<string, CaseNote[]>>(initialNotes);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [ledgerBusy, setLedgerBusy] = useState<string | null>(null);
@@ -67,27 +77,38 @@ export function useWardRuntime() {
 
   const refreshPatientThreads = useCallback(async (uiPatientId: string) => {
     const patient = patients.find((candidate) => candidate.id === uiPatientId);
-    if (patient === undefined || patient.backendLinked !== true) return;
+    if (patient === undefined || patient.agenticLinked !== true) {
+      setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
+      return;
+    }
+    setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "syncing" }));
     try {
       const overview = await getWardCompanionOverview(
         patient.pipelinePatientId,
         crypto.randomUUID(),
       );
-      if (overview.patientId !== patient.pipelinePatientId) return;
-      const authoritative = overview.threads.map((thread) => ({
-        ...thread,
-        patientId: uiPatientId,
-      }));
-      setThreads((current) => [
-        ...current.filter((thread) => thread.patientId !== uiPatientId),
-        ...authoritative,
-      ]);
+      if (overview.patientId !== patient.pipelinePatientId) {
+        setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
+        return;
+      }
+      if (patient.backendLinked === true) {
+        const authoritative = overview.threads.map((thread) => ({
+          ...thread,
+          patientId: uiPatientId,
+        }));
+        setThreads((current) => [
+          ...current.filter((thread) => thread.patientId !== uiPatientId),
+          ...authoritative,
+        ]);
+      }
       setChangeImpacts((current) => ({
         ...current,
         [uiPatientId]: overview.changeImpacts,
       }));
+      setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "ready" }));
     } catch {
       // Retain current local/demo work when authoritative services are unavailable.
+      setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
     }
   }, []);
 
@@ -409,6 +430,7 @@ export function useWardRuntime() {
   return {
     threads,
     changeImpacts,
+    authoritativeSync,
     notes,
     ledgerBusy,
     ledgerErrors,

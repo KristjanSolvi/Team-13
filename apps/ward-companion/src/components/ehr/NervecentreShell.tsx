@@ -85,7 +85,7 @@ export function NervecentreShell({
   useEffect(() => {
     let currentRequest = true;
     setEhrDocuments([]);
-    if (current.backendLinked !== true) {
+    if (current.ehrLinked !== true) {
       setEhrConnected(false);
       return () => {
         currentRequest = false;
@@ -104,7 +104,7 @@ export function NervecentreShell({
     return () => {
       currentRequest = false;
     };
-  }, [current.backendLinked, current.pipelinePatientId, recordRefreshKey]);
+  }, [current.ehrLinked, current.pipelinePatientId, recordRefreshKey]);
 
   const handleDocumentChange = (document: ClinicalDocument) => {
     setEhrConnected(true);

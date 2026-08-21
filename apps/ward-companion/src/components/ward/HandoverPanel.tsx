@@ -19,6 +19,9 @@ function errorMessage(error: unknown): string {
     if (error.code === "REQUEST_FAILED" && error.message.includes("401")) {
       return "Handover access token missing · set INTEGRATION_API_BEARER_TOKEN for the UI dev server.";
     }
+    if (error.code === "PATIENT_NOT_FOUND") {
+      return "This patient is not present in the Agentic record store yet. Refresh after the ward roster has synchronized.";
+    }
     return `${error.message}${error.retryable ? " · safe to retry" : ""}`;
   }
   return "The handover could not be generated; nothing was saved.";
@@ -42,7 +45,7 @@ export function HandoverPanel({ patient }: Props) {
   }, [patient.id]);
 
   const generate = async () => {
-    if (busy) return;
+    if (busy || patient.agenticLinked !== true) return;
     setBusy(true);
     setError(null);
     try {
@@ -94,17 +97,25 @@ export function HandoverPanel({ patient }: Props) {
         </div>
         <button
           onClick={() => void generate()}
-          disabled={busy}
+          disabled={busy || patient.agenticLinked !== true}
           className="flex items-center gap-1.5 rounded-md bg-teal px-3 py-1.5 text-[12.5px] font-medium text-panel disabled:cursor-not-allowed disabled:opacity-45"
         >
           {busy && <LoaderCircle className="size-3.5 animate-spin" />}
           {busy
             ? "Agent gathering context…"
-            : handover === null
-              ? `Generate for ${patient.name.split(" ").slice(-1)[0]}`
-              : "Regenerate"}
+            : patient.agenticLinked !== true
+              ? "Agentic not connected"
+              : handover === null
+                ? `Generate for ${patient.name.split(" ").slice(-1)[0]}`
+                : "Regenerate"}
         </button>
       </header>
+
+      {patient.agenticLinked !== true && (
+        <p className="px-4 py-2.5 text-[12px] text-muted-foreground">
+          Patient-scoped Agentic tools are unavailable for this roster entry; no request was sent.
+        </p>
+      )}
 
       {error !== null && (
         <p role="alert" className="px-4 py-2.5 text-[12px] text-escalated-strong">
