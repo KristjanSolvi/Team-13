@@ -1,4 +1,5 @@
 import type {
+  AmbientFact,
   AmbientSession,
   CodingResult,
   CodingSystem,
@@ -356,6 +357,7 @@ export async function generateCandidates(input: {
   interactionId: string;
   correlationId: string;
   segments: TranscriptSegment[];
+  facts: AmbientFact[];
 }): Promise<CandidateGenerationResult> {
   return responseJson<CandidateGenerationResult>(
     await fetch(integrationUrl("/api/corti/candidates/generate"), {
@@ -365,6 +367,7 @@ export async function generateCandidates(input: {
         patientId: input.patientId,
         interactionId: input.interactionId,
         segments: input.segments,
+        facts: input.facts,
       }),
     }),
   );

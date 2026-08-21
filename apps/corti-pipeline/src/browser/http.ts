@@ -1,4 +1,5 @@
 import type {
+  AmbientFact,
   AmbientSession,
   CodingResult,
   CodingSystem,
@@ -88,6 +89,7 @@ export async function generateCandidates(
     patientId: string;
     interactionId: string;
     segments: readonly TranscriptSegment[];
+    facts?: readonly AmbientFact[];
   },
   correlationId: string,
 ): Promise<CandidateGenerationResponse> {

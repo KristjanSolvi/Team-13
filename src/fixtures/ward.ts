@@ -1,6 +1,93 @@
 import type { SqliteStore } from "../infra/store.js";
 import { KAREN_PATIENT_ID, seedKaren } from "./karen.js";
 
+const wardOperationalTeams = [
+  {
+    team: {
+      teamId: "ward-medical",
+      name: "Ward Medical Team",
+      capabilities: ["medication-review"],
+    },
+    members: [
+      {
+        memberId: "ward-doctor-a",
+        teamId: "ward-medical",
+        capabilities: ["medication-review"],
+        onShift: true,
+        available: true,
+        openTaskCount: 0,
+        capacity: 6,
+        tieBreakKey: "a",
+      },
+      {
+        memberId: "ward-doctor-b",
+        teamId: "ward-medical",
+        capabilities: ["medication-review"],
+        onShift: true,
+        available: true,
+        openTaskCount: 1,
+        capacity: 6,
+        tieBreakKey: "b",
+      },
+    ],
+  },
+  {
+    team: {
+      teamId: "ward-nursing",
+      name: "Ward Nursing Team",
+      capabilities: ["ward-care"],
+    },
+    members: [
+      {
+        memberId: "ward-nurse-a",
+        teamId: "ward-nursing",
+        capabilities: ["ward-care"],
+        onShift: true,
+        available: true,
+        openTaskCount: 1,
+        capacity: 8,
+        tieBreakKey: "a",
+      },
+      {
+        memberId: "ward-nurse-b",
+        teamId: "ward-nursing",
+        capabilities: ["ward-care"],
+        onShift: true,
+        available: true,
+        openTaskCount: 2,
+        capacity: 8,
+        tieBreakKey: "b",
+      },
+    ],
+  },
+] as const;
+
+function seedWardOperationalTeams(store: SqliteStore): void {
+  for (const { team, members } of wardOperationalTeams) {
+    const existingTeam = store
+      .listTeams()
+      .find((candidate) => candidate.teamId === team.teamId);
+    if (existingTeam === undefined) {
+      store.putTeam({ ...team, capabilities: [...team.capabilities] });
+    } else if (
+      existingTeam.name !== team.name ||
+      existingTeam.capabilities.length !== team.capabilities.length ||
+      !team.capabilities.every((capability) =>
+        existingTeam.capabilities.includes(capability),
+      )
+    ) {
+      continue;
+    }
+    const existingMemberIds = new Set(
+      store.listMembers(team.teamId).map((member) => member.memberId),
+    );
+    for (const member of members) {
+      if (existingMemberIds.has(member.memberId)) continue;
+      store.putMember({ ...member, capabilities: [...member.capabilities] });
+    }
+  }
+}
+
 type WardPatientFixture = {
   patientId: string;
   displayName: string;
@@ -159,6 +246,7 @@ export const syntheticWardPatients: readonly WardPatientFixture[] = [
 
 /** Seed every synthetic ward identity exactly once, including Karen. */
 export function seedSyntheticWard(store: SqliteStore, now: string): void {
+  seedWardOperationalTeams(store);
   if (!store.getPatient(KAREN_PATIENT_ID)) {
     seedKaren(store, now);
   }

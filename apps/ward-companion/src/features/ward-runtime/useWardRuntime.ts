@@ -27,7 +27,7 @@ import { recordCortiActivity } from "@/lib/corti-activity";
 const ledgerCommandNotes: Record<WardTaskCommand, string> = {
   approve: "approved and sent to the receiving team.",
   correct: "corrected before approval.",
-  dismiss: "dismissed as already covered.",
+  dismiss: "removed during clinician review as not needed.",
   reopen: "reopened with a fresh deadline.",
   accept: "accepted by the receiving team.",
   decline: "declined by the receiving team.",
@@ -55,6 +55,19 @@ const patientEventTypes = [
   "meeting.reconciliation_saved",
 ] as const;
 const demoHostSessionStorageKey = "fluence.demo-host-session.v1";
+
+function mergeAuthoritativeThreads(
+  current: Thread[],
+  uiPatientId: string,
+  authoritative: Thread[],
+  replaceLocalFixtures: boolean,
+): Thread[] {
+  const retained = current.filter(
+    (thread) =>
+      thread.patientId !== uiPatientId || (!replaceLocalFixtures && thread.backend === undefined),
+  );
+  return [...retained, ...authoritative];
+}
 
 function stamp() {
   return new Date().toLocaleTimeString([], {
@@ -139,16 +152,18 @@ export function useWardRuntime() {
         setAuthoritativeSync((current) => ({ ...current, [uiPatientId]: "unavailable" }));
         return;
       }
-      if (patient.backendLinked === true) {
-        const authoritative = overview.threads.map((thread) => ({
-          ...thread,
-          patientId: uiPatientId,
-        }));
-        setThreads((current) => [
-          ...current.filter((thread) => thread.patientId !== uiPatientId),
-          ...authoritative,
-        ]);
-      }
+      const authoritative = overview.threads.map((thread) => ({
+        ...thread,
+        patientId: uiPatientId,
+      }));
+      setThreads((current) =>
+        mergeAuthoritativeThreads(
+          current,
+          uiPatientId,
+          authoritative,
+          patient.backendLinked === true,
+        ),
+      );
       setChangeImpacts((current) => ({
         ...current,
         [uiPatientId]: overview.changeImpacts,
@@ -285,7 +300,7 @@ export function useWardRuntime() {
         command === "approve"
           ? { approvalChannel: "app_one_tap" }
           : command === "dismiss"
-            ? { reason: "Dismissed on the ward round as already covered." }
+            ? { reason: "Removed during clinician review as not needed." }
             : command === "reopen"
               ? { dueInMs: 24 * 3_600_000 }
               : command === "complete" || command === "verify"

@@ -82,8 +82,8 @@ const ledgerCommandMeta: Record<
   },
   correct: { label: "Correct", Icon: Check, tone: "border border-border bg-panel" },
   dismiss: {
-    label: "Dismiss · already covered",
-    Icon: CircleSlash,
+    label: "Remove task",
+    Icon: Trash2,
     tone: "border border-border bg-panel text-muted-foreground",
   },
   reopen: {
@@ -197,7 +197,22 @@ export function PatientActivity({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-        <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+        <LiveStrip
+          patient={patient}
+          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+          onReviewTask={(taskId) => {
+            void onRefreshPatient(patient.id).then(() => {
+              onSelect(taskId);
+              window.setTimeout(
+                () =>
+                  document
+                    .getElementById(`task-${taskId}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+                0,
+              );
+            });
+          }}
+        />
 
         <HandoverPanel patient={patient} />
 
@@ -304,7 +319,7 @@ export function PatientActivity({
               const assignmentCandidates = thread.candidates.length > 0 ? thread.candidates : staff;
               const last = thread.activity[thread.activity.length - 1];
               return (
-                <li key={thread.id} className="relative pl-6">
+                <li id={`task-${thread.id}`} key={thread.id} className="relative pl-6">
                   <span
                     className={`absolute left-0 top-[15px] size-[11px] rounded-full ring-4 ring-panel ${statusDotClass[thread.status]}`}
                   />
@@ -436,7 +451,11 @@ export function PatientActivity({
                                   key={command}
                                   type="button"
                                   disabled={ledgerBusy !== null}
-                                  onClick={() => onLedgerCommand(thread, command)}
+                                  onClick={() =>
+                                    command === "dismiss"
+                                      ? setConfirmRemove(thread.id)
+                                      : onLedgerCommand(thread, command)
+                                  }
                                   className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium hover:opacity-85 disabled:opacity-45 ${meta.tone}`}
                                 >
                                   {busy ? (
@@ -450,6 +469,34 @@ export function PatientActivity({
                             })}
                         </div>
                       )}
+
+                      {!done &&
+                        thread.backend !== undefined &&
+                        confirmRemove === thread.id &&
+                        thread.backend.availableCommands.includes("dismiss") && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">
+                            <span>Remove this draft task from Activity?</span>
+                            <span className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmRemove(null);
+                                  onLedgerCommand(thread, "dismiss");
+                                }}
+                                className="rounded-md bg-escalated-strong px-2.5 py-1 font-medium text-white"
+                              >
+                                Yes, remove task
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmRemove(null)}
+                                className="rounded-md px-2.5 py-1 font-medium text-muted-foreground"
+                              >
+                                Keep task
+                              </button>
+                            </span>
+                          </div>
+                        )}
 
                       {!done && thread.backend === undefined && (
                         <div className="flex flex-wrap gap-2">

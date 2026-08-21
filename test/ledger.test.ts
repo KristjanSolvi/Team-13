@@ -4,6 +4,7 @@ import test, { type TestContext } from "node:test";
 import { DomainError } from "../src/domain/errors.js";
 import type { Member, Team } from "../src/domain/types.js";
 import { seedKaren } from "../src/fixtures/karen.js";
+import { seedSyntheticWard } from "../src/fixtures/ward.js";
 import { DemoClock } from "../src/infra/clock.js";
 import { openDatabase } from "../src/infra/database.js";
 import { SqliteStore } from "../src/infra/store.js";
@@ -97,6 +98,63 @@ test("Karen helper creates the canonical medium district-nursing draft", (t) => 
   assert.equal(task.dueBy, "2026-08-22T10:00:00.000Z");
   assert.equal(task.state, "draft");
   assert.equal(task.version, 1);
+});
+
+test("the presentation plan creates five distinct reviewable drafts", (t) => {
+  const store = new SqliteStore(openDatabase(":memory:"));
+  t.after(() => store.close());
+  seedSyntheticWard(store, NOW);
+  const ledger = new LedgerService(
+    store,
+    new DemoClock(new Date(NOW), true),
+    SECRET,
+  );
+  const plan = [
+    ["Monitor observations today", "observation-monitoring", "ward-nursing"],
+    [
+      "Start IV furosemide 80mg once a day",
+      "medication-follow-through-furosemide",
+      "ward-medical",
+    ],
+    ["Daily weight monitoring", "daily-weight-monitoring", "ward-nursing"],
+    ["Accurate fluid balance chart", "fluid-balance-monitoring", "ward-nursing"],
+    ["Order daily bloods", "daily-bloods", "ward-nursing"],
+  ] as const;
+
+  const tasks = plan.map(([summary, taskType, targetTeamId], index) => {
+    const evidenceRef = `encounter:presentation-plan-${index + 1}`;
+    store.putRecordItem({
+      itemId: `presentation-plan-${index + 1}`,
+      patientId: "synthetic-sarah",
+      itemType: "encounter-evidence",
+      text: summary,
+      sourceRef: evidenceRef,
+      recordedAt: NOW,
+    });
+    const capability = targetTeamId === "ward-medical" ? "medication-review" : "ward-care";
+    return ledger.createDraft({
+      patientId: "synthetic-sarah",
+      interactionId: "interaction-sarah-presentation",
+      contextId: "ctx-sarah-presentation",
+      origin: "agent_suggested",
+      summary,
+      taskType,
+      evidenceRefs: [evidenceRef],
+      targetTeamId,
+      requiredCapabilities: [capability],
+      clinicalUrgency: "medium",
+      dueInMs: targetTeamId === "ward-medical" ? 14_400_000 : 43_200_000,
+      idempotencyKey: `presentation-plan-${index + 1}`,
+      actor: { type: "agent", id: "corti" },
+    });
+  });
+
+  assert.equal(tasks.length, 5);
+  assert.equal(new Set(tasks.map((task) => task.taskType)).size, 5);
+  assert.deepEqual(
+    tasks.map((task) => task.state),
+    ["draft", "draft", "draft", "draft", "draft"],
+  );
 });
 
 test("draft, approval, publication, and acceptance replay without duplicate events", (t) => {

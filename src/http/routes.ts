@@ -209,10 +209,28 @@ export function mountRoutes(app: Router, dependencies: AppDependencies): void {
             evidenceRefs: body.evidenceRefs,
             idempotencyKey: body.idempotencyKey,
           });
+          const draftCommand = dependencies.store.getProcessedCommand(
+            "create-draft",
+            body.idempotencyKey,
+          );
+          const possibleDraftId =
+            typeof draftCommand?.taskId === "string"
+              ? draftCommand.taskId
+              : null;
+          const possibleDraft =
+            possibleDraftId === null
+              ? null
+              : dependencies.store.getTask(possibleDraftId);
+          const draftTaskId =
+            possibleDraft?.patientId === body.patientId &&
+            possibleDraft.state === "draft"
+              ? possibleDraft.taskId
+              : null;
           const agentResult = {
             signalEventId: result.signalEventId,
             contextId: agent.contextId,
             cortiTaskId: agent.taskId,
+            ...(draftTaskId === null ? {} : { draftTaskId }),
             agentState: agent.state,
             ...(agent.credits === undefined ? {} : { credits: agent.credits }),
           };
