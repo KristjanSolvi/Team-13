@@ -35,6 +35,14 @@ export interface RoutingDecision {
   candidates: RoutingCandidateEvaluation[];
 }
 
+export interface RoutingOptions {
+  includeDemoAudience?: boolean;
+}
+
+export function isDemoAudienceMember(memberId: string): boolean {
+  return memberId.startsWith("audience:");
+}
+
 function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
@@ -86,11 +94,21 @@ function evaluateCandidate(
   };
 }
 
-export function explainRouting(task: Task, members: Member[]): RoutingDecision {
-  const evaluated = members.map((member) => ({
-    member,
-    evaluation: evaluateCandidate(task, member),
-  }));
+export function explainRouting(
+  task: Task,
+  members: Member[],
+  options: RoutingOptions = {},
+): RoutingDecision {
+  const evaluated = members
+    .filter(
+      (member) =>
+        options.includeDemoAudience === true ||
+        !isDemoAudienceMember(member.memberId),
+    )
+    .map((member) => ({
+      member,
+      evaluation: evaluateCandidate(task, member),
+    }));
   const eligible = evaluated
     .filter(({ evaluation }) => evaluation.eligible)
     .toSorted(compareEligible);
@@ -117,8 +135,16 @@ export function explainRouting(task: Task, members: Member[]): RoutingDecision {
   };
 }
 
-export function chooseMember(task: Task, members: Member[]): Member | null {
-  const selectedMemberId = explainRouting(task, members).selectedMemberId;
+export function chooseMember(
+  task: Task,
+  members: Member[],
+  options: RoutingOptions = {},
+): Member | null {
+  const selectedMemberId = explainRouting(
+    task,
+    members,
+    options,
+  ).selectedMemberId;
   return (
     members.find((member) => member.memberId === selectedMemberId) ?? null
   );

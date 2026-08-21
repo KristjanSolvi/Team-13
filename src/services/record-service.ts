@@ -9,6 +9,7 @@ import {
 } from "../domain/change-radar.js";
 import { DomainError } from "../domain/errors.js";
 import { isHandoverTaskActive } from "../domain/handover.js";
+import { isDemoAudienceMember } from "../domain/routing.js";
 import type { Task, Team, Thread } from "../domain/types.js";
 import type { PatientRecordItem, SqliteStore } from "../infra/store.js";
 
@@ -304,7 +305,9 @@ export class RecordService {
         ),
       )
       .map((team) => {
-        const members = this.store.listMembers(team.teamId);
+        const members = this.store
+          .listMembers(team.teamId)
+          .filter((member) => !isDemoAudienceMember(member.memberId));
         return {
           ...team,
           availability: {

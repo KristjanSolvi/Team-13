@@ -314,7 +314,12 @@ export class DemoAudienceService {
             : undefined;
         })
         .filter((member) => member !== undefined);
-      const routingDecision = explainRouting(task, members);
+      // Audience members are deliberately excluded from normal ward routing.
+      // This explicit, clinician-chosen group is the only routing path that
+      // opts them in, and the durable receipt records that scoped decision.
+      const routingDecision = explainRouting(task, members, {
+        includeDemoAudience: true,
+      });
       const selected = members.find(
         (member) => member.memberId === routingDecision.selectedMemberId,
       );

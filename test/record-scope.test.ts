@@ -119,7 +119,11 @@ test("open threads are patient scoped and exclude verified and dismissed threads
   };
   store.putThread(base);
   store.putThread({ ...base, threadId: "thread-verified", state: "verified" });
-  store.putThread({ ...base, threadId: "thread-dismissed", state: "dismissed" });
+  store.putThread({
+    ...base,
+    threadId: "thread-dismissed",
+    state: "dismissed",
+  });
 
   assert.deepEqual(
     records
@@ -180,6 +184,16 @@ test("eligible teams require every capability and report exact availability", (t
       capacity: 2,
       tieBreakKey: "c",
     },
+    {
+      memberId: "audience:demo-participant",
+      teamId: mobileTeam.teamId,
+      capabilities: [...mobileTeam.capabilities],
+      onShift: true,
+      available: true,
+      openTaskCount: 0,
+      capacity: 2,
+      tieBreakKey: "0",
+    },
   ];
   for (const member of members) store.putMember(member);
 
@@ -198,7 +212,10 @@ test("eligible teams require every capability and report exact availability", (t
   assert.deepEqual(
     records
       .listEligibleTeams(CONTEXT_ID, PATIENT_ID, ["blood-pressure"])
-      .map((team) => ({ teamId: team.teamId, availability: team.availability })),
+      .map((team) => ({
+        teamId: team.teamId,
+        availability: team.availability,
+      })),
     [
       {
         teamId: "district-nursing",

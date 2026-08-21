@@ -265,6 +265,27 @@ test("stable routing selects nurse-a while excluding an off-shift member", () =>
   assert.equal(chooseMember(task, members)?.memberId, "nurse-a");
 });
 
+test("normal routing excludes demo audience members unless explicitly opted in", () => {
+  const audience = createMember({
+    memberId: "audience:participant-1",
+    openTaskCount: 0,
+    tieBreakKey: "0",
+  });
+  const nurse = createMember({
+    memberId: "nurse-a",
+    openTaskCount: 2,
+    tieBreakKey: "z",
+  });
+
+  assert.equal(chooseMember(createTask(), [audience, nurse]), nurse);
+  assert.equal(
+    chooseMember(createTask(), [audience, nurse], {
+      includeDemoAudience: true,
+    }),
+    audience,
+  );
+});
+
 test("routing excludes every kind of ineligible member", () => {
   const task = createTask({
     requiredCapabilities: ["blood-pressure", "home-visit"],
