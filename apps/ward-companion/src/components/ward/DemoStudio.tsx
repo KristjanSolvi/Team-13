@@ -1,22 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Check,
   Copy,
   FileCheck2,
   LoaderCircle,
-  Mic,
   QrCode,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import type { Thread } from "@/data/ward";
-import { useCortiActivity } from "@/hooks/use-corti-activity";
-import { cortiProductDefinitions, type CortiProductId } from "@/lib/corti-activity";
 import { RoutingReceipt } from "./RoutingReceipt";
 import {
   assignDemoTask,
@@ -60,56 +56,6 @@ const scenarioOptions: Array<{
   },
 ];
 
-const ensembleStages: Array<{
-  number: string;
-  title: string;
-  detail: string;
-  products: CortiProductId[];
-}> = [
-  {
-    number: "01",
-    title: "Hear",
-    detail: "Ambient captures the conversation; FactsR structures what matters.",
-    products: ["ambient", "factsr"],
-  },
-  {
-    number: "02",
-    title: "Interpret",
-    detail: "Text Generation reviews wording and extracts grounded follow-through.",
-    products: ["text-generation"],
-  },
-  {
-    number: "03",
-    title: "Check & route",
-    detail: "Agentic reads patient context and open work through scoped MCP tools.",
-    products: ["agentic"],
-  },
-  {
-    number: "04",
-    title: "Close safely",
-    detail: "Dictation corrects; Medical Coding and the EHR retain explicit decisions.",
-    products: ["dictation", "medical-coding"],
-  },
-];
-
-const valuePromises: Array<{
-  Icon: ComponentType<{ className?: string }>;
-  title: string;
-  detail: string;
-}> = [
-  { Icon: Mic, title: "Say it once", detail: "Ambient captures the clinical conversation live." },
-  {
-    Icon: ShieldCheck,
-    title: "Nothing silent",
-    detail: "Uncertain wording and agent suggestions require review.",
-  },
-  {
-    Icon: FileCheck2,
-    title: "Prove closure",
-    detail: "Ownership, completion, verification, and record history remain attributable.",
-  },
-];
-
 function displayError(error: unknown): string {
   if (error instanceof FollowThroughApiError) {
     return `${error.message}${error.retryable ? " · safe to retry" : ""}`;
@@ -133,7 +79,6 @@ function teamLabel(teamId: string): string {
 }
 
 export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) {
-  const activity = useCortiActivity();
   const [scenario, setScenario] = useState<DemoScenario>("discharge_coordination");
   const [groupSize, setGroupSize] = useState<1 | 2>(2);
   const [session, setSession] = useState<DemoSession | null>(null);
@@ -160,9 +105,6 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
     session === null || typeof window === "undefined"
       ? ""
       : new URL(session.joinPath, window.location.origin).toString();
-  const evidencedProducts = cortiProductDefinitions.filter(
-    (product) => activity[product.id] !== undefined,
-  ).length;
   const latestAssignment = session?.assignments.at(-1) ?? null;
 
   const refreshSession = useCallback(
@@ -274,67 +216,11 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
 
   return (
     <div className="h-full overflow-y-auto px-5 py-4">
-      <section className="overflow-hidden rounded-2xl border border-border bg-panel">
-        <div className="border-b border-border bg-gradient-to-br from-teal/10 via-panel to-tracking-soft/45 px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="max-w-xl">
-              <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-teal">
-                <Sparkles className="size-3.5" /> Live demo studio
-              </p>
-              <h2 className="mt-1 text-[19px] font-medium tracking-tight text-foreground">
-                A spoken promise becomes verified follow-through
-              </h2>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                The differentiator is the ensemble: Corti captures, interprets, reasons over scoped
-                context, and helps close the loop—without removing clinician control.
-              </p>
-            </div>
-            <span className="rounded-full border border-teal/20 bg-panel/70 px-3 py-1.5 text-[11px] font-medium text-foreground">
-              {evidencedProducts}/6 Corti products evidenced live
-            </span>
-          </div>
-        </div>
-
-        <ol className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
-          {ensembleStages.map((stage) => {
-            const completed = stage.products.filter(
-              (product) => activity[product]?.status === "completed",
-            ).length;
-            const active = stage.products.some((product) => activity[product]?.status === "active");
-            return (
-              <li key={stage.number} className="bg-panel px-3.5 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
-                    {stage.number}
-                  </span>
-                  {completed === stage.products.length ? (
-                    <Check className="size-3.5 text-verified-strong" aria-label="Evidenced" />
-                  ) : active ? (
-                    <span
-                      className="size-2 animate-pulse rounded-full bg-teal"
-                      aria-label="Active"
-                    />
-                  ) : (
-                    <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                      waiting
-                    </span>
-                  )}
-                </div>
-                <h3 className="mt-1 text-[13px] font-medium text-foreground">{stage.title}</h3>
-                <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
-                  {stage.detail}
-                </p>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <section className="mt-4 rounded-2xl border border-border bg-panel">
+      <section className="rounded-2xl border border-border bg-panel">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-3.5">
           <div>
             <h2 className="flex items-center gap-2 text-[14px] font-medium text-foreground">
-              <Users className="size-4 text-teal" /> Audience assignment
+              <Users className="size-4 text-teal" /> Live audience interaction
             </h2>
             <p className="mt-0.5 max-w-xl text-[11.5px] leading-relaxed text-muted-foreground">
               Guests scan once, enter solo or duo groups, then one participant receives an actual
@@ -625,18 +511,6 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
             </button>
           </footer>
         )}
-      </section>
-
-      <section className="mt-4 grid gap-2 sm:grid-cols-3">
-        {valuePromises.map(({ Icon, title, detail }) => {
-          return (
-            <div key={title} className="rounded-xl border border-border bg-panel px-3.5 py-3">
-              <Icon className="size-4 text-teal" />
-              <h3 className="mt-1.5 text-[12px] font-medium text-foreground">{title}</h3>
-              <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">{detail}</p>
-            </div>
-          );
-        })}
       </section>
     </div>
   );
