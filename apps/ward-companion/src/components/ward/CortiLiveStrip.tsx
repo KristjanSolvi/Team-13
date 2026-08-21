@@ -796,11 +796,6 @@ export function CortiLiveStrip({ patient, onAuthoritativeChange, onMoveToDocumen
           ))}
         </div>
       )}
-
-      <footer className="border-t border-border px-4 py-2.5 text-[11.5px] text-muted-foreground">
-        Ambient evidence may suggest a candidate. Only an attributed clinician approval can create
-        tracked work.
-      </footer>
     </section>
   );
 }
