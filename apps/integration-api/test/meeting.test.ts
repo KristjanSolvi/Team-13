@@ -353,4 +353,65 @@ describe("public ward meeting lifecycle", () => {
       },
     );
   });
+
+  it("resumes reconciliation when a close replay observes the segment already reconciling", async () => {
+    const { agentic, app } = harness();
+    vi.mocked(agentic.closeMeetingSegment).mockResolvedValueOnce({
+      meeting: {
+        meetingId: MEETING_ID,
+        wardId: "ward-13",
+        interactionId: "interaction-meeting-13",
+        status: "recording",
+        startedBy: "clinician:evelyn",
+        startedAt: "2026-08-20T10:00:00.000Z",
+        completedAt: null,
+        version: 3,
+      },
+      segment: {
+        segmentId: SEGMENT_ID,
+        meetingId: MEETING_ID,
+        patientId: "synthetic-karen",
+        status: "reconciling",
+        openedBy: "clinician:evelyn",
+        openedAt: "2026-08-20T10:01:00.000Z",
+        closedAt: "2026-08-20T10:05:00.000Z",
+        version: 3,
+      },
+      replayed: true,
+    });
+    vi.mocked(agentic.reconcileMeetingSegment).mockResolvedValueOnce({
+      replayed: true,
+      reconciliation: {
+        reconciliationId: "33333333-3333-4333-8333-333333333333",
+        meetingId: MEETING_ID,
+        patientSegmentId: SEGMENT_ID,
+        patientId: "synthetic-karen",
+        status: "saved",
+        newDraftTaskIds: [],
+        carryForwardTaskRefs: [],
+        version: 2,
+      },
+      newDraftTasks: [],
+      carryForwards: [],
+    });
+
+    const response = await request(app)
+      .post(`/api/ward-meetings/${MEETING_ID}/segments/${SEGMENT_ID}/close`)
+      .set(headers)
+      .send({
+        expectedMeetingVersion: 2,
+        expectedSegmentVersion: 1,
+        idempotencyKey: "meeting-public-close",
+      })
+      .expect(200);
+
+    expect(response.body.segment.status).toBe("reconciling");
+    expect(response.body.reconciliation.status).toBe("saved");
+    expect(agentic.reconcileMeetingSegment).toHaveBeenCalledWith(
+      MEETING_ID,
+      SEGMENT_ID,
+      expect.objectContaining({ expectedSegmentVersion: 3 }),
+      expect.objectContaining({ actorId: "clinician:evelyn" }),
+    );
+  });
 });

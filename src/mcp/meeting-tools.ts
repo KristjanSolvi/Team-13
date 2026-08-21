@@ -7,9 +7,11 @@ import type { MeetingService } from "../services/meeting-service.js";
 import type { RecordService } from "../services/record-service.js";
 import { contextIdFromMeta } from "./auth.js";
 
-const evidenceReference = z
-  .string()
-  .regex(/^(encounter|record|dictation):[A-Za-z0-9._-]+$/);
+// Return a fresh schema for every nested array. Reusing one Zod instance makes
+// the MCP converter emit a nested JSON Schema $ref, which Corti's function-tool
+// validator rejects before the agent can run.
+const evidenceReference = () =>
+  z.string().regex(/^(encounter|record|dictation):[A-Za-z0-9._-]+$/);
 const reconciliationScope = {
   reconciliationId: z.string().uuid(),
   patientId: z.string().min(1).max(160),
@@ -228,7 +230,7 @@ export function createMeetingReconciliationMcp(
                 sourceQuote: z.string().min(1).max(4_000),
                 taskType: z.string().min(1).max(120),
                 evidenceRefs: z
-                  .array(evidenceReference)
+                  .array(evidenceReference())
                   .min(1)
                   .max(20)
                   .refine((refs) => new Set(refs).size === refs.length),
@@ -248,7 +250,7 @@ export function createMeetingReconciliationMcp(
               .object({
                 taskRef: z.string().regex(/^task:[0-9a-f-]{36}@[1-9][0-9]*$/),
                 reason: z.enum(["unresolved", "not_discussed", "overdue"]),
-                sourceRefs: z.array(evidenceReference).max(20),
+                sourceRefs: z.array(evidenceReference()).max(20),
               })
               .strict(),
           )

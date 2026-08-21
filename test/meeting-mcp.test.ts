@@ -124,9 +124,8 @@ function call(
 
 test("meeting MCP exposes exactly six reads and one constrained save", async (t) => {
   const { client } = await harness(t);
-  const names = (await client.listTools()).tools
-    .map(({ name }) => name)
-    .toSorted();
+  const tools = (await client.listTools()).tools;
+  const names = tools.map(({ name }) => name).toSorted();
 
   assert.deepEqual(names, [
     "get_latest_patient_handover",
@@ -138,6 +137,11 @@ test("meeting MCP exposes exactly six reads and one constrained save", async (t)
     "save_meeting_reconciliation",
   ]);
   assert.equal(names.includes("publish_team_task"), false);
+  const save = tools.find(
+    ({ name }) => name === "save_meeting_reconciliation",
+  );
+  assert.ok(save);
+  assert.doesNotMatch(JSON.stringify(save.inputSchema), /"\$ref"/);
 });
 
 test("meeting reads are patient scoped and return exact current evidence", async (t) => {

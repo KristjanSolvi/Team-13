@@ -1107,7 +1107,12 @@ export class IntegrationService {
       closed.meeting.meetingId !== meetingId ||
       closed.segment.meetingId !== meetingId ||
       closed.segment.segmentId !== segmentId ||
-      closed.segment.status !== "closed"
+      !(
+        closed.segment.status === "closed" ||
+        (closed.replayed &&
+          (closed.segment.status === "reconciling" ||
+            closed.segment.status === "reconciled"))
+      )
     ) {
       throw invalidUpstreamMeeting();
     }
