@@ -85,6 +85,74 @@ describe("mock EHR document service", () => {
     ]);
   });
 
+  it("persists and versions the clinician's medical-coding review", () => {
+    const created = service.createDocument(
+      "synthetic-karen",
+      {
+        idempotencyKey: "document-create-coding-001",
+        category: "medical",
+        title: "Ward round note",
+        content: "Paracetamol continued for pain.",
+        source: "agent",
+        codingReview: {
+          outcome: "accepted",
+          approvalId: "record-review-001",
+          system: "icd10int-outpatient",
+          selectedCode: {
+            suggestionKind: "supported",
+            code: "R52",
+            display: "Pain, unspecified",
+            evidenceStatus: "validated",
+            evidences: [{ text: "pain", start: 27, end: 31 }],
+          },
+        },
+      },
+      "clinician:marriott",
+      "corr-coding-create",
+    );
+
+    expect(created.codingReview).toMatchObject({
+      outcome: "accepted",
+      approvalId: "record-review-001",
+      selectedCode: { code: "R52", suggestionKind: "supported" },
+      reviewedAt: "2026-08-20T12:00:00.000Z",
+      reviewedBy: "clinician:marriott",
+    });
+
+    const revised = service.reviseDocument(
+      created.documentId,
+      {
+        expectedVersion: 1,
+        idempotencyKey: "document-revise-coding-001",
+        reason: "Clinician rejected coding suggestion after review",
+        changes: {
+          codingReview: {
+            outcome: "rejected",
+            approvalId: "record-review-001",
+            system: "icd10int-outpatient",
+            selectedCode: null,
+          },
+        },
+      },
+      "clinician:marriott",
+      "corr-coding-revise",
+    );
+
+    expect(revised).toMatchObject({
+      version: 2,
+      codingReview: {
+        outcome: "rejected",
+        selectedCode: null,
+        reviewedAt: "2026-08-20T12:00:01.000Z",
+        reviewedBy: "clinician:marriott",
+      },
+    });
+    expect(service.listHistory(created.documentId).map((entry) => entry.codingReview?.outcome)).toEqual([
+      "rejected",
+      "accepted",
+    ]);
+  });
+
   it("files the reviewed version idempotently and makes it immutable", () => {
     service.createDocument(
       "synthetic-karen",

@@ -7,6 +7,7 @@ import type {
 } from "@pipeline/contracts.js";
 
 import type { CaseNote, DocId } from "@/data/ward";
+import { recordCortiActivity } from "@/lib/corti-activity";
 import {
   createEhrDocument,
   fileEhrDocument,
@@ -15,6 +16,7 @@ import {
   getEhrDocumentHistory,
   predictMedicalCodes,
   reviseEhrDocument,
+  type CodingReviewInput,
   type ClinicalDocument,
   type ClinicalDocumentVersion,
 } from "@/lib/follow-through-api";
@@ -151,6 +153,21 @@ function timestamp(value: string | null): string {
   });
 }
 
+function sameCodingReview(
+  persisted: ClinicalDocument["codingReview"] | undefined,
+  proposed: CodingReviewInput | null,
+): boolean {
+  if (persisted == null || proposed === null) return persisted == null && proposed === null;
+  return (
+    JSON.stringify({
+      outcome: persisted.outcome,
+      approvalId: persisted.approvalId,
+      system: persisted.system,
+      selectedCode: persisted.selectedCode,
+    }) === JSON.stringify(proposed)
+  );
+}
+
 export function RecordClosure({ patientId, category, notes, onDocumentChange }: Props) {
   const initialSource = useMemo(() => clinicalSource(notes), [notes]);
   const [source, setSource] = useState(initialSource);
@@ -161,6 +178,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
   const [codingSystem, setCodingSystem] = useState<CodingSystem>("icd10int-outpatient");
   const [codes, setCodes] = useState<Awaited<ReturnType<typeof predictMedicalCodes>> | null>(null);
   const [selectedCoding, setSelectedCoding] = useState<SelectedCodingSuggestion | null>(null);
+  const [codingDecision, setCodingDecision] = useState<"accepted" | "rejected" | null>(null);
   const [documentCredits, setDocumentCredits] = useState<number | null>(null);
   const [codingCredits, setCodingCredits] = useState<number | null>(null);
   const [document, setDocument] = useState<ClinicalDocument | null>(null);
@@ -185,6 +203,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setCodingSystem("icd10int-outpatient");
     setCodes(null);
     setSelectedCoding(null);
+    setCodingDecision(null);
     setDocumentCredits(null);
     setCodingCredits(null);
     setDocument(null);
@@ -198,17 +217,68 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
   }, [category, initialSource, patientId]);
 
   const hasGeneratedDraft = reviewId !== null && title.trim() !== "" && content.trim() !== "";
-  const documentIsDirty =
-    document !== null && (document.title !== title.trim() || document.content !== content.trim());
-  const canGenerate = source.trim() !== "" && reviewed && busy === null;
-  const canSave = hasGeneratedDraft && document?.status !== "filed" && busy === null;
-  const canFile = document?.status === "draft" && !documentIsDirty && busy === null;
   const selectedCode =
     selectedCoding?.group === "supported"
       ? codes?.codes[selectedCoding.index]
       : selectedCoding?.group === "candidate"
         ? codes?.candidates[selectedCoding.index]
         : undefined;
+  const suggestionCount = codes === null ? 0 : codes.codes.length + codes.candidates.length;
+  const codingReview: CodingReviewInput | null =
+    reviewId === null
+      ? null
+      : codingError !== null
+        ? {
+            outcome: "unavailable",
+            approvalId: reviewId,
+            system: codingSystem,
+            selectedCode: null,
+          }
+        : codes === null
+          ? null
+          : suggestionCount === 0
+            ? {
+                outcome: "no-suggestions",
+                approvalId: reviewId,
+                system: codes.system,
+                selectedCode: null,
+              }
+            : codingDecision === "rejected"
+              ? {
+                  outcome: "rejected",
+                  approvalId: reviewId,
+                  system: codes.system,
+                  selectedCode: null,
+                }
+              : codingDecision === "accepted" && selectedCode !== undefined
+                ? {
+                    outcome: "accepted",
+                    approvalId: reviewId,
+                    system: codes.system,
+                    selectedCode: {
+                      suggestionKind:
+                        selectedCoding?.group === "supported" ? "supported" : "candidate",
+                      code: selectedCode.code,
+                      display: selectedCode.display,
+                      evidenceStatus: selectedCode.evidenceStatus,
+                      evidences: selectedCode.evidences.map((evidence) => ({
+                        text: evidence.text,
+                        start: evidence.start,
+                        end: evidence.end,
+                      })),
+                    },
+                  }
+                : null;
+  const documentIsDirty =
+    document !== null &&
+    (document.title !== title.trim() ||
+      document.content !== content.trim() ||
+      !sameCodingReview(document.codingReview, codingReview));
+  const codingReviewComplete = codingReview !== null;
+  const canGenerate = source.trim() !== "" && reviewed && busy === null;
+  const canSave =
+    hasGeneratedDraft && codingReviewComplete && document?.status !== "filed" && busy === null;
+  const canFile = document?.status === "draft" && !documentIsDirty && busy === null;
 
   const refreshHistory = async (documentId: string) => {
     const result = await getEhrDocumentHistory(documentId, crypto.randomUUID());
@@ -224,6 +294,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setDocumentCredits(null);
     setCodingCredits(null);
     setSelectedCoding(null);
+    setCodingDecision(null);
     const approvalId = `record-review-${crypto.randomUUID()}`;
     const correlationId = crypto.randomUUID();
     const [documentResult, codingResult] = await Promise.allSettled([
@@ -246,6 +317,12 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
       setTitle(documentResult.value.name);
       setContent(generatedText(documentResult.value.sections));
       setDocumentCredits(documentResult.value.creditsConsumed);
+      recordCortiActivity({
+        product: "text-generation",
+        status: "completed",
+        action: "Clinician-reviewed EHR draft generated",
+        credits: documentResult.value.creditsConsumed,
+      });
     } else {
       setGenerationError(messageFor(documentResult.reason));
     }
@@ -259,8 +336,19 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
             ? { group: "candidate", index: 0 }
             : null,
       );
+      recordCortiActivity({
+        product: "medical-coding",
+        status: "completed",
+        action: `${codingResult.value.codes.length + codingResult.value.candidates.length} evidence-linked suggestion${codingResult.value.codes.length + codingResult.value.candidates.length === 1 ? "" : "s"} returned for review`,
+        credits: codingResult.value.creditsConsumed,
+      });
     } else {
       setCodingError(messageFor(codingResult.reason));
+      recordCortiActivity({
+        product: "medical-coding",
+        status: "unavailable",
+        action: "Coding review unavailable; document workflow remained safe",
+      });
     }
     setBusy(null);
   };
@@ -279,6 +367,12 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
       setReceipt({
         title: result.name,
         content: generatedText(result.sections),
+        credits: result.creditsConsumed,
+      });
+      recordCortiActivity({
+        product: "text-generation",
+        status: "completed",
+        action: "Plain-language patient instructions drafted",
         credits: result.creditsConsumed,
       });
     } catch (error) {
@@ -305,6 +399,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
               title: title.trim(),
               content: content.trim(),
               source: "agent",
+              codingReview,
             })
           : documentIsDirty
             ? await reviseEhrDocument({
@@ -314,7 +409,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                 expectedVersion: document.version,
                 idempotencyKey: `record-revise-${crypto.randomUUID()}`,
                 reason: "Clinician reviewed the generated draft",
-                changes: { title: title.trim(), content: content.trim() },
+                changes: { title: title.trim(), content: content.trim(), codingReview },
               })
             : document;
       setDocument(saved);
@@ -358,6 +453,7 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
     setContent("");
     setCodes(null);
     setSelectedCoding(null);
+    setCodingDecision(null);
     setDocumentCredits(null);
     setCodingCredits(null);
     setDocument(null);
@@ -528,14 +624,20 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                       kind="supported"
                       suggestions={codes.codes}
                       selected={selectedCoding}
-                      onSelect={setSelectedCoding}
+                      onSelect={(selection) => {
+                        setSelectedCoding(selection);
+                        setCodingDecision(null);
+                      }}
                     />
                     <CodingSuggestionGroup
                       title="Candidates requiring review"
                       kind="candidate"
                       suggestions={codes.candidates}
                       selected={selectedCoding}
-                      onSelect={setSelectedCoding}
+                      onSelect={(selection) => {
+                        setSelectedCoding(selection);
+                        setCodingDecision(null);
+                      }}
                     />
                   </div>
                   <aside className="border border-ehr-line bg-ehr-bg p-2">
@@ -584,6 +686,44 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                       </div>
                     )}
                   </aside>
+                </div>
+              )}
+              {codes !== null && suggestionCount > 0 && (
+                <div className="mt-2 border-t border-ehr-line pt-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={selectedCode === undefined || document?.status === "filed"}
+                      onClick={() => setCodingDecision("accepted")}
+                      className="bg-ehr-chrome px-2.5 py-1 text-[9.5px] font-semibold text-ehr-chrome-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      Accept selected code
+                    </button>
+                    <button
+                      type="button"
+                      disabled={document?.status === "filed"}
+                      onClick={() => setCodingDecision("rejected")}
+                      className="border border-ehr-line bg-ehr-bg px-2.5 py-1 text-[9.5px] font-semibold text-ehr-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      Reject all suggestions
+                    </button>
+                    {codingDecision === null ? (
+                      <span className="text-[9px] text-pending-strong">
+                        Choose an outcome before saving the EHR draft.
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-medium text-verified-strong">
+                        <Check className="size-3" aria-hidden="true" />
+                        {codingDecision === "accepted"
+                          ? `${selectedCode?.code ?? "Code"} accepted for this version`
+                          : "Suggestions rejected for this version"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[9px] text-ehr-muted">
+                    Saving attributes this decision to {clinicianActorId} and records it in the
+                    immutable version history.
+                  </p>
                 </div>
               )}
               <p className="mt-2 text-[9px] leading-snug text-ehr-muted">
@@ -644,7 +784,9 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                     <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
                   )}
                   {document === null
-                    ? "Save EHR draft"
+                    ? codingReviewComplete
+                      ? "Save EHR draft and coding decision"
+                      : "Complete coding review to save"
                     : documentIsDirty
                       ? "Save new version"
                       : "Draft saved"}
@@ -693,6 +835,9 @@ export function RecordClosure({ patientId, category, notes, onDocumentChange }: 
                       className="border border-ehr-line bg-ehr-bg px-1.5 py-1 text-[9px] text-ehr-muted"
                     >
                       v{version.version} · {version.status} · {version.updatedBy}
+                      {version.codingReview !== null
+                        ? ` · coding ${version.codingReview.outcome}`
+                        : ""}
                     </li>
                   ))}
                 </ol>

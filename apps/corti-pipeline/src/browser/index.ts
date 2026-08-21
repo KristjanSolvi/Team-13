@@ -25,3 +25,8 @@ export type {
   CandidateGenerationResponse,
   CandidateInvestigationResponse,
 } from "./http.js";
+export { buildReviewedTranscript } from "../transcript-interpretation.js";
+export type {
+  ReviewedTranscript,
+  TranscriptReviewDecision,
+} from "../transcript-interpretation.js";

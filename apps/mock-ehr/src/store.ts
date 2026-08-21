@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
 import type {
+  ClinicalCodingReview,
   ClinicalDocument,
   ClinicalDocumentVersion,
 } from "./contracts.js";
@@ -64,8 +65,8 @@ export class MockEhrStore {
         INSERT INTO clinical_documents
           (document_id, patient_id, category, title, content, source, status,
            version, created_at, created_by, updated_at, updated_by, filed_at,
-           filed_by, correlation_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           filed_by, correlation_id, coding_review_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(...documentValues(document));
     this.insertVersion(document, changeReason);
@@ -76,7 +77,7 @@ export class MockEhrStore {
       .prepare(`
         SELECT document_id, patient_id, category, title, content, source,
                status, version, created_at, created_by, updated_at, updated_by,
-               filed_at, filed_by, correlation_id
+               filed_at, filed_by, correlation_id, coding_review_json
         FROM clinical_documents
         WHERE document_id = ?
       `)
@@ -89,7 +90,7 @@ export class MockEhrStore {
       .prepare(`
         SELECT document_id, patient_id, category, title, content, source,
                status, version, created_at, created_by, updated_at, updated_by,
-               filed_at, filed_by, correlation_id
+               filed_at, filed_by, correlation_id, coding_review_json
         FROM clinical_documents
         WHERE patient_id = ?
         ORDER BY updated_at DESC, document_id DESC
@@ -104,7 +105,8 @@ export class MockEhrStore {
         UPDATE clinical_documents
         SET category = ?, title = ?, content = ?, source = ?, status = ?,
             version = ?, created_at = ?, created_by = ?, updated_at = ?,
-            updated_by = ?, filed_at = ?, filed_by = ?, correlation_id = ?
+            updated_by = ?, filed_at = ?, filed_by = ?, correlation_id = ?,
+            coding_review_json = ?
         WHERE document_id = ? AND version = ?
       `)
       .run(
@@ -121,6 +123,7 @@ export class MockEhrStore {
         document.filedAt,
         document.filedBy,
         document.correlationId,
+        codingReviewValue(document.codingReview),
         document.documentId,
         currentVersion,
       );
@@ -139,7 +142,7 @@ export class MockEhrStore {
       .prepare(`
         SELECT document_id, patient_id, category, title, content, source,
                status, version, created_at, created_by, updated_at, updated_by,
-               filed_at, filed_by, correlation_id, change_reason
+               filed_at, filed_by, correlation_id, coding_review_json, change_reason
         FROM clinical_document_versions
         WHERE document_id = ?
         ORDER BY version DESC
@@ -157,8 +160,8 @@ export class MockEhrStore {
         INSERT INTO clinical_document_versions
           (document_id, patient_id, category, title, content, source, status,
            version, created_at, created_by, updated_at, updated_by, filed_at,
-           filed_by, correlation_id, change_reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           filed_by, correlation_id, coding_review_json, change_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(...documentValues(document), changeReason);
   }
@@ -181,6 +184,7 @@ function documentValues(document: ClinicalDocument): SQLInputValue[] {
     document.filedAt,
     document.filedBy,
     document.correlationId,
+    codingReviewValue(document.codingReview),
   ];
 }
 
@@ -202,7 +206,17 @@ function documentFromRow(row: object): ClinicalDocument {
     filedAt: rowNullableText(row, "filed_at"),
     filedBy: rowNullableText(row, "filed_by"),
     correlationId: rowText(row, "correlation_id"),
+    codingReview: codingReviewFromRow(row),
   };
+}
+
+function codingReviewValue(review: ClinicalCodingReview | null): string | null {
+  return review === null ? null : JSON.stringify(review);
+}
+
+function codingReviewFromRow(row: object): ClinicalCodingReview | null {
+  const value = rowNullableText(row, "coding_review_json");
+  return value === null ? null : (parseJson(value) as ClinicalCodingReview);
 }
 
 function rowValue(row: object, key: string): unknown {

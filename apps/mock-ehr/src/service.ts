@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type {
+  ClinicalCodingReview,
   ClinicalDocument,
   ClinicalDocumentVersion,
   CreateDocumentInput,
@@ -47,6 +48,7 @@ export class MockEhrService {
           filedAt: null,
           filedBy: null,
           correlationId,
+          codingReview: stampCodingReview(input.codingReview, actorId, occurredAt),
         };
         this.store.insertDocument(document, "Document draft created");
         return document;
@@ -86,7 +88,15 @@ export class MockEhrService {
         }
         const title = input.changes.title ?? current.title;
         const content = input.changes.content ?? current.content;
-        if (title === current.title && content === current.content) {
+        const codingReview =
+          input.changes.codingReview === undefined
+            ? current.codingReview
+            : stampCodingReview(input.changes.codingReview, actorId, occurredAt);
+        if (
+          title === current.title &&
+          content === current.content &&
+          JSON.stringify(codingReview) === JSON.stringify(current.codingReview)
+        ) {
           throw new MockEhrError(
             "NO_DOCUMENT_CHANGES",
             "Document revision does not change any values",
@@ -96,6 +106,7 @@ export class MockEhrService {
           ...current,
           title,
           content,
+          codingReview,
           version: current.version + 1,
           updatedAt: occurredAt,
           updatedBy: actorId,
@@ -171,6 +182,14 @@ export class MockEhrService {
       );
     }
   }
+}
+
+function stampCodingReview(
+  review: CreateDocumentInput["codingReview"] | null | undefined,
+  actorId: string,
+  reviewedAt: string,
+): ClinicalCodingReview | null {
+  return review == null ? null : { ...review, reviewedAt, reviewedBy: actorId };
 }
 
 function requestHash(value: unknown): string {

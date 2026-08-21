@@ -53,10 +53,33 @@ spans, or capitalization alone. Context never authorizes a replacement.
 
 Every retained item has `requiresConfirmation: true`. The response always has
 `originalTranscriptPreserved: true`; it contains suggestions and source offsets,
-not a corrected transcript. The UI runs review concurrently with follow-through
-candidate extraction, displays the pending state only for the real request,
-and asks the clinician to keep the original or confirm the suggested
-interpretation. Neither choice silently rewrites the source transcript.
+not a corrected transcript. The UI may start candidate extraction from the raw
+transcript concurrently to keep the common path fast, but it cannot send those
+candidates to Agentic while any wording suggestion awaits a clinician decision.
+If every phrase is kept, the raw extraction can continue. If any interpretation
+is confirmed, the raw result is discarded and candidate extraction runs again
+over a separate clinician-reviewed interpretation. The exact Ambient transcript
+remains immutable and visible throughout.
+
+## Mock-EHR documents and medical-coding review
+
+The mock EHR versions the clinician's Medical Coding review with the same
+optimistic concurrency and immutable history as its document draft. A coding
+suggestion being highlighted for evidence inspection is not acceptance. Before
+the UI can save a draft that has suggestions, the clinician must explicitly
+choose one of these outcomes:
+
+- `accepted`, with the exact supported/candidate code, display text,
+  evidence-validation status, and evidence offsets;
+- `rejected`, with no selected code;
+- `no-suggestions`, recorded when Corti returned no reviewable result; or
+- `unavailable`, recorded when coding failed without blocking safe document
+  drafting.
+
+The server stamps the review with `reviewedBy` from `x-actor-id` and its own
+`reviewedAt` time. Create and revision requests carry only the review input;
+clients cannot provide attribution. Changing a coding outcome creates a new
+document version. Filing preserves that version and makes it immutable.
 
 ## Pipeline signal and evidence boundary
 

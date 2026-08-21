@@ -28,7 +28,8 @@ export function openMockEhrDatabase(databasePath: string): DatabaseSync {
       updated_by TEXT NOT NULL,
       filed_at TEXT,
       filed_by TEXT,
-      correlation_id TEXT NOT NULL
+      correlation_id TEXT NOT NULL,
+      coding_review_json TEXT
     );
 
     CREATE TABLE IF NOT EXISTS clinical_document_versions (
@@ -47,6 +48,7 @@ export function openMockEhrDatabase(databasePath: string): DatabaseSync {
       filed_at TEXT,
       filed_by TEXT,
       correlation_id TEXT NOT NULL,
+      coding_review_json TEXT,
       change_reason TEXT NOT NULL,
       PRIMARY KEY (document_id, version)
     );
@@ -65,5 +67,23 @@ export function openMockEhrDatabase(databasePath: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_document_versions_document
       ON clinical_document_versions(document_id, version);
   `);
+  ensureColumn(database, "clinical_documents", "coding_review_json", "TEXT");
+  ensureColumn(database, "clinical_document_versions", "coding_review_json", "TEXT");
   return database;
+}
+
+function ensureColumn(
+  database: DatabaseSync,
+  table: "clinical_documents" | "clinical_document_versions",
+  column: string,
+  definition: string,
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  const exists = columns.some(
+    (value) =>
+      typeof value === "object" &&
+      value !== null &&
+      (value as Record<string, unknown>)["name"] === column,
+  );
+  if (!exists) database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
