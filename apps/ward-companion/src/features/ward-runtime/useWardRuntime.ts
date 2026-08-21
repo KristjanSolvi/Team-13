@@ -11,6 +11,7 @@ import {
   type WardTaskCommand,
 } from "@/lib/follow-through-api";
 import { loadWardState, saveWardState } from "@/lib/ward-persistence";
+import { recordCortiActivity } from "@/lib/corti-activity";
 
 const ledgerCommandNotes: Record<WardTaskCommand, string> = {
   approve: "approved and sent to the receiving team.",
@@ -163,15 +164,35 @@ export function useWardRuntime() {
           },
         });
         addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
+        if (command === "approve" && result.agentState !== undefined) {
+          recordCortiActivity({
+            product: "agentic",
+            status: "completed",
+            action: "Clinician-approved task published through patient-scoped MCP",
+            ...(result.credits === undefined ? {} : { credits: result.credits }),
+          });
+        }
         if (
           command === "approve" &&
           (result.recordDraft?.status === "created" || result.recordDraft?.status === "existing")
         ) {
+          recordCortiActivity({
+            product: "text-generation",
+            status: "completed",
+            action: "Approved follow-through drafted into the EHR for clinician review",
+            credits: result.recordDraft.creditsConsumed,
+          });
           addNote(
             thread.patientId,
             `${thread.title} — Corti drafted an important-details note for clinician review in the EHR.`,
           );
           setEhrRevision((current) => current + 1);
+        } else if (command === "approve" && result.recordDraft?.status === "unavailable") {
+          recordCortiActivity({
+            product: "text-generation",
+            status: "unavailable",
+            action: "Supporting EHR draft unavailable; task publication still succeeded",
+          });
         }
         await refreshPatientThreads(thread.patientId);
       } catch (error) {

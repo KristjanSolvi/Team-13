@@ -7,6 +7,7 @@ import {
   requestPatientHandover,
   type GroundedHandover,
 } from "@/lib/follow-through-api";
+import { recordCortiActivity } from "@/lib/corti-activity";
 
 type Props = { patient: Patient };
 
@@ -51,10 +52,27 @@ export function HandoverPanel({ patient }: Props) {
         correlationId: crypto.randomUUID(),
       });
       setHandover(result);
+      recordCortiActivity({
+        product: "agentic",
+        status: "completed",
+        action: "Fresh handover context assembled through patient-scoped MCP",
+      });
       if (result.rendered === null) {
         setError("The handover packet was saved but prose rendering is still pending.");
+      } else {
+        recordCortiActivity({
+          product: "text-generation",
+          status: "completed",
+          action: "Evidence-linked handover rendered for clinician review",
+          credits: result.rendered.creditsConsumed,
+        });
       }
     } catch (requestError) {
+      recordCortiActivity({
+        product: "agentic",
+        status: "unavailable",
+        action: "Handover agent did not return a current evidence packet",
+      });
       setError(errorMessage(requestError));
     } finally {
       setBusy(false);

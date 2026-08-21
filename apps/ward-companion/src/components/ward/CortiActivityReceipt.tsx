@@ -1,35 +1,14 @@
-import { useEffect, useState } from "react";
 import { Check, ChevronDown, CircleAlert, LoaderCircle, ReceiptText } from "lucide-react";
 
-import {
-  cortiActivityEvent,
-  cortiProductDefinitions,
-  readCortiActivity,
-  type CortiActivityEntry,
-  type CortiActivitySnapshot,
-} from "@/lib/corti-activity";
+import { useCortiActivity } from "@/hooks/use-corti-activity";
+import { cortiProductDefinitions } from "@/lib/corti-activity";
 
 function timeLabel(value: string): string {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 export function CortiActivityReceipt() {
-  const [activity, setActivity] = useState<CortiActivitySnapshot>({});
-
-  useEffect(() => {
-    setActivity(readCortiActivity());
-    const onActivity = (event: Event) => {
-      const entry = (event as CustomEvent<CortiActivityEntry>).detail;
-      setActivity((current) => ({ ...current, [entry.product]: entry }));
-    };
-    const onStorage = () => setActivity(readCortiActivity());
-    window.addEventListener(cortiActivityEvent, onActivity);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener(cortiActivityEvent, onActivity);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
+  const activity = useCortiActivity();
 
   const evidenced = cortiProductDefinitions.filter(
     (product) => activity[product.id]?.status !== undefined,

@@ -65,6 +65,70 @@ export type CandidateInvestigationResult = {
   handoff: unknown;
 };
 
+export type DemoScenario = "meeting" | "discharge_coordination" | "ward_consultation";
+
+export type DemoParticipant = {
+  participantId: string;
+  sessionId: string;
+  groupId: string;
+  displayName: string;
+  memberId: string;
+  joinedAt: string;
+  assignedTaskCount?: number;
+};
+
+export type DemoAssignment = {
+  assignmentId: string;
+  sessionId: string;
+  groupId: string;
+  participantId: string;
+  taskId: string;
+  assignedBy: string;
+  assignedAt: string;
+};
+
+export type DemoSession = {
+  sessionId: string;
+  joinCode: string;
+  joinPath: string;
+  title: string;
+  scenario: DemoScenario;
+  groupSize: 1 | 2;
+  targetTeamId: string;
+  createdAt: string;
+  groups: Array<{ groupId: string; participants: DemoParticipant[] }>;
+  assignments: DemoAssignment[];
+};
+
+export type DemoAssignedTask = {
+  taskId: string;
+  summary: string;
+  state:
+    | "draft"
+    | "offered_to_team"
+    | "assigned_to_member"
+    | "accepted"
+    | "completed"
+    | "verified"
+    | "escalated"
+    | "dismissed";
+  assignedMemberId: string | null;
+  dueBy: string;
+  version: number;
+};
+
+export type DemoParticipantView = {
+  participant: DemoParticipant;
+  session: Omit<DemoSession, "groups" | "assignments">;
+  assignments: Array<{ assignment: DemoAssignment; task: DemoAssignedTask }>;
+};
+
+export type DemoAssignmentResult = {
+  assignment: DemoAssignment;
+  participant: DemoParticipant;
+  task: DemoAssignedTask;
+};
+
 export type ClinicalDocument = {
   schemaVersion: "1";
   documentId: string;
@@ -293,6 +357,8 @@ export async function investigateCandidate(
 export type WardTaskCommand = NonNullable<Thread["backend"]>["availableCommands"][number];
 
 export type TaskCommandResult = {
+  agentState?: string;
+  credits?: number;
   recordDraft?:
     | {
         status: "created" | "existing";
@@ -404,6 +470,98 @@ export async function simulateSyntheticSourceRevision(input: {
         body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
       },
     ),
+  );
+}
+
+export async function createDemoSession(input: {
+  title: string;
+  scenario: DemoScenario;
+  groupSize: 1 | 2;
+  targetTeamId: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<DemoSession> {
+  return responseJson<DemoSession>(
+    await fetch(integrationUrl("/api/demo/sessions"), {
+      method: "POST",
+      headers: attributedJsonHeaders(input.correlationId, input.actorId),
+      body: JSON.stringify({
+        title: input.title,
+        scenario: input.scenario,
+        groupSize: input.groupSize,
+        targetTeamId: input.targetTeamId,
+        idempotencyKey: `demo-session-${crypto.randomUUID()}`,
+      }),
+    }),
+  );
+}
+
+export async function getDemoSession(
+  sessionId: string,
+  correlationId: string,
+): Promise<DemoSession> {
+  return responseJson<DemoSession>(
+    await fetch(integrationUrl(`/api/demo/sessions/${encodeURIComponent(sessionId)}`), {
+      headers: { "x-correlation-id": correlationId },
+    }),
+  );
+}
+
+export async function joinDemoSession(input: {
+  joinCode: string;
+  displayName: string;
+  joinKey: string;
+  correlationId: string;
+}): Promise<{
+  participant: DemoParticipant;
+  participantToken: string;
+  session: Omit<DemoSession, "groups" | "assignments">;
+}> {
+  return responseJson(
+    await fetch(integrationUrl(`/api/demo/join/${encodeURIComponent(input.joinCode)}`), {
+      method: "POST",
+      headers: jsonHeaders(input.correlationId),
+      body: JSON.stringify({ displayName: input.displayName, joinKey: input.joinKey }),
+    }),
+  );
+}
+
+export async function assignDemoTask(input: {
+  sessionId: string;
+  groupId: string;
+  taskId: string;
+  expectedVersion: number;
+  actorId: string;
+  correlationId: string;
+}): Promise<DemoAssignmentResult> {
+  return responseJson<DemoAssignmentResult>(
+    await fetch(
+      integrationUrl(`/api/demo/sessions/${encodeURIComponent(input.sessionId)}/assign`),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          groupId: input.groupId,
+          taskId: input.taskId,
+          expectedVersion: input.expectedVersion,
+          idempotencyKey: `demo-assign-${crypto.randomUUID()}`,
+        }),
+      },
+    ),
+  );
+}
+
+export async function getDemoParticipantView(
+  participantToken: string,
+  correlationId: string,
+): Promise<DemoParticipantView> {
+  return responseJson<DemoParticipantView>(
+    await fetch(integrationUrl("/api/demo/participants/me"), {
+      headers: {
+        authorization: `Bearer ${participantToken}`,
+        "x-correlation-id": correlationId,
+      },
+    }),
   );
 }
 
