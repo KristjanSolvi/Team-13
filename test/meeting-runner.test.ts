@@ -109,11 +109,12 @@ function harness(t: TestContext) {
   return { store, meetings, request };
 }
 
-test("meeting agent prompt locks exact tools, evidence, and draft-only behavior", () => {
+test("meeting agent prompt locks exact tools, evidence, and review-only behavior", () => {
   assert.match(MEETING_RECONCILIATION_PROMPT, /exactly seven tools/i);
   assert.match(MEETING_RECONCILIATION_PROMPT, /explicitly selected patient/i);
   assert.match(MEETING_RECONCILIATION_PROMPT, /exact contiguous quote/i);
   assert.match(MEETING_RECONCILIATION_PROMPT, /carry-forward/i);
+  assert.match(MEETING_RECONCILIATION_PROMPT, /taskRevisions/);
   assert.match(MEETING_RECONCILIATION_PROMPT, /never.*duplicate/i);
   assert.match(MEETING_RECONCILIATION_PROMPT, /cannot publish/i);
   assert.match(
@@ -239,7 +240,7 @@ test("config, provisioning, and runtime expose a distinct meeting agent", (t) =>
     {
       name: "meeting-tools",
       description:
-        "Seven patient-scoped tools for grounded ward-meeting reconciliation and draft-only task creation.",
+        "Seven patient-scoped tools for grounded ward-meeting reconciliation and new or revised task drafts.",
       transportType: "streamable_http",
       authorizationType: "bearer",
       url: "https://meeting.example/mcp",

@@ -25,7 +25,7 @@ export function buildAgentDefinitions(config: AppConfig) {
   const meetingMcpServer: Corti.AgentsCreateMcpServer = {
     name: config.meetingMcpName,
     description:
-      "Seven patient-scoped tools for grounded ward-meeting reconciliation and draft-only task creation.",
+      "Seven patient-scoped tools for grounded ward-meeting reconciliation and new or revised task drafts.",
     transportType: "streamable_http",
     authorizationType: "bearer",
     url: config.meetingMcpPublicUrl,

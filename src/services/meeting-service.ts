@@ -84,6 +84,15 @@ export interface MeetingCarryForwardInput {
   sourceRefs: string[];
 }
 
+export interface MeetingTaskRevisionInput {
+  taskRef: string;
+  summary: string;
+  sourceQuote: string;
+  evidenceRefs: string[];
+  clinicalUrgency: ClinicalUrgency;
+  dueInMs: number;
+}
+
 export interface SaveMeetingReconciliationInput extends CommandMeta {
   reconciliationId: string;
   patientId: string;
@@ -91,6 +100,7 @@ export interface SaveMeetingReconciliationInput extends CommandMeta {
   expectedVersion: number;
   sourceSnapshotHash: string;
   proposals: MeetingDraftProposal[];
+  taskRevisions?: MeetingTaskRevisionInput[];
   carryForwards: MeetingCarryForwardInput[];
 }
 
@@ -723,6 +733,7 @@ export class MeetingService {
     input: SaveMeetingReconciliationInput,
   ): MeetingReconciliationResult {
     const scope = `meeting:save-reconciliation:${input.reconciliationId}`;
+    const taskRevisions = input.taskRevisions ?? [];
     const requestHash = commandHash({
       reconciliationId: input.reconciliationId,
       patientId: input.patientId,
@@ -730,6 +741,7 @@ export class MeetingService {
       expectedVersion: input.expectedVersion,
       sourceSnapshotHash: input.sourceSnapshotHash,
       proposals: input.proposals,
+      taskRevisions,
       carryForwards: input.carryForwards,
       actor: input.actor,
     });
@@ -809,10 +821,30 @@ export class MeetingService {
       const activeTasks = this.store
         .listPatientTasks(input.patientId)
         .filter(isHandoverTaskActive);
+      this.validateTaskRevisions(
+        taskRevisions,
+        evidence,
+        activeTasks,
+        input.carryForwards,
+      );
       this.validateCarryForwards(input.carryForwards, activeTasks);
 
       const occurredAt = this.clock.now().toISOString();
-      const newDraftTasks = input.proposals.map((proposal, index) =>
+      const revisedTasks = taskRevisions.map((revision) => {
+        const reference = parseTaskReference(revision.taskRef);
+        return this.ledger.reviseTaskForReview(
+          reference.taskId,
+          reference.version,
+          {
+            summary: revision.summary,
+            evidenceRefs: revision.evidenceRefs,
+            clinicalUrgency: revision.clinicalUrgency,
+            dueInMs: revision.dueInMs,
+          },
+          input.actor,
+        );
+      });
+      const createdTasks = input.proposals.map((proposal, index) =>
         this.ledger.createDraft({
           patientId: input.patientId,
           interactionId: reconciliation.interactionId,
@@ -829,6 +861,7 @@ export class MeetingService {
           actor: input.actor,
         }),
       );
+      const draftTasks = [...revisedTasks, ...createdTasks];
       const carryForwards = input.carryForwards.map((carryForward) => {
         const warning: CarryForwardWarning = {
           warningId: randomUUID(),
@@ -847,7 +880,7 @@ export class MeetingService {
           ...reconciliation,
           contextId: input.contextId,
           status: "saved",
-          newDraftTaskIds: newDraftTasks.map(({ taskId }) => taskId),
+          newDraftTaskIds: draftTasks.map(({ taskId }) => taskId),
           carryForwardTaskRefs: carryForwards.map(({ taskRef }) => taskRef),
           updatedAt: occurredAt,
           version: reconciliation.version + 1,
@@ -874,15 +907,19 @@ export class MeetingService {
           meetingId: reconciliation.meetingId,
           segmentId: reconciliation.patientSegmentId,
           reconciliationId: reconciliation.reconciliationId,
-          draftCount: newDraftTasks.length,
+          draftCount: draftTasks.length,
+          revisionCount: revisedTasks.length,
           carryForwardCount: carryForwards.length,
           status: saved.status,
           version: saved.version,
         },
       });
-      for (const task of newDraftTasks) {
+      const revisedTaskIds = new Set(revisedTasks.map(({ taskId }) => taskId));
+      for (const task of draftTasks) {
         this.store.appendEvent({
-          eventType: "meeting.draft_task_created",
+          eventType: revisedTaskIds.has(task.taskId)
+            ? "meeting.task_revision_proposed"
+            : "meeting.draft_task_created",
           occurredAt,
           correlationId: input.correlationId,
           patientId: input.patientId,
@@ -893,6 +930,7 @@ export class MeetingService {
             meetingId: reconciliation.meetingId,
             reconciliationId: reconciliation.reconciliationId,
             taskId: task.taskId,
+            revised: revisedTaskIds.has(task.taskId),
             state: task.state,
             version: task.version,
           },
@@ -925,7 +963,7 @@ export class MeetingService {
       return {
         reconciliation: saved,
         segment: reconciled,
-        newDraftTasks,
+        newDraftTasks: draftTasks,
         carryForwards,
         replayed: false,
       };
@@ -1322,6 +1360,76 @@ export class MeetingService {
         throw new DomainError(
           "MEETING_EVIDENCE_NOT_FOUND",
           "Carry-forward evidence must come from the current task",
+          false,
+          409,
+        );
+      }
+    }
+  }
+
+  private validateTaskRevisions(
+    revisions: MeetingTaskRevisionInput[],
+    evidence: Map<string, MeetingTranscriptEvidence>,
+    activeTasks: Task[],
+    carryForwards: MeetingCarryForwardInput[],
+  ): void {
+    if (
+      revisions.length > 50 ||
+      new Set(revisions.map(({ taskRef }) => taskRef)).size !== revisions.length
+    ) {
+      throw new DomainError(
+        "MEETING_TASK_REFERENCE_INVALID",
+        "Task revision references must be unique",
+      );
+    }
+    const carriedTaskIds = new Set(
+      carryForwards.map(({ taskRef }) => parseTaskReference(taskRef).taskId),
+    );
+    const tasks = new Map(activeTasks.map((task) => [task.taskId, task]));
+    for (const revision of revisions) {
+      const reference = parseTaskReference(revision.taskRef);
+      const task = tasks.get(reference.taskId);
+      if (
+        !task ||
+        task.version !== reference.version ||
+        carriedTaskIds.has(reference.taskId)
+      ) {
+        throw new DomainError(
+          "MEETING_SOURCE_CHANGED",
+          "Task revision is unavailable, stale, or also carried forward",
+          true,
+          409,
+        );
+      }
+      if (
+        revision.summary.trim().length === 0 ||
+        revision.sourceQuote.trim().length === 0 ||
+        revision.evidenceRefs.length === 0 ||
+        new Set(revision.evidenceRefs).size !== revision.evidenceRefs.length
+      ) {
+        throw new DomainError(
+          "MEETING_EVIDENCE_NOT_FOUND",
+          "Task revision requires unique grounded evidence",
+          false,
+          409,
+        );
+      }
+      const resolved = revision.evidenceRefs.map((referenceValue) => {
+        const item = evidence.get(referenceValue);
+        if (!item) {
+          throw new DomainError(
+            "MEETING_EVIDENCE_NOT_FOUND",
+            "Task revision evidence is unavailable",
+            false,
+            409,
+          );
+        }
+        return item;
+      });
+      if (!resolved.some((item) => item.text.includes(revision.sourceQuote))) {
+        throw new DomainError(
+          "MEETING_EVIDENCE_NOT_FOUND",
+          "Task revision quote is not present in its evidence",
           false,
           409,
         );

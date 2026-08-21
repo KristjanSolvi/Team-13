@@ -217,7 +217,7 @@ export function createMeetingReconciliationMcp(
     "save_meeting_reconciliation",
     {
       description:
-        "Atomically save grounded draft-task proposals and carry-forward warnings. This can create drafts but cannot publish, offer, assign, accept, complete, verify, or escalate work.",
+        "Atomically save grounded new-task proposals, revisions of active tasks, and carry-forward warnings. New and revised work returns to draft review and cannot be published or accepted here.",
       inputSchema: {
         ...reconciliationScope,
         expectedVersion: z.number().int().positive(),
@@ -244,6 +244,25 @@ export function createMeetingReconciliationMcp(
               .strict(),
           )
           .max(50),
+        taskRevisions: z
+          .array(
+            z
+              .object({
+                taskRef: z.string().regex(/^task:[0-9a-f-]{36}@[1-9][0-9]*$/),
+                summary: z.string().trim().min(1).max(240),
+                sourceQuote: z.string().min(1).max(4_000),
+                evidenceRefs: z
+                  .array(evidenceReference())
+                  .min(1)
+                  .max(20)
+                  .refine((refs) => new Set(refs).size === refs.length),
+                clinicalUrgency: z.enum(["high", "medium", "routine"]),
+                dueInMs: z.number().int().positive(),
+              })
+              .strict(),
+          )
+          .max(50)
+          .default([]),
         carryForwards: z
           .array(
             z
