@@ -353,7 +353,7 @@ export function WardMeetingPanel({ patientId, patientName, onAuthoritativeChange
     patientSegmentRef.current !== null;
 
   return (
-    <section className="mt-4 rounded-2xl border border-border bg-panel">
+    <section className="rounded-2xl border border-border bg-panel">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-3.5">
         <div>
           <h2 className="flex items-center gap-2 text-[14px] font-medium text-foreground">

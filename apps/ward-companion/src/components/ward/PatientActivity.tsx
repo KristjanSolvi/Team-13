@@ -32,6 +32,7 @@ import { SystemConnectionPanel } from "./SystemConnectionPanel";
 import { TaskCorrectionPanel } from "./TaskCorrectionPanel";
 import { TaskDeliveryStatus } from "./TaskDeliveryStatus";
 import { usePendingAction } from "./useLoading";
+import { WardMeetingPanel } from "./WardMeetingPanel";
 
 type Props = {
   threads: Thread[];
@@ -187,6 +188,13 @@ export function PatientActivity({
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         <LiveStrip patient={patient} onAuthoritativeChange={() => onRefreshPatient(patient.id)} />
+
+        <WardMeetingPanel
+          key={patient.pipelinePatientId}
+          patientId={patient.pipelinePatientId}
+          patientName={patient.name}
+          onAuthoritativeChange={() => onRefreshPatient(patient.id)}
+        />
 
         <div>
           <div className="mb-3 flex items-center justify-between">
