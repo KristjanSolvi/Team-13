@@ -6,6 +6,7 @@ import { Insights } from "@/components/ward/Insights";
 import { FloatingLauncher } from "@/components/ward/FloatingLauncher";
 import { BoardSkeleton, InsightsSkeleton, ListSkeleton } from "@/components/ward/Loading";
 import { ViewTabs } from "@/components/ward/ViewTabs";
+import { CortiActivityReceipt } from "@/components/ward/CortiActivityReceipt";
 import { useFirstLoad } from "@/components/ward/useLoading";
 import { NervecentreShell } from "@/components/ehr/NervecentreShell";
 import {
@@ -388,6 +389,8 @@ function Index() {
               }}
             />
           </header>
+
+          <CortiActivityReceipt />
 
           <div className="min-h-0 flex-1">
             {loadingView ? (

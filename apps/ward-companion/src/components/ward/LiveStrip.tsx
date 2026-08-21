@@ -8,7 +8,12 @@ import type {
   TranscriptSegment,
   AmbientFact,
 } from "@pipeline/contracts.js";
+import {
+  buildReviewedTranscript,
+  type TranscriptReviewDecision,
+} from "@pipeline/transcript-interpretation.js";
 import type { Patient } from "@/data/ward";
+import { recordCortiActivity } from "@/lib/corti-activity";
 import {
   createAmbientSession,
   generateCandidates,
@@ -18,7 +23,7 @@ import {
   reviewTranscript,
 } from "@/lib/follow-through-api";
 import { LiveInterimText } from "./LiveInterimText";
-import { TranscriptReviewPanel, type TranscriptReviewDecision } from "./TranscriptReviewPanel";
+import { TranscriptReviewPanel } from "./TranscriptReviewPanel";
 
 type CaptureState =
   | "checking"
@@ -27,12 +32,14 @@ type CaptureState =
   | "starting"
   | "recording"
   | "stopping"
+  | "awaiting-review"
   | "analysing"
   | "complete"
   | "error";
 
 type InvestigationState = "checking" | "sent" | "failed";
-type TranscriptReviewState = "idle" | "reviewing" | "complete" | "unavailable";
+type TranscriptReviewState = "idle" | "reviewing" | "complete" | "confirmed" | "unavailable";
+type CandidateGenerationResult = Awaited<ReturnType<typeof generateCandidates>>;
 
 type CandidateView = {
   candidate: FollowThroughCandidate;
@@ -104,6 +111,8 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState("");
   const captureRef = useRef<AmbientCapture | null>(null);
+  const pendingFinalSegmentsRef = useRef<TranscriptSegment[] | null>(null);
+  const pendingGenerationRef = useRef<Promise<CandidateGenerationResult> | null>(null);
   const correlationIdRef = useRef(crypto.randomUUID());
   const recordingStartedAtRef = useRef<number | null>(null);
   const liveCortiReadyRef = useRef<boolean | null>(null);
@@ -169,6 +178,8 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
       void captureRef.current.stop().catch(() => undefined);
     }
     captureRef.current = null;
+    pendingFinalSegmentsRef.current = null;
+    pendingGenerationRef.current = null;
     correlationIdRef.current = crypto.randomUUID();
     setSegments([]);
     setFacts([]);
@@ -205,6 +216,11 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
   const onPipelineEvent = (event: PipelineEvent) => {
     switch (event.type) {
       case "ambient.started":
+        recordCortiActivity({
+          product: "ambient",
+          status: "active",
+          action: "Live audio capture started",
+        });
         recordingStartedAtRef.current = Date.now();
         setElapsedSeconds(0);
         setState("recording");
@@ -216,6 +232,13 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
         break;
       case "facts.updated":
         setFacts(event.payload.facts);
+        if (event.payload.facts.length > 0) {
+          recordCortiActivity({
+            product: "factsr",
+            status: "completed",
+            action: `${event.payload.facts.length} structured fact${event.payload.facts.length === 1 ? "" : "s"} extracted live`,
+          });
+        }
         break;
       case "audio.quality_changed":
         if (event.payload.product !== "ambient") return;
@@ -232,12 +255,26 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
       case "usage.updated":
         if (event.payload.product === "ambient") {
           setAmbientCredits(event.payload.creditsConsumed);
+          recordCortiActivity({
+            product: "ambient",
+            status: "active",
+            action: "Live transcript and audio quality streaming",
+            credits: event.payload.creditsConsumed,
+          });
         }
         break;
       case "ambient.ended":
         if (event.payload.creditsConsumed !== undefined) {
           setAmbientCredits(event.payload.creditsConsumed);
         }
+        recordCortiActivity({
+          product: "ambient",
+          status: "completed",
+          action: "Final transcript captured",
+          ...(event.payload.creditsConsumed === undefined
+            ? {}
+            : { credits: event.payload.creditsConsumed }),
+        });
         break;
       case "pipeline.error":
         setState("error");
@@ -264,6 +301,8 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     setReviewDecisions({});
     setElapsedSeconds(0);
     setAudioMessage("Checking audio…");
+    pendingFinalSegmentsRef.current = null;
+    pendingGenerationRef.current = null;
     try {
       const session = await createAmbientSession(
         `${patient.pipelinePatientId}-${Date.now()}`,
@@ -299,6 +338,95 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     );
   };
 
+  const analyseFinalSegments = async (
+    finalSegments: TranscriptSegment[],
+    correlationId: string,
+    generatedResult?: Promise<CandidateGenerationResult>,
+  ) => {
+    const interactionId = finalSegments[0]?.interactionId;
+    if (interactionId === undefined) {
+      throw new Error("No final transcript was available for candidate analysis.");
+    }
+    setState("analysing");
+    setMessage("Checking conservative follow-through evidence…");
+    const generated = await (generatedResult ??
+      generateCandidates({
+        patientId: patient.pipelinePatientId,
+        interactionId,
+        correlationId,
+        segments: finalSegments,
+      }));
+    if (correlationIdRef.current !== correlationId) return;
+    recordCortiActivity({
+      product: "text-generation",
+      status: "completed",
+      action: "Evidence-grounded follow-through candidates generated",
+      credits: generated.creditsConsumed,
+    });
+    pendingGenerationRef.current = null;
+    setGenerationCredits(generated.creditsConsumed);
+    setCandidateViews(
+      generated.candidates.map((candidate) => ({
+        candidate,
+        state: "checking" as const,
+        message: "Corti Agentic is checking the patient record, open threads, and eligible teams…",
+        agentCredits: null,
+      })),
+    );
+    setState("complete");
+    if (generated.candidates.length === 0) {
+      setMessage(
+        generated.rejectedAudioQualityCount > 0
+          ? "No item promoted · relevant evidence overlapped unclear audio"
+          : "No evidence-backed follow-through item detected",
+      );
+      return;
+    }
+    setMessage(
+      `${generated.candidates.length} evidence-backed candidate${generated.candidates.length === 1 ? "" : "s"} sent for context checks`,
+    );
+    let investigationAccepted = false;
+    await Promise.allSettled(
+      generated.candidates.map(async (candidate) => {
+        try {
+          const result = await investigateCandidate(candidate);
+          if (correlationIdRef.current !== correlationId) return;
+          const handoff = agentHandoffSummary(result.handoff);
+          recordCortiActivity({
+            product: "agentic",
+            status: "completed",
+            action: "Patient context and open work checked through scoped MCP",
+            ...(handoff.credits === null ? {} : { credits: handoff.credits }),
+          });
+          investigationAccepted = true;
+          updateCandidate(candidate.candidateId, {
+            state: "sent",
+            message: handoff.completed
+              ? "Corti Agentic completed the context check · any proposed work remains clinician-controlled"
+              : handoff.retained
+                ? "Signal retained with its evidence · no autonomous task was created"
+                : "Context check accepted · no autonomous task was created",
+            agentCredits: handoff.credits,
+          });
+        } catch {
+          if (correlationIdRef.current !== correlationId) return;
+          recordCortiActivity({
+            product: "agentic",
+            status: "unavailable",
+            action: "Agentic/MCP context check unavailable; candidate retained safely",
+          });
+          updateCandidate(candidate.candidateId, {
+            state: "failed",
+            message: "Context check unavailable · candidate retained without action",
+          });
+        }
+      }),
+    );
+    if (investigationAccepted && correlationIdRef.current === correlationId) {
+      await onAuthoritativeChange();
+    }
+  };
+
   const stopAndAnalyse = async () => {
     const capture = captureRef.current;
     if (capture === null) return;
@@ -316,84 +444,60 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
         throw new Error("No final transcript was available for candidate analysis.");
       }
       const reviewCorrelationId = correlationIdRef.current;
-      setReviewState("reviewing");
-      void reviewTranscript({
+      pendingFinalSegmentsRef.current = finalSegments;
+      const generationPromise = generateCandidates({
+        patientId: patient.pipelinePatientId,
         interactionId,
         correlationId: reviewCorrelationId,
         segments: finalSegments,
-        contextTerms: [
-          patient.name,
-          patient.todaySchedule ?? "",
-          patient.waitingFor ?? "",
-          "blood pressure",
-          "district nursing",
-          "medication change",
-        ].filter((term) => term.length > 0),
-        protectedTerms: [patient.name],
-      })
-        .then((result) => {
-          if (correlationIdRef.current !== reviewCorrelationId) return;
-          setReviewSuggestions(result.suggestions);
-          setReviewCredits(result.creditsConsumed);
-          setReviewState("complete");
-        })
-        .catch(() => {
-          if (correlationIdRef.current !== reviewCorrelationId) return;
-          setReviewState("unavailable");
-        });
-      const generated = await generateCandidates({
-        patientId: patient.pipelinePatientId,
-        interactionId,
-        correlationId: correlationIdRef.current,
-        segments: finalSegments,
       });
-      setGenerationCredits(generated.creditsConsumed);
-      setCandidateViews(
-        generated.candidates.map((candidate) => ({
-          candidate,
-          state: "checking" as const,
-          message:
-            "Corti Agentic is checking the patient record, open threads, and eligible teams…",
-          agentCredits: null,
-        })),
-      );
-      setState("complete");
-      if (generated.candidates.length === 0) {
-        setMessage(
-          generated.rejectedAudioQualityCount > 0
-            ? "No item promoted · relevant evidence overlapped unclear audio"
-            : "No evidence-backed follow-through item detected",
-        );
-        return;
+      pendingGenerationRef.current = generationPromise;
+      void generationPromise.catch(() => undefined);
+      setReviewState("reviewing");
+      try {
+        const review = await reviewTranscript({
+          interactionId,
+          correlationId: reviewCorrelationId,
+          segments: finalSegments,
+          contextTerms: [
+            patient.name,
+            patient.todaySchedule ?? "",
+            patient.waitingFor ?? "",
+            "blood pressure",
+            "district nursing",
+            "medication change",
+          ].filter((term) => term.length > 0),
+          protectedTerms: [patient.name],
+        });
+        if (correlationIdRef.current !== reviewCorrelationId) return;
+        setReviewSuggestions(review.suggestions);
+        setReviewCredits(review.creditsConsumed);
+        recordCortiActivity({
+          product: "text-generation",
+          status: "completed",
+          action:
+            review.suggestions.length === 0
+              ? "Transcript wording reviewed; original retained"
+              : `${review.suggestions.length} possible wording mismatch${review.suggestions.length === 1 ? "" : "es"} surfaced for confirmation`,
+          credits: review.creditsConsumed,
+        });
+        if (review.suggestions.length > 0) {
+          setReviewState("complete");
+          setState("awaiting-review");
+          setMessage("Confirm possible wording mismatches before follow-through analysis");
+          return;
+        }
+        setReviewState("complete");
+      } catch {
+        if (correlationIdRef.current !== reviewCorrelationId) return;
+        setReviewState("unavailable");
+        recordCortiActivity({
+          product: "text-generation",
+          status: "unavailable",
+          action: "Transcript review unavailable; raw wording retained",
+        });
       }
-      setMessage(
-        `${generated.candidates.length} evidence-backed candidate${generated.candidates.length === 1 ? "" : "s"} sent for context checks`,
-      );
-      let investigationAccepted = false;
-      await Promise.allSettled(
-        generated.candidates.map(async (candidate) => {
-          try {
-            const result = await investigateCandidate(candidate);
-            const handoff = agentHandoffSummary(result.handoff);
-            investigationAccepted = true;
-            updateCandidate(candidate.candidateId, {
-              state: "sent",
-              message: handoff.completed
-                ? "Corti Agentic completed the context check · any proposed work remains clinician-controlled"
-                : handoff.retained
-                  ? "Signal retained with its evidence · no autonomous task was created"
-                  : "Context check accepted · no autonomous task was created",
-              agentCredits: handoff.credits,
-            });
-          } catch {
-            updateCandidate(candidate.candidateId, {
-              state: "failed",
-              message: "Context check unavailable · candidate retained without action",
-            });
-          }
-        }),
-      );
-      if (investigationAccepted) await onAuthoritativeChange();
+      await analyseFinalSegments(finalSegments, reviewCorrelationId, generationPromise);
     } catch (error) {
       captureRef.current = null;
       setState("error");
@@ -405,7 +509,35 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
     }
   };
 
+  const continueAfterReview = async () => {
+    const rawSegments = pendingFinalSegmentsRef.current;
+    if (rawSegments === null || reviewSuggestions.length === 0) return;
+    const correlationId = correlationIdRef.current;
+    try {
+      const reviewed = buildReviewedTranscript(rawSegments, reviewSuggestions, reviewDecisions);
+      setReviewState("confirmed");
+      setMessage(
+        reviewed.appliedSuggestionIds.length > 0
+          ? "Using the clinician-confirmed interpretation for follow-through analysis · raw transcript preserved"
+          : "Original wording confirmed · checking follow-through evidence",
+      );
+      const generationPromise =
+        reviewed.appliedSuggestionIds.length === 0
+          ? (pendingGenerationRef.current ?? undefined)
+          : undefined;
+      await analyseFinalSegments(reviewed.segments, correlationId, generationPromise);
+    } catch (error) {
+      setState("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The wording confirmation could not be applied safely.",
+      );
+    }
+  };
+
   const busy = ["starting", "stopping", "analysing"].includes(state);
+  const reviewPending = state === "awaiting-review";
   const finalSegments = segments.filter((segment) => segment.isFinal);
   const latestInterim = segments.filter((segment) => !segment.isFinal).at(-1);
 
@@ -429,7 +561,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
           <select
             value={deviceId}
             onChange={(event) => setDeviceId(event.target.value)}
-            disabled={state === "recording" || busy}
+            disabled={state === "recording" || busy || reviewPending}
             aria-label="Ambient microphone"
             className="max-w-36 rounded-md border border-border bg-panel px-2 py-1.5 text-[11.5px] text-muted-foreground"
           >
@@ -450,7 +582,7 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
           ) : (
             <button
               onClick={() => void start()}
-              disabled={state === "checking" || state === "unavailable" || busy}
+              disabled={state === "checking" || state === "unavailable" || busy || reviewPending}
               className="flex items-center gap-1.5 rounded-md bg-teal px-3 py-1.5 text-[12.5px] font-medium text-panel disabled:cursor-not-allowed disabled:opacity-45"
             >
               {busy ? (
@@ -498,7 +630,8 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
                 (reviewSuggestions.length === 0
                   ? "no changes suggested"
                   : `${reviewSuggestions.length} phrase${reviewSuggestions.length === 1 ? "" : "s"} to confirm`)}
-              {reviewState === "complete" && reviewCredits !== null
+              {reviewState === "confirmed" && "clinician-confirmed interpretation used downstream"}
+              {(reviewState === "complete" || reviewState === "confirmed") && reviewCredits !== null
                 ? ` · ${creditsLabel(reviewCredits)}`
                 : ""}
             </span>
@@ -556,6 +689,9 @@ export function LiveStrip({ patient, onAuthoritativeChange }: Props) {
             [suggestion.suggestionId]: decision,
           }))
         }
+        onContinue={() => void continueAfterReview()}
+        continuing={state === "analysing" && reviewState === "confirmed"}
+        confirmed={reviewState === "confirmed"}
       />
 
       {facts.length > 0 && (

@@ -20,6 +20,11 @@ patient copies while still giving the UI an EHR-shaped record boundary.
   new document rather than rewriting history.
 - `source` records whether content originated from a `clinician`, `agent`, or
   `scribe`; it never replaces clinician attribution or approval.
+- An optional Medical Coding review is stored on the same version. The server
+  attributes accepted, rejected, no-suggestion, or unavailable outcomes to the
+  actor and records the selected code and evidence snapshot only when accepted.
+- Changing the coding decision creates a new draft version; filing freezes it
+  together with the clinical document.
 
 ## Private endpoints
 

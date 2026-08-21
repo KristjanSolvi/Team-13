@@ -1,16 +1,28 @@
-import { Check, ShieldCheck } from "lucide-react";
+import { Check, LoaderCircle, ShieldCheck } from "lucide-react";
 import type { TranscriptReviewSuggestion } from "@pipeline/contracts.js";
-
-export type TranscriptReviewDecision = "keep" | "use-suggestion";
+import type { TranscriptReviewDecision } from "@pipeline/transcript-interpretation.js";
 
 type Props = {
   suggestions: TranscriptReviewSuggestion[];
   decisions: Record<string, TranscriptReviewDecision>;
   onDecision: (suggestion: TranscriptReviewSuggestion, decision: TranscriptReviewDecision) => void;
+  onContinue: () => void;
+  continuing: boolean;
+  confirmed: boolean;
 };
 
-export function TranscriptReviewPanel({ suggestions, decisions, onDecision }: Props) {
+export function TranscriptReviewPanel({
+  suggestions,
+  decisions,
+  onDecision,
+  onContinue,
+  continuing,
+  confirmed,
+}: Props) {
   if (suggestions.length === 0) return null;
+  const allDecided = suggestions.every(
+    (suggestion) => decisions[suggestion.suggestionId] !== undefined,
+  );
 
   return (
     <section
@@ -74,9 +86,26 @@ export function TranscriptReviewPanel({ suggestions, decisions, onDecision }: Pr
         );
       })}
 
-      <p className="text-[10.5px] text-muted-foreground">
-        The raw Corti transcript remains unchanged for traceability.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10.5px] text-muted-foreground">
+          The raw Corti transcript remains unchanged for traceability.
+        </p>
+        <button
+          type="button"
+          onClick={onContinue}
+          disabled={!allDecided || continuing || confirmed}
+          className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-[11.5px] font-medium text-background disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {continuing ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : confirmed ? (
+            <Check className="size-3.5" />
+          ) : null}
+          {confirmed
+            ? "Wording confirmed for analysis"
+            : "Confirm wording and check follow-through"}
+        </button>
+      </div>
     </section>
   );
 }

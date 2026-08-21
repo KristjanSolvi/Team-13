@@ -202,6 +202,18 @@ describe("UI-facing mock EHR boundary", () => {
 
   it("forwards document draft, revision, filing, and history operations", async () => {
     const { mockEhr, app } = harness();
+    const codingReview = {
+      outcome: "accepted" as const,
+      approvalId: "record-review-001",
+      system: "icd10int-outpatient" as const,
+      selectedCode: {
+        suggestionKind: "supported" as const,
+        code: "R52",
+        display: "Pain, unspecified",
+        evidenceStatus: "validated" as const,
+        evidences: [{ text: "pain", start: 0, end: 4 }],
+      },
+    };
     const created = await request(app)
       .post("/api/ehr/patients/synthetic-karen/documents")
       .set("x-actor-id", "clinician:marriott")
@@ -211,6 +223,7 @@ describe("UI-facing mock EHR boundary", () => {
         title: "Ward round note",
         content: "Initial draft.",
         source: "scribe",
+        codingReview,
       })
       .expect(201);
     const revised = await request(app)
@@ -241,6 +254,11 @@ describe("UI-facing mock EHR boundary", () => {
     expect(filed.body).toMatchObject({ status: "filed", version: 3 });
     expect(history.body.versions).toHaveLength(3);
     expect(mockEhr.createDocument).toHaveBeenCalledOnce();
+    expect(mockEhr.createDocument).toHaveBeenCalledWith(
+      "synthetic-karen",
+      expect.objectContaining({ codingReview }),
+      expect.objectContaining({ actorId: "clinician:marriott" }),
+    );
     expect(mockEhr.reviseDocument).toHaveBeenCalledOnce();
     expect(mockEhr.fileDocument).toHaveBeenCalledOnce();
   });

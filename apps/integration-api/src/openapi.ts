@@ -1702,6 +1702,53 @@ export const integrationOpenApi = {
           title: { type: "string", minLength: 1, maxLength: 240 },
           content: { type: "string", minLength: 1, maxLength: 40000 },
           source: { type: "string", enum: ["clinician", "agent", "scribe"] },
+          codingReview: {
+            oneOf: [{ $ref: "#/components/schemas/EhrCodingReview" }, { type: "null" }],
+          },
+        },
+      },
+      EhrCodingReview: {
+        type: "object",
+        additionalProperties: false,
+        required: ["outcome", "approvalId", "system", "selectedCode"],
+        properties: {
+          outcome: {
+            type: "string",
+            enum: ["accepted", "rejected", "no-suggestions", "unavailable"],
+          },
+          approvalId: { type: "string", minLength: 1, maxLength: 200 },
+          system: {
+            type: "string",
+            enum: [
+              "icd10int-outpatient",
+              "icd10int-inpatient",
+              "icd10cm-outpatient",
+              "icd10cm-inpatient",
+            ],
+          },
+          selectedCode: {
+            oneOf: [
+              {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "suggestionKind",
+                  "code",
+                  "display",
+                  "evidenceStatus",
+                  "evidences",
+                ],
+                properties: {
+                  suggestionKind: { type: "string", enum: ["supported", "candidate"] },
+                  code: { type: "string", minLength: 1, maxLength: 80 },
+                  display: { type: "string", minLength: 1, maxLength: 500 },
+                  evidenceStatus: { type: "string", enum: ["validated", "unavailable"] },
+                  evidences: { type: "array", maxItems: 50, items: { type: "object" } },
+                },
+              },
+              { type: "null" },
+            ],
+          },
         },
       },
       EhrDocumentRevision: {
@@ -1719,6 +1766,9 @@ export const integrationOpenApi = {
             properties: {
               title: { type: "string", minLength: 1, maxLength: 240 },
               content: { type: "string", minLength: 1, maxLength: 40000 },
+              codingReview: {
+                oneOf: [{ $ref: "#/components/schemas/EhrCodingReview" }, { type: "null" }],
+              },
             },
           },
         },

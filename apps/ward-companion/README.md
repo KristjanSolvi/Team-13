@@ -16,12 +16,19 @@ and historical activity are synthetic demo fixtures; they are not a live EHR.
   `apps/corti-pipeline` and shows transcript and audio-quality events. Browser
   requests go through the integration API's allow-listed proxy.
 - Final transcript evidence is sent to the pipeline's conservative candidate
-  generator.
+  generator only after possible wording mismatches are either kept or
+  clinician-confirmed. The raw transcript remains unchanged.
 - Evidence-backed candidates are sent to the integration API for record and
   open-work checks. A candidate is not a task and does not authorize action.
 - Expanded task cards offer the official Corti Dictation control plus a typed
   corridor fallback. Both produce a constrained change preview; fixture tasks
   cannot be mutated because they have no authoritative ledger version.
+- The record-closure workflow separates code inspection from explicit
+  accept/reject review and versions that attributed decision in the mock EHR.
+- The Ward panel includes a live Corti activity receipt. It lights up only
+  after actual SDK events or API responses and shows Ambient, FactsR, Text
+  Generation, Agentic with the scoped MCP connector, Dictation, and Medical
+  Coding.
 - If the integration/agent service is unavailable, the UI retains the
   candidate without creating local work.
 - A successful companion read replaces that patient's demo rows with the

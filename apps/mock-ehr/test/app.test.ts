@@ -89,6 +89,39 @@ describe("mock EHR HTTP API", () => {
     expect(listed.headers["cache-control"]).toBe("no-store");
   });
 
+  it("attributes a persisted medical-coding decision to the clinician", async () => {
+    const created = await authorized(
+      request(app).post("/api/patients/synthetic-karen/documents"),
+    )
+      .set("x-actor-id", "clinician:marriott")
+      .send({
+        idempotencyKey: "document-create-coding-001",
+        category: "medical",
+        title: "Ward round note",
+        content: "Paracetamol continued for pain.",
+        source: "agent",
+        codingReview: {
+          outcome: "accepted",
+          approvalId: "record-review-001",
+          system: "icd10int-outpatient",
+          selectedCode: {
+            suggestionKind: "candidate",
+            code: "R52",
+            display: "Pain, unspecified",
+            evidenceStatus: "validated",
+            evidences: [{ text: "pain", start: 27, end: 31 }],
+          },
+        },
+      })
+      .expect(201);
+
+    expect(created.body.codingReview).toMatchObject({
+      outcome: "accepted",
+      selectedCode: { code: "R52", suggestionKind: "candidate" },
+      reviewedBy: "clinician:marriott",
+    });
+  });
+
   it("requires actor attribution for writes and validates identifiers and content", async () => {
     const missingActor = await authorized(
       request(app).post("/api/patients/synthetic-karen/documents"),

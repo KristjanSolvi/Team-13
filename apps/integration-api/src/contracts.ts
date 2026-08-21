@@ -288,6 +288,55 @@ export const ehrProfileUpdateSchema = z
   })
   .strict();
 
+const ehrCodingReviewSchema = z
+  .object({
+    outcome: z.enum(["accepted", "rejected", "no-suggestions", "unavailable"]),
+    approvalId: z.string().trim().min(1).max(200),
+    system: z.enum([
+      "icd10int-outpatient",
+      "icd10int-inpatient",
+      "icd10cm-outpatient",
+      "icd10cm-inpatient",
+    ]),
+    selectedCode: z
+      .object({
+        suggestionKind: z.enum(["supported", "candidate"]),
+        code: z.string().trim().min(1).max(80),
+        display: z.string().trim().min(1).max(500),
+        evidenceStatus: z.enum(["validated", "unavailable"]),
+        evidences: z
+          .array(
+            z
+              .object({
+                text: z.string().max(4_000),
+                start: z.number().int().nonnegative(),
+                end: z.number().int().nonnegative(),
+              })
+              .strict(),
+          )
+          .max(50),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .superRefine((review, context) => {
+    if (review.outcome === "accepted" && review.selectedCode === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedCode"],
+        message: "An accepted coding review requires a selected code",
+      });
+    }
+    if (review.outcome !== "accepted" && review.selectedCode !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedCode"],
+        message: "Only an accepted coding review may include a selected code",
+      });
+    }
+  });
+
 export const ehrCreateDocumentSchema = z
   .object({
     idempotencyKey: z.string().trim().min(8).max(200),
@@ -295,6 +344,7 @@ export const ehrCreateDocumentSchema = z
     title: z.string().trim().min(1).max(240),
     content: z.string().trim().min(1).max(40_000),
     source: z.enum(["clinician", "agent", "scribe"]),
+    codingReview: ehrCodingReviewSchema.nullable().default(null),
   })
   .strict();
 
@@ -307,6 +357,7 @@ export const ehrReviseDocumentSchema = z
       .object({
         title: z.string().trim().min(1).max(240).optional(),
         content: z.string().trim().min(1).max(40_000).optional(),
+        codingReview: ehrCodingReviewSchema.nullable().optional(),
       })
       .strict()
       .refine((changes) => Object.keys(changes).length > 0, {
