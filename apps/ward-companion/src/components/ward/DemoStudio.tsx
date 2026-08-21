@@ -18,6 +18,7 @@ import type { Thread } from "@/data/ward";
 import { useCortiActivity } from "@/hooks/use-corti-activity";
 import { cortiProductDefinitions, type CortiProductId } from "@/lib/corti-activity";
 import { RoutingReceipt } from "./RoutingReceipt";
+import { WardMeetingPanel } from "./WardMeetingPanel";
 import {
   assignDemoTask,
   createDemoSession,
@@ -329,6 +330,12 @@ export function DemoStudio({ threads, onRefreshPatient, onOpenPatient }: Props) 
           })}
         </ol>
       </section>
+
+      <WardMeetingPanel
+        patientId="synthetic-karen"
+        patientName="Karen Jensen"
+        onAuthoritativeChange={() => onRefreshPatient(demoPatientId)}
+      />
 
       <section className="mt-4 rounded-2xl border border-border bg-panel">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-3.5">

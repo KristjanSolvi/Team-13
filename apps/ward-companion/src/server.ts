@@ -118,12 +118,15 @@ async function proxyIntegrationRequest(request: Request): Promise<Response | nul
   headers.set("x-forwarded-proto", incoming.protocol.slice(0, -1));
 
   const upstreamPath = incoming.pathname.slice(integrationProxyPrefix.length) || "/";
-  if (/^\/api\/patients\/[^/]+\/handovers$/.test(upstreamPath)) {
-    const handoverBearer = process.env["INTEGRATION_API_BEARER_TOKEN"]?.trim();
-    if (!handoverBearer) {
-      return proxyConfigurationError("The server-side handover credential is not configured.");
+  const requiresIntegrationBearer =
+    /^\/api\/patients\/[^/]+\/handovers$/.test(upstreamPath) ||
+    /^\/api\/ward-meetings(?:\/|$)/.test(upstreamPath);
+  if (requiresIntegrationBearer) {
+    const integrationBearer = process.env["INTEGRATION_API_BEARER_TOKEN"]?.trim();
+    if (!integrationBearer) {
+      return proxyConfigurationError("The server-side integration credential is not configured.");
     }
-    headers.set("authorization", `Bearer ${handoverBearer}`);
+    headers.set("authorization", `Bearer ${integrationBearer}`);
   }
 
   try {

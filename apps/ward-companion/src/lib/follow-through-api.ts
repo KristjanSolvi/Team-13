@@ -446,6 +446,225 @@ export type GroundedHandover = {
   } | null;
 };
 
+export type WardMeeting = {
+  meetingId: string;
+  wardId: string;
+  interactionId: string;
+  status: "recording" | "completed" | "failed";
+  startedBy: string;
+  startedAt: string;
+  completedAt: string | null;
+  version: number;
+};
+
+export type PatientMeetingSegment = {
+  segmentId: string;
+  meetingId: string;
+  patientId: string;
+  status: "recording" | "closed" | "reconciling" | "reconciled" | "failed";
+  openedBy: string;
+  openedAt: string;
+  closedAt: string | null;
+  version: number;
+};
+
+export type MeetingDraftTask = {
+  taskId: string;
+  summary: string;
+  state:
+    | "draft"
+    | "offered_to_team"
+    | "assigned_to_member"
+    | "accepted"
+    | "completed"
+    | "verified"
+    | "escalated"
+    | "dismissed";
+  version: number;
+};
+
+export type MeetingCarryForward = {
+  warningId: string;
+  taskRef: string;
+  reason: "unresolved" | "not_discussed" | "overdue";
+};
+
+export type WardMeetingStartResult = {
+  meeting: WardMeeting;
+  replayed: boolean;
+  ambientSession: AmbientSession;
+};
+
+export type WardMeetingSegmentResult = {
+  meeting: WardMeeting;
+  segment: PatientMeetingSegment;
+  replayed: boolean;
+};
+
+export type WardMeetingTranscriptResult = {
+  evidence: Array<{
+    evidenceId: string;
+    meetingId: string;
+    patientSegmentId: string | null;
+    interactionId: string;
+    segmentKey: string;
+    text: string;
+    startSeconds: number;
+    endSeconds: number;
+    speakerId?: number;
+    isFinal: boolean;
+    audioQuality: "clear" | "uncertain";
+    eligible: boolean;
+    sourceRef: string | null;
+    recordedAt: string;
+  }>;
+  ignoredInterimCount: number;
+  replayed: boolean;
+};
+
+export type WardMeetingReconciliationResult = WardMeetingSegmentResult & {
+  reconciliation: {
+    reconciliationId: string;
+    meetingId: string;
+    patientSegmentId: string;
+    patientId: string;
+    status: "requested" | "saved" | "failed";
+    newDraftTaskIds: string[];
+    carryForwardTaskRefs: string[];
+    version: number;
+  };
+  newDraftTasks: MeetingDraftTask[];
+  carryForwards: MeetingCarryForward[];
+};
+
+export async function startWardMeeting(input: {
+  wardId: string;
+  encounterIdentifier: string;
+  idempotencyKey: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<WardMeetingStartResult> {
+  return responseJson<WardMeetingStartResult>(
+    await fetch(integrationUrl("/api/ward-meetings"), {
+      method: "POST",
+      headers: attributedJsonHeaders(input.correlationId, input.actorId),
+      body: JSON.stringify({
+        wardId: input.wardId,
+        encounterIdentifier: input.encounterIdentifier,
+        idempotencyKey: input.idempotencyKey,
+      }),
+    }),
+  );
+}
+
+export async function openWardMeetingSegment(input: {
+  meetingId: string;
+  patientId: string;
+  expectedMeetingVersion: number;
+  idempotencyKey: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<WardMeetingSegmentResult> {
+  return responseJson<WardMeetingSegmentResult>(
+    await fetch(
+      integrationUrl(`/api/ward-meetings/${encodeURIComponent(input.meetingId)}/segments`),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          patientId: input.patientId,
+          expectedMeetingVersion: input.expectedMeetingVersion,
+          idempotencyKey: input.idempotencyKey,
+        }),
+      },
+    ),
+  );
+}
+
+export async function appendWardMeetingTranscript(input: {
+  meetingId: string;
+  patientSegmentId: string;
+  segments: TranscriptSegment[];
+  idempotencyKey: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<WardMeetingTranscriptResult> {
+  return responseJson<WardMeetingTranscriptResult>(
+    await fetch(
+      integrationUrl(
+        `/api/ward-meetings/${encodeURIComponent(input.meetingId)}/transcript-segments`,
+      ),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          patientSegmentId: input.patientSegmentId,
+          segments: input.segments.map((segment) => ({
+            segmentKey: segment.segmentKey,
+            text: segment.text,
+            startSeconds: segment.startSeconds,
+            endSeconds: segment.endSeconds,
+            ...(segment.speakerId === undefined ? {} : { speakerId: segment.speakerId }),
+            isFinal: segment.isFinal,
+            // Missing quality is never upgraded to clear evidence.
+            audioQuality: segment.audioQuality ?? "uncertain",
+          })),
+          idempotencyKey: input.idempotencyKey,
+        }),
+      },
+    ),
+  );
+}
+
+export async function closeAndReconcileWardMeetingSegment(input: {
+  meetingId: string;
+  segmentId: string;
+  expectedMeetingVersion: number;
+  expectedSegmentVersion: number;
+  idempotencyKey: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<WardMeetingReconciliationResult> {
+  return responseJson<WardMeetingReconciliationResult>(
+    await fetch(
+      integrationUrl(
+        `/api/ward-meetings/${encodeURIComponent(input.meetingId)}/segments/${encodeURIComponent(input.segmentId)}/close`,
+      ),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          expectedMeetingVersion: input.expectedMeetingVersion,
+          expectedSegmentVersion: input.expectedSegmentVersion,
+          idempotencyKey: input.idempotencyKey,
+        }),
+      },
+    ),
+  );
+}
+
+export async function completeWardMeeting(input: {
+  meetingId: string;
+  expectedMeetingVersion: number;
+  idempotencyKey: string;
+  actorId: string;
+  correlationId: string;
+}): Promise<{ meeting: WardMeeting; replayed: boolean }> {
+  return responseJson<{ meeting: WardMeeting; replayed: boolean }>(
+    await fetch(
+      integrationUrl(`/api/ward-meetings/${encodeURIComponent(input.meetingId)}/complete`),
+      {
+        method: "POST",
+        headers: attributedJsonHeaders(input.correlationId, input.actorId),
+        body: JSON.stringify({
+          expectedMeetingVersion: input.expectedMeetingVersion,
+          idempotencyKey: input.idempotencyKey,
+        }),
+      },
+    ),
+  );
+}
+
 /**
  * Ask the handover Corti agent for a fresh, evidence-linked patient handover.
  * The integration API refuses stale drafts, so a success is current by
