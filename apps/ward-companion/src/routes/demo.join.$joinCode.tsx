@@ -130,8 +130,19 @@ function AudienceJoin() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-teal/10 to-transparent" />
       <div className="relative mx-auto w-full max-w-lg">
         <header className="mb-5 text-center">
-          <Link to="/" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal">
-            Fluence
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-teal"
+          >
+            <span className="flex size-8 items-center justify-center rounded-full border border-teal/15 bg-white/80 shadow-sm">
+              <img
+                src="/corti-hack-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="size-5 object-contain"
+              />
+            </span>
+            <span>Fluence</span>
           </Link>
           <h1 className="mt-2 text-2xl font-medium tracking-tight">Join the live ward demo</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">

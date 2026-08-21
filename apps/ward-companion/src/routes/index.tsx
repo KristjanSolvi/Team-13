@@ -173,7 +173,7 @@ function Index() {
           }`}
         >
           <header className="flex items-center border-b border-white/25 bg-white/12 px-4 py-3">
-            <div className="flex flex-1 justify-start">
+            <div className="flex flex-1 items-center justify-start gap-2.5">
               <button
                 type="button"
                 onClick={() => setMaximized((current) => !current)}
@@ -184,6 +184,19 @@ function Index() {
               >
                 {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
+              <div className="hidden items-center gap-2 sm:flex" aria-label="Fluence">
+                <span className="flex size-7 items-center justify-center rounded-full border border-white/30 bg-white/70 shadow-sm">
+                  <img
+                    src="/corti-hack-logo.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="size-5 object-contain"
+                  />
+                </span>
+                <span className="text-[13px] font-semibold tracking-tight text-foreground">
+                  Fluence
+                </span>
+              </div>
             </div>
             <ViewTabs
               value={view}
