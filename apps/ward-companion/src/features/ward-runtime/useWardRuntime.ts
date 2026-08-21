@@ -285,9 +285,16 @@ export function useWardRuntime() {
   );
 
   const runLedgerCommand = useCallback(
-    async (thread: Thread, command: WardTaskCommand) => {
+    async (thread: Thread, command: WardTaskCommand, options: { reason?: string } = {}) => {
       const backend = thread.backend;
       if (backend?.taskId == null || backend.taskVersion == null || ledgerBusy !== null) {
+        return;
+      }
+      if (command === "dismiss" && (options.reason?.trim().length ?? 0) < 3) {
+        setLedgerErrors((current) => ({
+          ...current,
+          [thread.id]: "Explain why this task is being removed.",
+        }));
         return;
       }
       setLedgerBusy(`${command}-${thread.id}`);
@@ -300,28 +307,78 @@ export function useWardRuntime() {
         command === "approve"
           ? { approvalChannel: "app_one_tap" }
           : command === "dismiss"
-            ? { reason: "Removed during clinician review as not needed." }
+            ? { reason: options.reason?.trim() }
             : command === "reopen"
               ? { dueInMs: 24 * 3_600_000 }
               : command === "complete" || command === "verify"
                 ? { outcomeRef: `record:ward-panel-${crypto.randomUUID().slice(0, 12)}` }
                 : {};
-      const actorId =
-        command === "accept" || command === "decline" || command === "complete"
-          ? (thread.assignee ?? demoActors.teamMember)
-          : demoActors.clinician;
-      try {
-        const result = await executeTaskCommand({
-          taskId: backend.taskId,
+      const idempotencyKey = `${command}-${crypto.randomUUID()}`;
+      const latestCommandThread = async () => {
+        const patient = patients.find((candidate) => candidate.id === thread.patientId);
+        if (patient?.agenticLinked !== true) {
+          throw new FollowThroughApiError(
+            "Authoritative task state is unavailable.",
+            "TASK_STATE_UNAVAILABLE",
+            true,
+          );
+        }
+        const overview = await getWardCompanionOverview(
+          patient.pipelinePatientId,
+          crypto.randomUUID(),
+        );
+        const latest = overview.threads.find(
+          (candidate) => candidate.backend?.taskId === backend.taskId,
+        );
+        if (latest?.backend?.taskVersion == null) {
+          throw new FollowThroughApiError(
+            "The task is no longer available in Activity.",
+            "TASK_NOT_FOUND",
+            false,
+          );
+        }
+        return latest;
+      };
+      const executeLatest = async () => {
+        const latest = await latestCommandThread();
+        const latestBackend = latest.backend;
+        if (
+          latestBackend?.taskId == null ||
+          latestBackend.taskVersion == null ||
+          !latestBackend.availableCommands.includes(command)
+        ) {
+          throw new FollowThroughApiError(
+            "The task changed and this action is no longer available.",
+            "COMMAND_NOT_AVAILABLE",
+            false,
+          );
+        }
+        const actorId =
+          command === "accept" || command === "decline" || command === "complete"
+            ? (latest.assignee ?? thread.assignee ?? demoActors.teamMember)
+            : demoActors.clinician;
+        return executeTaskCommand({
+          taskId: latestBackend.taskId,
           command,
           actorId,
           correlationId: crypto.randomUUID(),
           body: {
-            expectedVersion: backend.taskVersion,
-            idempotencyKey: `${command}-${crypto.randomUUID()}`,
+            expectedVersion: latestBackend.taskVersion,
+            idempotencyKey,
             ...extras,
           },
         });
+      };
+      try {
+        let result: Awaited<ReturnType<typeof executeTaskCommand>>;
+        try {
+          result = await executeLatest();
+        } catch (error) {
+          if (!(error instanceof FollowThroughApiError) || error.code !== "VERSION_CONFLICT") {
+            throw error;
+          }
+          result = await executeLatest();
+        }
         addNote(thread.patientId, `${thread.title} — ${ledgerCommandNotes[command]}`);
         if (command === "approve" && result.agentState !== undefined) {
           recordCortiActivity({

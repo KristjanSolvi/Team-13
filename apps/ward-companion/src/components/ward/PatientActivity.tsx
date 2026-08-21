@@ -47,7 +47,11 @@ type Props = {
   onSelect: (id: string | null) => void;
   onStatusChange: (id: string, status: ThreadStatus) => void;
   onAssign: (id: string, assignee: string | null) => void;
-  onLedgerCommand: (thread: Thread, command: WardTaskCommand) => void;
+  onLedgerCommand: (
+    thread: Thread,
+    command: WardTaskCommand,
+    options?: { reason?: string },
+  ) => void;
   ledgerBusy: string | null;
   ledgerErrors: Record<string, string>;
   onAddActivity: (id: string, text: string) => void;
@@ -145,6 +149,7 @@ export function PatientActivity({
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [editFor, setEditFor] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
   const [taskTeam, setTaskTeam] = useState("");
   const [taskUrgency, setTaskUrgency] = useState<Urgency>("routine");
   const [taskDue, setTaskDue] = useState("");
@@ -454,7 +459,7 @@ export function PatientActivity({
                                   disabled={ledgerBusy !== null}
                                   onClick={() =>
                                     command === "dismiss"
-                                      ? setConfirmRemove(thread.id)
+                                      ? (setConfirmRemove(thread.id), setRemoveReason(""))
                                       : onLedgerCommand(thread, command)
                                   }
                                   className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] font-medium hover:opacity-85 disabled:opacity-45 ${meta.tone}`}
@@ -476,21 +481,40 @@ export function PatientActivity({
                         confirmRemove === thread.id &&
                         thread.backend.availableCommands.includes("dismiss") && (
                           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-escalated-soft px-3 py-2 text-[12.5px] text-escalated-strong">
-                            <span>Remove this draft task from Activity?</span>
-                            <span className="flex gap-2">
+                            <div className="w-full">
+                              <label htmlFor={`remove-reason-${thread.id}`} className="font-medium">
+                                Why is this task being removed?
+                              </label>
+                              <textarea
+                                id={`remove-reason-${thread.id}`}
+                                value={removeReason}
+                                onChange={(event) => setRemoveReason(event.target.value)}
+                                placeholder="Add a brief clinical or operational explanation"
+                                rows={2}
+                                className="mt-1.5 w-full resize-none rounded-md border border-escalated-strong/20 bg-panel px-2.5 py-2 text-foreground outline-none focus:border-escalated-strong"
+                              />
+                            </div>
+                            <span className="ml-auto flex gap-2">
                               <button
                                 type="button"
+                                disabled={removeReason.trim().length < 3 || ledgerBusy !== null}
                                 onClick={() => {
                                   setConfirmRemove(null);
-                                  onLedgerCommand(thread, "dismiss");
+                                  onLedgerCommand(thread, "dismiss", {
+                                    reason: removeReason.trim(),
+                                  });
+                                  setRemoveReason("");
                                 }}
-                                className="rounded-md bg-escalated-strong px-2.5 py-1 font-medium text-white"
+                                className="rounded-md bg-escalated-strong px-2.5 py-1 font-medium text-white disabled:opacity-40"
                               >
                                 Yes, remove task
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setConfirmRemove(null)}
+                                onClick={() => {
+                                  setConfirmRemove(null);
+                                  setRemoveReason("");
+                                }}
                                 className="rounded-md px-2.5 py-1 font-medium text-muted-foreground"
                               >
                                 Keep task
