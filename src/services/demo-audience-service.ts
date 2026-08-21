@@ -314,7 +314,12 @@ export class DemoAudienceService {
             : undefined;
         })
         .filter((member) => member !== undefined);
-      const selected = chooseMember(task, members);
+      // Audience members are deliberately excluded from normal ward routing.
+      // This explicit, clinician-chosen group is the only routing path that
+      // opts them in.
+      const selected = chooseMember(task, members, {
+        includeDemoAudience: true,
+      });
       if (!selected) {
         throw new DomainError(
           "DEMO_GROUP_INELIGIBLE",
