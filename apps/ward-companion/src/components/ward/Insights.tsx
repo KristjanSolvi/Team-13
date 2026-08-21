@@ -41,7 +41,7 @@ function Card({
 }
 
 /* ------------------------------------------------------------------ */
-/* estimated bed-days protected                                       */
+/* modelled discharge-delay exposure                                  */
 /* ------------------------------------------------------------------ */
 
 function BedDaysProtected({ threads }: { threads: Thread[] }) {
@@ -49,28 +49,49 @@ function BedDaysProtected({ threads }: { threads: Thread[] }) {
 
   return (
     <Card
-      title="Estimated bed-days protected this week"
-      hint="Modelled estimate · not measured outcome"
+      title="Discharge delay exposure"
+      hint="Modelled opportunity · not measured outcome"
       className="bed-days-insight overflow-hidden lg:col-span-2"
     >
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0">
           <p className="text-[44px] font-medium leading-none tracking-tight tabular-nums text-foreground">
-            {estimate.protectedBedDays.toFixed(1)}
+            {estimate.bedDaysAtRisk.toFixed(1)}
             <span className="ml-2 text-[17px] font-normal tracking-normal text-muted-foreground">
-              bed-days
+              bed-days at risk
             </span>
           </p>
           <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">
-            {estimate.timelyVerifiedBlockers} discharge-blocking thread
-            {estimate.timelyVerifiedBlockers === 1 ? "" : "s"} verified before deadline ×{" "}
-            {estimate.assumedBedDaysPerBlocker.toFixed(1)} assumed bed-day delay avoided.
+            {estimate.openDischargeBlockers} open follow-through item
+            {estimate.openDischargeBlockers === 1 ? "" : "s"} for patients planned home tomorrow ×{" "}
+            {estimate.assumedBedDaysPerBlocker.toFixed(1)} modelled day of possible discharge delay.
           </p>
         </div>
-        <span className="w-fit shrink-0 rounded-full border border-white/70 bg-white/45 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-foreground/75 shadow-sm backdrop-blur-md">
-          Estimate, not an outcome claim
-        </span>
+        <div className="grid min-w-[220px] grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/70 bg-white/45 px-3 py-2.5 shadow-sm backdrop-blur-md">
+            <p className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Protected so far
+            </p>
+            <p className="mt-1 text-[20px] font-medium tabular-nums text-verified-strong">
+              {estimate.protectedBedDays.toFixed(1)}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">bed-days</span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/70 bg-white/45 px-3 py-2.5 shadow-sm backdrop-blur-md">
+            <p className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Closed on time
+            </p>
+            <p className="mt-1 text-[20px] font-medium tabular-nums text-foreground">
+              {estimate.timelyVerifiedBlockers}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">items</span>
+            </p>
+          </div>
+        </div>
       </div>
+      <p className="mt-3 border-t border-border/70 pt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
+        Protection is credited only after independent verification before the task deadline; open
+        work remains exposure, not impact claimed.
+      </p>
     </Card>
   );
 }
